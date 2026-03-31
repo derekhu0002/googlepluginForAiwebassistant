@@ -1,0 +1,144 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100vh;
+  padding: 16px;
+}
+
+.app-header,
+.status-card,
+.panel-block {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.app-header h1,
+.panel-block h2 {
+  margin: 0 0 6px;
+}
+
+.app-header p,
+.panel-block p,
+.status-card small {
+  margin: 0;
+  color: #475569;
+}
+
+.mode-chip {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.button-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.button-group button {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button-group button.secondary {
+  background: #334155;
+}
+
+.button-group button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panel-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+.field-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-item dt {
+  font-size: 12px;
+  color: #475569;
+}
+
+.field-item dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.empty-state,
+.empty-value {
+  color: #94a3b8;
+}
+
+.error-text {
+  color: #b91c1c;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  margin: 0.5em 0;
+}
+
+.markdown-body p,
+.markdown-body li {
+  line-height: 1.5;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 20px;
+}
