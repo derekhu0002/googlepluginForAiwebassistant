@@ -1,10 +1,10 @@
-export interface CapturePayload {
+export type CapturePayload = Record<string, string> & {
   pageTitle: string;
   pageUrl: string;
   metaDescription: string;
   h1: string;
   selectedText: string;
-}
+};
 
 export interface AnalyzeRequest {
   capture: CapturePayload;

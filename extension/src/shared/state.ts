@@ -9,5 +9,7 @@ export const initialAssistantState: AssistantState = {
   error: null,
   errorMessage: "",
   lastUpdatedAt: null,
-  uiMode: "sidepanel"
+  uiMode: "sidepanel",
+  matchedRule: null,
+  lastCapturedUrl: null
 };

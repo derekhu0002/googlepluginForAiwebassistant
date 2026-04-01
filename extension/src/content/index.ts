@@ -76,7 +76,7 @@ function toggleEmbeddedPanel() {
 
 chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
   if (message.type === "COLLECT_FIELDS") {
-    sendResponse(captureFields(document, window));
+    sendResponse(captureFields(document, window, message.payload.fields));
     return true;
   }
 

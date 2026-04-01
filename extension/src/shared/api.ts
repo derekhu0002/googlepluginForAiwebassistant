@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { extensionConfig } from "./config";
 import { createDomainError, ERROR_CODES } from "./errors";
-import type { AnalyzeApiResponse, CapturedFields } from "./types";
+import type { AnalyzeApiResponse, CanonicalCapturedFields } from "./types";
 
 const apiResponseSchema = z.union([
   z.object({
@@ -22,7 +22,7 @@ const apiResponseSchema = z.union([
   })
 ]);
 
-export async function requestAnalysis(capture: CapturedFields): Promise<AnalyzeApiResponse> {
+export async function requestAnalysis(capture: CanonicalCapturedFields): Promise<AnalyzeApiResponse> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), extensionConfig.requestTimeoutMs);
 

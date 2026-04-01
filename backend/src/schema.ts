@@ -6,7 +6,7 @@ export const captureSchema = z.object({
   metaDescription: z.string().max(2000).default(""),
   h1: z.string().max(500).default(""),
   selectedText: z.string().max(5000).default("")
-});
+}).catchall(z.string().max(5000));
 
 export const analyzeRequestSchema = z.object({
   capture: captureSchema,

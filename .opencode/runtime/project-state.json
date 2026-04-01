@@ -1,168 +1,145 @@
 {
   "version": 1,
-  "activeGoal": "开发一个 Google Chrome 浏览器插件：插件启动后在浏览器页面右侧边沿显示悬浮入口；点击后展开右侧侧边操作台；操作台包含多个按钮，其中一个“采集并分析”按钮用于从当前网页按预定义规则采集指定字段并展示，同时发送到后台服务；后台服务",
-  "designSummary": "Chrome 插件网页字段捕获与 LLM 分析架构基线：采用 Chrome Extension Manifest V3 架构，页面侧由 content script 注入右侧悬浮入口，并优先通过 Chrome Side Panel 承载主操作台；background service worker 负责统一编排采集请求、标签页上下文、后端通信与错误治理；后端 API 负责鉴权、规则校验、调用 LLM 与结果格式化；插件仅在用户主动点击后按预定义选择器采集当前激活页字段，采集结果与 Markdown 分析结果在侧边操作台展示。整体设计遵循最小权限、HTTPS 通信、敏感信息最小采集、明确错误分类与超时控制。",
+  "activeGoal": "将当前 Chrome 插件调整为：可采集网页范围不能写死在代码中。需要支持运行时可配置的目标网页范围（例如用户可维护 allowlist/pattern 列表），在尽量符合 Chrome Extension 权限模型和安全约束下实现动态配置",
+  "designSummary": "[APPROVED] TASK-012 架构结论：Chrome Extension MV3 下无法在不受 manifest/权限模型约束的前提下实现“运行时任意网站动态配置采集”。结合当前业务已收敛为同一目标站点/少量受控域名下多 URL 页面采集指定字段，最佳方案是将页面范围与字段规则配置化（UI + storage），同时将浏览器权限边界控制在域名级别。主方案为：默认仅授予目标业务域名权限（域名固定则可用精确 host_permissions；若需安装后按需启用则使用 optional_host_permissions+用户授权），并以 background + chrome.scripting 按需注入替代写死页面白名单的固定 content_scripts。activeTab 仅作为临时补充，不作为同域多页面稳定采集主路径。额外域名（如 google.com）可以作为可选扩展域名纳入，但必须通过 optional_host_permissions 或 activeTab 满足权限约束，不建议默认开放。",
   "designDecisions": [
-    "Decision: 采用 Chrome Extension Manifest V3 作为插件技术基础，使用 background service worker 替代持久后台页，以满足 Chrome 最新稳定版与 Web Store 合规要求。",
-    "Decision: 右侧主操作台优先采用 Chrome Side Panel 承载，content script 仅负责悬浮入口与页面最小注入；若特定页面受限，则保留 injected UI 轻量降级策略但不作为主路径。",
-    "Decision: 采集动作仅在用户显式点击“采集并分析”后执行，且仅针对当前激活标签页、预定义字段规则与允许的目标页面执行，禁止默认全页抓取。",
-    "Decision: 插件前端不直接调用 LLM，统一由后台服务完成鉴权、提示词组装、模型调用、结果清洗与 Markdown 返回，以收敛密钥风险和业务规则。",
-    "Decision: 建立标准错误域：CaptureError、ValidationError、NetworkError、AnalysisError、TimeoutError、PermissionError，并在 side panel 中区分展示可恢复提示。",
-    "Decision: API 通信必须使用 HTTPS，并通过扩展固定后端域名白名单、服务端 API Key/签名校验、请求超时与内容长度限制形成基础安全约束。",
-    "Decision: 后台分析服务首版允许使用 Mock Analysis Provider 快速打通端到端链路，但必须通过稳定的 AnalysisProvider 接口/适配器边界实现，保证后续可无缝替换为真实 LLM 服务而不影响插件侧协议。",
-    "ReworkRequired: 当前 QA/Audit 失败项主要属于实现偏差而非意图模型缺失。现有四层架构基线已明确最小权限、HTTPS-first、固定白名单、端到端鉴权闭环以及统一错误域；G1/G2/G3/G4/G6 均为实现未满足既有基线。G5 可通过在现有统一错误域下补充 PermissionError/RestrictedPageError 等细化映射来闭合，不需要重做架构基线。需新增返工任务修复扩展鉴权头传递、收敛 host_permissions/content_scripts.matches、落实 HTTPS-first + allowlist 配置、统一前后端错误域、补足浏览器真机 E2E/扩展自动化测试与 README 限制说明。"
+    "Decision[DRAFT]: 对于同一域名下多个 URL 的采集需求，不采用“任意网站动态开放”目标；浏览器权限边界与产品可配置范围分层处理。产品层：URL/path/字段规则配置化，不写死在代码中。浏览器层：以单域名或少量域名为 host permission 边界，优先 optional_host_permissions+用户显式授权；若域名长期固定且产品范围明确，可接受精确 host_permissions 以获得更稳定体验和更低实现复杂度。",
+    "Decision[APPROVED]: 采用“域名级受控权限 + 页面规则配置化 + 按需注入”方案，不追求任意网站动态开放。默认业务域名最小授权；页面 URL/path/字段提取规则不再硬编码。human-reviewed and approved.",
+    "ReworkRequired: ‘可配置规则版’当前实现与已批准架构结论存在实现偏差。已批准方案要求‘域名级受控权限 + 页面规则配置化 + 按需注入’，不建议走任意网站动态放开。审计发现 production 默认 optional_host_permissions=[\"https://*/*\"]、web_accessible_resources.matches 复用该广域配置、activeTab 策略未明确，均属于对既定权限边界与注入暴露面的实现偏离，应通过实现返工收敛权限范围与策略，而非修改架构模型。"
   ],
   "tasks": [
     {
-      "id": "TASK-001",
-      "title": "开发一个 Google Chrome 浏览器插件：插件启动后在浏览器页面右侧边沿显示悬浮入口；点击后展开右侧侧边操作台；操作台包含多个按钮，其中一个“采集并分析”按钮用于从当前网页按预定义规则采集指定字段并展示，同时发送到后台服务；后台服务",
+      "id": "TASK-012",
+      "title": "将当前 Chrome 插件调整为：可采集网页范围不能写死在代码中。需要支持运行时可配置的目标网页范围（例如用户可维护 allowlist/pattern 列表），在尽量符合 Chrome Extension 权限模型和安全约束下实现动态配置",
       "status": "done",
       "owner": "Implementation",
-      "summary": "Completed runnable MVP for Chrome extension plus backend mock analysis end-to-end integration with documented setup and verification commands.",
-      "createdAt": "2026-03-31T16:30:30.528Z",
-      "updatedAt": "2026-03-31T16:48:18.345Z",
-      "details": "Completed runnable MVP for Chrome extension plus backend mock analysis end-to-end integration with documented setup and verification commands."
+      "summary": "TASK-012 已完成 MVP 交付：规则配置中心、storage 持久化、runtime 规则匹配与按需注入、README 更新、测试补充与验证完成。",
+      "createdAt": "2026-04-01T02:07:38.789Z",
+      "updatedAt": "2026-04-01T03:38:52.724Z",
+      "details": "TASK-012 已完成 MVP 交付：规则配置中心、storage 持久化、runtime 规则匹配与按需注入、README 更新、测试补充与验证完成。"
     },
     {
-      "id": "TASK-002",
-      "title": "实现 Chrome Extension MV3 基础骨架（manifest、background service worker、content script、side panel）",
+      "id": "TASK-013",
+      "title": "权限与注入模型重构：移除写死页面范围，评估并落地 optional_host_permissions/精确 host_permissions 与 chrome.scripting 按需注入方案",
       "status": "done",
       "owner": "Implementation",
-      "summary": "Implemented MV3 extension scaffold with manifest, background service worker, content script, and side panel build pipeline.",
-      "details": "Implemented MV3 extension scaffold with manifest, background service worker, content script, and side panel build pipeline.",
-      "createdAt": "2026-03-31T16:31:42.552Z",
-      "updatedAt": "2026-03-31T16:48:18.168Z"
+      "summary": "已移除写死页面 content_scripts 白名单，manifest 改为 optional_host_permissions + scripting runtime 注入；background 采集前按 tab URL 检查规则与域名授权。",
+      "details": "已移除写死页面 content_scripts 白名单，manifest 改为 optional_host_permissions + scripting runtime 注入；background 采集前按 tab URL 检查规则与域名授权。",
+      "createdAt": "2026-04-01T02:49:16.429Z",
+      "updatedAt": "2026-04-01T03:38:52.507Z"
     },
     {
-      "id": "TASK-003",
-      "title": "实现网页字段采集规则引擎与当前激活页 DOM 抽取流程",
+      "id": "TASK-014",
+      "title": "规则配置中心：在 side panel/options 中新增 URL/path 规则与字段提取规则 CRUD，并持久化到 storage",
       "status": "done",
       "owner": "Implementation",
-      "summary": "Implemented configurable field capture rules for pageTitle, pageUrl, metaDescription, h1, and selectedText via content script DOM extraction.",
-      "details": "Implemented configurable field capture rules for pageTitle, pageUrl, metaDescription, h1, and selectedText via content script DOM extraction.",
-      "createdAt": "2026-03-31T16:31:42.552Z",
-      "updatedAt": "2026-03-31T16:48:18.192Z"
+      "summary": "已在 side panel 内实现规则配置中心，支持规则与字段规则 CRUD，并持久化到 chrome.storage.local。",
+      "details": "已在 side panel 内实现规则配置中心，支持规则与字段规则 CRUD，并持久化到 chrome.storage.local。",
+      "createdAt": "2026-04-01T02:49:16.429Z",
+      "updatedAt": "2026-04-01T03:38:52.558Z"
     },
     {
-      "id": "TASK-004",
-      "title": "实现 side panel 操作台、悬浮入口、采集结果展示与 Markdown 渲染",
+      "id": "TASK-015",
+      "title": "授权编排：按域名检测并申请 host 权限，区分已授权/未授权/拒绝授权状态",
       "status": "done",
       "owner": "Implementation",
-      "summary": "Implemented floating entry, side panel React UI, embedded fallback panel, capture actions, and Markdown rendering.",
-      "details": "Implemented floating entry, side panel React UI, embedded fallback panel, capture actions, and Markdown rendering.",
-      "createdAt": "2026-03-31T16:31:42.552Z",
-      "updatedAt": "2026-03-31T16:48:18.214Z"
+      "summary": "已实现当前 tab 域名授权检测与 chrome.permissions.request 授权入口，区分已授权/未授权状态。",
+      "details": "已实现当前 tab 域名授权检测与 chrome.permissions.request 授权入口，区分已授权/未授权状态。",
+      "createdAt": "2026-04-01T02:49:16.429Z",
+      "updatedAt": "2026-04-01T03:38:52.603Z"
     },
     {
-      "id": "TASK-005",
-      "title": "实现后台 API：鉴权、字段载荷校验、LLM 调用编排、Markdown 结果返回与错误映射",
+      "id": "TASK-016",
+      "title": "采集执行链改造：background 统一调度注入，content 采集脚本模块化并兼容现有 AnalysisProvider",
       "status": "done",
       "owner": "Implementation",
-      "summary": "Implemented Express backend API with validation, timeout handling, provider orchestration, and Markdown response contract.",
-      "details": "Implemented Express backend API with validation, timeout handling, provider orchestration, and Markdown response contract.",
-      "createdAt": "2026-03-31T16:31:42.552Z",
-      "updatedAt": "2026-03-31T16:48:18.235Z"
+      "summary": "已改造 background 统一调度采集链，命中规则后通过 chrome.scripting 注入 content.js 并执行字段采集，兼容现有后端 AnalysisProvider。",
+      "details": "已改造 background 统一调度采集链，命中规则后通过 chrome.scripting 注入 content.js 并执行字段采集，兼容现有后端 AnalysisProvider。",
+      "createdAt": "2026-04-01T02:49:16.429Z",
+      "updatedAt": "2026-04-01T03:38:52.644Z"
     },
     {
-      "id": "TASK-006",
-      "title": "补充 Chrome 权限最小化、安全约束、超时控制与端到端测试",
+      "id": "TASK-017",
+      "title": "错误域与UX补强：新增规则未命中、未授权、字段缺失、页面不支持等错误与引导",
       "status": "done",
       "owner": "Implementation",
-      "summary": "Implemented minimal permissions, request/body limits, timeout controls, config samples, unit/API tests, and build/typecheck verification; browser UI E2E remains manual due environment limits.",
-      "details": "Implemented minimal permissions, request/body limits, timeout controls, config samples, unit/API tests, and build/typecheck verification; browser UI E2E remains manual due environment limits.",
-      "createdAt": "2026-03-31T16:31:42.552Z",
-      "updatedAt": "2026-03-31T16:48:18.254Z"
+      "summary": "已补充规则未命中、未授权、受限页面等错误提示，并在 side panel 中提供上下文引导与状态展示。",
+      "details": "已补充规则未命中、未授权、受限页面等错误提示，并在 side panel 中提供上下文引导与状态展示。",
+      "createdAt": "2026-04-01T02:49:16.429Z",
+      "updatedAt": "2026-04-01T03:38:52.681Z"
     },
     {
-      "id": "TASK-007",
-      "title": "实现 Mock Analysis Provider 与可替换的 AnalysisProvider 适配器接口，支持后续切换真实 LLM 服务",
-      "status": "done",
-      "owner": "Implementation",
-      "summary": "Implemented AnalysisProvider interface and MockAnalysisProvider adapter for future real LLM replacement.",
-      "details": "Implemented AnalysisProvider interface and MockAnalysisProvider adapter for future real LLM replacement.",
-      "createdAt": "2026-03-31T16:35:14.754Z",
-      "updatedAt": "2026-03-31T16:48:18.273Z"
+      "id": "TASK-018",
+      "title": "回归与合规验证：覆盖最小权限、授权流程、规则生效、同域多URL采集及CWS合规检查",
+      "status": "todo",
+      "owner": "QA",
+      "summary": "",
+      "details": "",
+      "createdAt": "2026-04-01T02:49:16.429Z",
+      "updatedAt": "2026-04-01T02:49:16.429Z"
     },
     {
-      "id": "TASK-008",
-      "title": "收敛 extension host_permissions 与 content_scripts.matches 到最小权限白名单，并验证受限页面降级行为",
+      "id": "TASK-019",
+      "title": "收紧生产默认 optional_host_permissions 到域名级受控清单，移除 https://*/* 广域配置，并保证授权申请按受控域名触发",
       "status": "done",
       "owner": "Implementation",
-      "summary": "已收敛扩展 manifest 权限与页面匹配到显式白名单；构建阶段动态生成 manifest，并补充受限页面/非白名单页面访问判定与测试验证。",
-      "details": "已收敛扩展 manifest 权限与页面匹配到显式白名单；构建阶段动态生成 manifest，并补充受限页面/非白名单页面访问判定与测试验证。",
-      "createdAt": "2026-03-31T17:10:33.048Z",
-      "updatedAt": "2026-03-31T17:28:12.885Z"
+      "summary": "已移除 production 默认 https://*/* 广域 optional_host_permissions，改为受控域名默认值并禁止广域模式；授权入口仅对受控域名开放，README 同步说明新增域名需先登记再申请授权。",
+      "details": "已移除 production 默认 https://*/* 广域 optional_host_permissions，改为受控域名默认值并禁止广域模式；授权入口仅对受控域名开放，README 同步说明新增域名需先登记再申请授权。",
+      "createdAt": "2026-04-01T03:45:35.378Z",
+      "updatedAt": "2026-04-01T03:56:15.800Z"
     },
     {
-      "id": "TASK-009",
-      "title": "修复 extension 到 backend 的鉴权闭环：支持可选 x-api-key 透传、HTTPS-first 默认配置与固定后端白名单策略",
+      "id": "TASK-020",
+      "title": "重构 web_accessible_resources.matches，不再直接复用 optional_host_permissions，按实际需要最小化暴露资源与匹配域",
       "status": "done",
       "owner": "Implementation",
-      "summary": "已实现扩展到后端 x-api-key 可选透传，扩展配置改为 HTTPS-first，后端与扩展均落地固定 allowlist 策略，并将 localhost 限定为开发环境用途。",
-      "details": "已实现扩展到后端 x-api-key 可选透传，扩展配置改为 HTTPS-first，后端与扩展均落地固定 allowlist 策略，并将 localhost 限定为开发环境用途。",
-      "createdAt": "2026-03-31T17:10:33.048Z",
-      "updatedAt": "2026-03-31T17:28:12.905Z"
+      "summary": "已将 web_accessible_resources.matches 改为独立配置 VITE_WEB_ACCESSIBLE_RESOURCE_MATCHES，并校验其必须位于 optional_host_permissions 受控子集内，不再直接复用可选主机权限。",
+      "details": "已将 web_accessible_resources.matches 改为独立配置 VITE_WEB_ACCESSIBLE_RESOURCE_MATCHES，并校验其必须位于 optional_host_permissions 受控子集内，不再直接复用可选主机权限。",
+      "createdAt": "2026-04-01T03:45:35.378Z",
+      "updatedAt": "2026-04-01T03:56:15.850Z"
     },
     {
-      "id": "TASK-010",
-      "title": "统一 extension/backend 错误域与映射：补充受限页面、权限失败、鉴权失败、网络/超时等领域错误并落地到 UI 展示",
+      "id": "TASK-021",
+      "title": "明确 activeTab 策略：删除未使用声明或实现为一次性 fallback，并补充代码注释、README 与验证用例",
       "status": "done",
       "owner": "Implementation",
-      "summary": "已统一 extension/backend 错误域与映射，覆盖权限失败、受限页面、鉴权失败、网络失败、超时等错误，并在 side panel UI 中一致展示错误域与提示。",
-      "details": "已统一 extension/backend 错误域与映射，覆盖权限失败、受限页面、鉴权失败、网络失败、超时等错误，并在 side panel UI 中一致展示错误域与提示。",
-      "createdAt": "2026-03-31T17:10:33.048Z",
-      "updatedAt": "2026-03-31T17:28:12.923Z"
-    },
-    {
-      "id": "TASK-011",
-      "title": "补充浏览器真机端到端验证、extension 自动化测试覆盖与 README 限制/配置说明",
-      "status": "done",
-      "owner": "Implementation",
-      "summary": "已补充 extension/backend 自动化测试、返工一键验证脚本、README 配置前提/限制/手工验收说明；真机 Chrome E2E 因当前 CLI 环境受限改以可执行脚本与手工步骤覆盖。",
-      "details": "已补充 extension/backend 自动化测试、返工一键验证脚本、README 配置前提/限制/手工验收说明；真机 Chrome E2E 因当前 CLI 环境受限改以可执行脚本与手工步骤覆盖。",
-      "createdAt": "2026-03-31T17:10:33.048Z",
-      "updatedAt": "2026-03-31T17:28:12.941Z"
+      "summary": "已明确 activeTab 仅用于用户点击扩展动作且 side panel 不可用时的一次性嵌入式 UI 兜底，不替代 host permission 采集主路径；补充代码注释、README 与背景流程测试。",
+      "details": "已明确 activeTab 仅用于用户点击扩展动作且 side panel 不可用时的一次性嵌入式 UI 兜底，不替代 host permission 采集主路径；补充代码注释、README 与背景流程测试。",
+      "createdAt": "2026-04-01T03:45:35.378Z",
+      "updatedAt": "2026-04-01T03:56:15.914Z"
     }
   ],
   "issues": [
     {
-      "id": "ISSUE-001",
+      "id": "ISSUE-003",
       "category": "ArchitectureGap",
-      "summary": "MVP architecture gaps in permissions, transport security, auth, and error taxonomy",
-      "details": "Audit found these gaps against the established baseline: manifest host_permissions and content script matches target all http/https pages instead of an allowlist; extension defaults to http://localhost:8787 rather than HTTPS-first backend policy; backend optional API_KEY/auth policy is not wired through extension requests; standardized error taxonomy (CaptureError, ValidationError, NetworkError, AnalysisError, TimeoutError, PermissionError) is only partially implemented and not consistently surfaced in side panel UX; limited automated verification for extension coordination and permission/error scenarios.",
-      "createdAt": "2026-03-31T16:50:59.670Z"
-    },
-    {
-      "id": "ISSUE-002",
-      "category": "BugReport",
-      "summary": "Extension does not support backend API_KEY authentication",
-      "details": "验证发现 backend 在配置 API_KEY 时会要求 /api/analyze 请求携带 x-api-key（backend/src/app.ts），但 extension/src/shared/api.ts 未发送该请求头，extension/.env.example 也未提供对应配置项。因此一旦启用 backend API_KEY，插件“采集并分析”主流程将返回 AUTH_ERROR，README 亦未说明该不兼容限制。建议为 extension 增加可选 API key 配置与请求头透传，或在 README 中明确当前仅支持后端关闭 API_KEY 的本地联调模式。",
-      "createdAt": "2026-03-31T17:09:21.546Z"
+      "summary": "可配置规则版权限边界与注入暴露面偏离已批准架构",
+      "details": "Audit failed。差距：1) production 默认 optional_host_permissions 过宽，不符合域名级受控权限；2) web_accessible_resources.matches 暴露面随之过大；3) activeTab 声明与策略未形成清晰一致的 fallback。结论：实现返工，非模型更新。",
+      "createdAt": "2026-04-01T03:45:35.250Z"
     }
   ],
   "validations": {
     "qa": {
       "status": "passed",
-      "summary": "重新 QA 验证通过：已执行 npm run verify:rework，backend 5/5、extension 12/12 测试通过，typecheck/build 通过。重点失败点复核结果：1) API_KEY 鉴权闭环已修复，extension/src/shared/api.ts 支持 x-api-key 透传，backend/src/app.test.ts 与 extension/src/shared/api.test.ts 覆盖鉴权正反用例；2) 自动化测试已补充，覆盖 backend 鉴权/白名单/错误域与 extension 配置白名单、受限页面、API key 透传、内容脚本注入；3) README 已补充 HTTPS-first、白名单、API_KEY 联动、已知限制说明；4) README 已补充真机 Chrome E2E 边界与手工验收步骤。剩余风险：当前 CLI 环境下仍无法直接驱动真实 Chrome Side Panel，全自动真机 E2E 仍未落地，但边界与手工验证步骤已明确。",
-      "details": "重新 QA 验证通过：已执行 npm run verify:rework，backend 5/5、extension 12/12 测试通过，typecheck/build 通过。重点失败点复核结果：1) API_KEY 鉴权闭环已修复，extension/src/shared/api.ts 支持 x-api-key 透传，backend/src/app.test.ts 与 extension/src/shared/api.test.ts 覆盖鉴权正反用例；2) 自动化测试已补充，覆盖 backend 鉴权/白名单/错误域与 extension 配置白名单、受限页面、API key 透传、内容脚本注入；3) README 已补充 HTTPS-first、白名单、API_KEY 联动、已知限制说明；4) README 已补充真机 Chrome E2E 边界与手工验收步骤。剩余风险：当前 CLI 环境下仍无法直接驱动真实 Chrome Side Panel，全自动真机 E2E 仍未落地，但边界与手工验证步骤已明确。",
-      "updatedAt": "2026-03-31T17:31:10.429Z"
+      "summary": "2026-04-01 复测“可配置规则版网页范围采集”修复实现：结论通过。已验证 1) Side Panel 保留规则配置中心，支持新增/编辑/删除规则、字段规则编辑与 chrome.storage.local 持久化，页面规则无需改代码；2) 受控域名登记、optional_host_permissions、web_accessible_resources 子集约束、域名授权流程与 activeTab 兜底边界在 README 与 UI 文案中说明清晰；3) npm run verify:rework 全量通过（backend 5/5、extension 20/20、typecheck/build 通过）；4) 采集→分析闭环仍在，background 命中规则后注入 content.js 采集字段并调用 /api/analyze，Side Panel 渲染 Markdown 结果。注意：新增受控域名仍需通过环境配置登记并重建扩展，这符合受控域名架构，但不属于纯 UI 动态扩域；另仓库仍缺真实 Chrome 安装态 E2E，仅有单元/集成与文档化手工验收建议。",
+      "details": "2026-04-01 复测“可配置规则版网页范围采集”修复实现：结论通过。已验证 1) Side Panel 保留规则配置中心，支持新增/编辑/删除规则、字段规则编辑与 chrome.storage.local 持久化，页面规则无需改代码；2) 受控域名登记、optional_host_permissions、web_accessible_resources 子集约束、域名授权流程与 activeTab 兜底边界在 README 与 UI 文案中说明清晰；3) npm run verify:rework 全量通过（backend 5/5、extension 20/20、typecheck/build 通过）；4) 采集→分析闭环仍在，background 命中规则后注入 content.js 采集字段并调用 /api/analyze，Side Panel 渲染 Markdown 结果。注意：新增受控域名仍需通过环境配置登记并重建扩展，这符合受控域名架构，但不属于纯 UI 动态扩域；另仓库仍缺真实 Chrome 安装态 E2E，仅有单元/集成与文档化手工验收建议。",
+      "updatedAt": "2026-04-01T03:59:26.480Z"
     },
     "audit": {
       "status": "passed",
-      "summary": "2026-04-01 重新审计 Chrome 插件 + backend 架构一致性：意图模型充分，重点关注的权限过宽、HTTP 默认配置、鉴权未闭环、错误域不统一、README/验证覆盖不足等问题已在实现中闭合。证据包括：extension/dist/manifest.json 最小权限与显式白名单；extension/src/shared/configuration.ts 的 HTTPS-first 与 allowlist 校验；extension/src/shared/api.ts 的 x-api-key 透传；backend/src/app.ts 与 backend/src/config.ts 的 API_KEY/ALLOWED_ORIGINS 校验；extension/src/shared/errors.ts 与 sidepanel/App.tsx 的统一错误域展示；README.md 的配置/限制/验收说明；npm run verify:rework 全量通过。剩余低风险观察为真实 Chrome Side Panel 自动化 E2E 仍未在当前 CLI 环境直接落地，暂以自动化单测/集成测试 + README 手工验收补足。",
-      "details": "2026-04-01 重新审计 Chrome 插件 + backend 架构一致性：意图模型充分，重点关注的权限过宽、HTTP 默认配置、鉴权未闭环、错误域不统一、README/验证覆盖不足等问题已在实现中闭合。证据包括：extension/dist/manifest.json 最小权限与显式白名单；extension/src/shared/configuration.ts 的 HTTPS-first 与 allowlist 校验；extension/src/shared/api.ts 的 x-api-key 透传；backend/src/app.ts 与 backend/src/config.ts 的 API_KEY/ALLOWED_ORIGINS 校验；extension/src/shared/errors.ts 与 sidepanel/App.tsx 的统一错误域展示；README.md 的配置/限制/验收说明；npm run verify:rework 全量通过。剩余低风险观察为真实 Chrome Side Panel 自动化 E2E 仍未在当前 CLI 环境直接落地，暂以自动化单测/集成测试 + README 手工验收补足。",
-      "updatedAt": "2026-03-31T17:31:06.473Z"
+      "summary": "2026-04-01 重新审计“可配置规则版网页范围采集”修复实现：架构基线充分且实现与已批准方案保持一致。production 默认 optional_host_permissions 已收紧为受控域名清单并禁止广域模式；web_accessible_resources.matches 已改为独立配置并校验为 optional_host_permissions 的受控子集；activeTab 已明确为仅在用户点击扩展动作且 sidePanel 不可用时的一次性嵌入式 UI 兜底，不作为稳定采集主路径；规则配置化、chrome.storage.local 持久化、background + chrome.scripting 按需注入链路保持成立。验证证据包括源码、README、单元测试、typecheck、production build 与构建产物 manifest。",
+      "details": "2026-04-01 重新审计“可配置规则版网页范围采集”修复实现：架构基线充分且实现与已批准方案保持一致。production 默认 optional_host_permissions 已收紧为受控域名清单并禁止广域模式；web_accessible_resources.matches 已改为独立配置并校验为 optional_host_permissions 的受控子集；activeTab 已明确为仅在用户点击扩展动作且 sidePanel 不可用时的一次性嵌入式 UI 兜底，不作为稳定采集主路径；规则配置化、chrome.storage.local 持久化、background + chrome.scripting 按需注入链路保持成立。验证证据包括源码、README、单元测试、typecheck、production build 与构建产物 manifest。",
+      "updatedAt": "2026-04-01T03:59:09.954Z"
     }
   },
   "release": {
-    "status": "completed",
-    "summary": "已完成 Chrome 插件 + backend 项目发布总结。交付范围覆盖 Chrome Extension MV3 骨架、悬浮入口与 Side Panel UI、字段采集、backend /api/analyze、MockAnalysisProvider、最小权限与白名单、安全与鉴权闭环、统一错误域、README 与验证脚本。验证结果：QA passed、Audit passed，已执行 npm run verify:rework，backend 5/5、extension 12/12、typecheck/build 全部通过。主要产物路径包括 README.md、extension/dist/、extension/dist/manifest.json、backend/、extension/、SprintRleaseLog.md。已知限制为真实 Chrome Side Panel 自动化 E2E 尚未落地，当前以自动化测试与手工验收补足。",
-    "releaseLogPath": "SprintRleaseLog.md",
-    "updatedAt": "2026-03-31T17:32:58.928Z"
+    "status": "not_started",
+    "summary": "Release not prepared for the current goal.",
+    "updatedAt": "2026-04-01T02:07:38.789Z"
   },
   "counters": {
-    "task": 11,
-    "issue": 2
+    "task": 21,
+    "issue": 3
   },
-  "updatedAt": "2026-03-31T17:32:58.928Z"
+  "updatedAt": "2026-04-01T03:59:26.481Z"
 }

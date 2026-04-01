@@ -49,6 +49,9 @@ export class MockAnalysisProvider implements AnalysisProvider {
         "## 观察",
         `- Meta Description：${capture.metaDescription || "空"}`,
         `- ${emphasis}`,
+        ...(Object.entries(capture)
+          .filter(([key]) => !["pageTitle", "pageUrl", "metaDescription", "h1", "selectedText"].includes(key))
+          .map(([key, value]) => `- 扩展字段 ${key}：${value || "空"}`)),
         "",
         "## 建议",
         "1. 优先核对页面标题与 H1 是否一致。",

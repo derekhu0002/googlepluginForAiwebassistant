@@ -2,7 +2,7 @@ import type { ErrorCode } from "./errors";
 
 export interface PageAccessResult {
   allowed: boolean;
-  code?: Extract<ErrorCode, "PERMISSION_ERROR" | "RESTRICTED_PAGE_ERROR">;
+  code?: Extract<ErrorCode, "PERMISSION_ERROR" | "RESTRICTED_PAGE_ERROR" | "RULE_NOT_MATCHED_ERROR">;
   message?: string;
 }
 
@@ -38,7 +38,9 @@ export function matchesChromePattern(url: string, pattern: string) {
 
     const [, hostPart] = pattern.split("://");
     const hostnamePattern = hostPart.replace(/\/\*$/, "");
-    const hostRegex = hostnamePattern.startsWith("*.")
+    const hostRegex = hostnamePattern === "*"
+      ? /^.+$/
+      : hostnamePattern.startsWith("*.")
       ? new RegExp(`^(?:[^./]+\\.)*${escapeRegExp(hostnamePattern.slice(2))}$`)
       : new RegExp(`^${escapeRegExp(hostnamePattern)}$`);
 
@@ -73,9 +75,14 @@ export function evaluatePageAccess(url: string | undefined, allowedPageMatches: 
     return {
       allowed: false,
       code: "PERMISSION_ERROR",
-      message: "当前页面不在扩展白名单内，请切换到允许的站点或调整配置。"
+      message: "当前页面域名不在受控授权清单内。请先在扩展配置中登记该域名，再由用户在 Side Panel 中申请当前域名权限。"
     };
   }
 
   return { allowed: true };
+}
+
+export function toOriginPermissionPattern(url: string) {
+  const parsed = new URL(url);
+  return `${parsed.protocol}//${parsed.hostname}/*`;
 }

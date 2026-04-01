@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluatePageAccess, isRestrictedUrl, matchesChromePattern } from "./pageAccess";
+import { evaluatePageAccess, isRestrictedUrl, matchesChromePattern, toOriginPermissionPattern } from "./pageAccess";
 
 describe("page access guard", () => {
   it("detects restricted browser pages", () => {
@@ -25,7 +25,11 @@ describe("page access guard", () => {
     expect(evaluatePageAccess("https://other.com", ["https://example.com/*"])).toEqual({
       allowed: false,
       code: "PERMISSION_ERROR",
-      message: "当前页面不在扩展白名单内，请切换到允许的站点或调整配置。"
+      message: "当前页面域名不在受控授权清单内。请先在扩展配置中登记该域名，再由用户在 Side Panel 中申请当前域名权限。"
     });
+  });
+
+  it("builds origin permission pattern from page url", () => {
+    expect(toOriginPermissionPattern("https://docs.example.com/path?q=1")).toBe("https://docs.example.com/*");
   });
 });

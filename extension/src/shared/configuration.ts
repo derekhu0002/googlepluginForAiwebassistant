@@ -8,7 +8,8 @@ export interface ExtensionConfig {
   apiKey: string;
   requestTimeoutMs: number;
   allowedApiOrigins: string[];
-  allowedPageMatches: string[];
+  optionalHostPermissions: string[];
+  webAccessibleResourceMatches: string[];
   apiHostPermissions: string[];
 }
 
@@ -19,9 +20,15 @@ const DEFAULT_PROD_API_BASE_URL = "https://api.example.com";
 const DEFAULT_DEV_API_BASE_URL = "http://localhost:8787";
 const DEFAULT_PROD_API_ORIGINS = ["https://api.example.com"];
 const DEFAULT_DEV_API_ORIGINS = ["http://localhost:8787"];
-const DEFAULT_PROD_PAGE_MATCHES = ["https://example.com/*", "https://*.example.com/*"];
-const DEFAULT_DEV_PAGE_MATCHES = [
-  ...DEFAULT_PROD_PAGE_MATCHES,
+const DEFAULT_OPTIONAL_HOST_PERMISSIONS = ["https://example.com/*", "https://*.example.com/*"];
+const DEFAULT_DEV_OPTIONAL_HOST_PERMISSIONS = [
+  ...DEFAULT_OPTIONAL_HOST_PERMISSIONS,
+  "http://localhost/*",
+  "http://127.0.0.1/*"
+];
+const DEFAULT_WEB_ACCESSIBLE_RESOURCE_MATCHES = ["https://example.com/*", "https://*.example.com/*"];
+const DEFAULT_DEV_WEB_ACCESSIBLE_RESOURCE_MATCHES = [
+  ...DEFAULT_WEB_ACCESSIBLE_RESOURCE_MATCHES,
   "http://localhost/*",
   "http://127.0.0.1/*"
 ];
@@ -49,8 +56,12 @@ function getDefaultApiOrigins(extensionEnv: ExtensionEnvironment) {
   return extensionEnv === "development" ? DEFAULT_DEV_API_ORIGINS : DEFAULT_PROD_API_ORIGINS;
 }
 
-function getDefaultPageMatches(extensionEnv: ExtensionEnvironment) {
-  return extensionEnv === "development" ? DEFAULT_DEV_PAGE_MATCHES : DEFAULT_PROD_PAGE_MATCHES;
+function getDefaultOptionalHostPermissions(extensionEnv: ExtensionEnvironment) {
+  return extensionEnv === "development" ? DEFAULT_DEV_OPTIONAL_HOST_PERMISSIONS : DEFAULT_OPTIONAL_HOST_PERMISSIONS;
+}
+
+function getDefaultWebAccessibleResourceMatches(extensionEnv: ExtensionEnvironment) {
+  return extensionEnv === "development" ? DEFAULT_DEV_WEB_ACCESSIBLE_RESOURCE_MATCHES : DEFAULT_WEB_ACCESSIBLE_RESOURCE_MATCHES;
 }
 
 function resolveExtensionEnvironment(rawEnv: RawEnv, mode = "production"): ExtensionEnvironment {
@@ -58,13 +69,28 @@ function resolveExtensionEnvironment(rawEnv: RawEnv, mode = "production"): Exten
   return extensionEnvironmentSchema.parse(requested);
 }
 
-function validatePageMatchPattern(pattern: string) {
-  if (["<all_urls>", "http://*/*", "https://*/*"].includes(pattern)) {
-    throw new Error(`Overbroad page match pattern is not allowed: ${pattern}`);
+function validateHostPermissionPattern(pattern: string) {
+  if (pattern === "<all_urls>") {
+    throw new Error(`Unsupported host permission pattern: ${pattern}`);
   }
 
-  const schema = z.string().regex(/^https?:\/\/(\*\.[^/*]+|[^/*]+)\/\*$/, `Invalid Chrome match pattern: ${pattern}`);
+  const schema = z.string().regex(/^https?:\/\/(\*|\*\.[^/*]+|[^/*]+)\/\*$/, `Invalid Chrome match pattern: ${pattern}`);
   return schema.parse(pattern);
+}
+
+function validateControlledHostPermissionPattern(pattern: string) {
+  const normalized = validateHostPermissionPattern(pattern);
+  const hostname = getPatternHostname(normalized);
+
+  if (hostname === "*") {
+    throw new Error(`Unsupported broad host permission pattern: ${pattern}`);
+  }
+
+  return normalized;
+}
+
+function ensureHostPermissionPatterns(patterns: string[]) {
+  return Array.from(new Set(patterns.map(validateControlledHostPermissionPattern)));
 }
 
 function validateApiOrigin(origin: string, extensionEnv: ExtensionEnvironment) {
@@ -100,12 +126,61 @@ function toApiHostPermission(origin: string) {
   return `${url.protocol}//${url.hostname}/*`;
 }
 
+function getPatternHostname(pattern: string) {
+  return pattern.split("://")[1]?.replace(/\/\*$/, "") ?? "";
+}
+
+function hostPatternCovers(candidateHostname: string, allowedHostname: string) {
+  if (allowedHostname === "*") {
+    return true;
+  }
+
+  if (candidateHostname === allowedHostname) {
+    return true;
+  }
+
+  if (allowedHostname.startsWith("*.")) {
+    const suffix = allowedHostname.slice(2);
+    return candidateHostname === suffix || candidateHostname.endsWith(`.${suffix}`);
+  }
+
+  return false;
+}
+
+function patternCovers(candidatePattern: string, allowedPattern: string) {
+  const candidateScheme = candidatePattern.startsWith("https://") ? "https" : candidatePattern.startsWith("http://") ? "http" : "";
+  const allowedScheme = allowedPattern.startsWith("https://") ? "https" : allowedPattern.startsWith("http://") ? "http" : "";
+
+  if (!candidateScheme || candidateScheme !== allowedScheme) {
+    return false;
+  }
+
+  const candidateHostname = getPatternHostname(candidatePattern);
+  const allowedHostname = getPatternHostname(allowedPattern);
+  return hostPatternCovers(candidateHostname, allowedHostname);
+}
+
+function validateWebAccessibleResourceMatches(matches: string[], optionalHostPermissions: string[]) {
+  return matches.map(validateControlledHostPermissionPattern).map((pattern) => {
+    const covered = optionalHostPermissions.some((allowedPattern) => patternCovers(pattern, allowedPattern));
+    if (!covered) {
+      throw new Error(`Web accessible resource match must stay within controlled host permissions: ${pattern}`);
+    }
+
+    return pattern;
+  });
+}
+
 export function createExtensionConfig(rawEnv: RawEnv, mode = "production"): ExtensionConfig {
   const extensionEnv = resolveExtensionEnvironment(rawEnv, mode);
   const requestTimeoutMs = z.coerce.number().int().positive().parse(rawEnv.VITE_REQUEST_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
   const allowedApiOrigins = parseCsvList(rawEnv.VITE_ALLOWED_API_ORIGINS, getDefaultApiOrigins(extensionEnv)).map((origin) => validateApiOrigin(origin, extensionEnv));
   const apiBaseUrl = validateApiBaseUrl(rawEnv.VITE_API_BASE_URL ?? getDefaultApiBaseUrl(extensionEnv), extensionEnv, allowedApiOrigins);
-  const allowedPageMatches = parseCsvList(rawEnv.VITE_ALLOWED_PAGE_MATCHES, getDefaultPageMatches(extensionEnv)).map(validatePageMatchPattern);
+  const optionalHostPermissions = ensureHostPermissionPatterns(parseCsvList(rawEnv.VITE_OPTIONAL_HOST_PERMISSIONS, getDefaultOptionalHostPermissions(extensionEnv)));
+  const webAccessibleResourceMatches = validateWebAccessibleResourceMatches(
+    parseCsvList(rawEnv.VITE_WEB_ACCESSIBLE_RESOURCE_MATCHES, getDefaultWebAccessibleResourceMatches(extensionEnv)),
+    optionalHostPermissions
+  );
 
   return {
     extensionEnv,
@@ -113,22 +188,23 @@ export function createExtensionConfig(rawEnv: RawEnv, mode = "production"): Exte
     apiKey: (rawEnv.VITE_API_KEY ?? "").trim(),
     requestTimeoutMs,
     allowedApiOrigins: Array.from(new Set(allowedApiOrigins)),
-    allowedPageMatches: Array.from(new Set(allowedPageMatches)),
+    optionalHostPermissions,
+    webAccessibleResourceMatches: Array.from(new Set(webAccessibleResourceMatches)),
     apiHostPermissions: Array.from(new Set(allowedApiOrigins.map(toApiHostPermission)))
   };
 }
 
 export function createExtensionManifest(rawEnv: RawEnv, mode = "production") {
   const config = createExtensionConfig(rawEnv, mode);
-  const hostPermissions = Array.from(new Set([...config.allowedPageMatches, ...config.apiHostPermissions]));
 
   return {
     manifest_version: 3,
     name: "AI Web Assistant MVP",
     version: "0.1.0",
     description: "Collect page fields and analyze them through a mock backend service.",
-    permissions: ["storage", "tabs", "sidePanel"],
-    host_permissions: hostPermissions,
+    permissions: ["storage", "tabs", "sidePanel", "scripting", "activeTab", "permissions"],
+    host_permissions: config.apiHostPermissions,
+    optional_host_permissions: config.optionalHostPermissions,
     background: {
       service_worker: "background.js",
       type: "module"
@@ -139,17 +215,10 @@ export function createExtensionManifest(rawEnv: RawEnv, mode = "production") {
     side_panel: {
       default_path: "sidepanel.html"
     },
-    content_scripts: [
-      {
-        matches: config.allowedPageMatches,
-        js: ["content.js"],
-        run_at: "document_idle"
-      }
-    ],
     web_accessible_resources: [
       {
         resources: ["sidepanel.html", "assets/*"],
-        matches: config.allowedPageMatches
+        matches: config.webAccessibleResourceMatches
       }
     ]
   };

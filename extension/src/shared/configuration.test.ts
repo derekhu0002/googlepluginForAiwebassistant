@@ -7,7 +7,8 @@ describe("extension configuration", () => {
 
     expect(config.apiBaseUrl).toBe("https://api.example.com");
     expect(config.allowedApiOrigins).toEqual(["https://api.example.com"]);
-    expect(config.allowedPageMatches).toEqual(["https://example.com/*", "https://*.example.com/*"]);
+    expect(config.optionalHostPermissions).toEqual(["https://example.com/*", "https://*.example.com/*"]);
+    expect(config.webAccessibleResourceMatches).toEqual(["https://example.com/*", "https://*.example.com/*"]);
   });
 
   it("allows localhost only during development", () => {
@@ -15,24 +16,42 @@ describe("extension configuration", () => {
 
     expect(config.apiBaseUrl).toBe("http://localhost:8787");
     expect(config.allowedApiOrigins).toContain("http://localhost:8787");
-    expect(config.allowedPageMatches).toContain("http://localhost/*");
+    expect(config.optionalHostPermissions).toContain("http://localhost/*");
+    expect(config.webAccessibleResourceMatches).toContain("http://localhost/*");
   });
 
-  it("rejects overbroad page matches", () => {
-    expect(() => createExtensionConfig({ VITE_ALLOWED_PAGE_MATCHES: "https://*/*" }, "production")).toThrow(/Overbroad/);
+  it("rejects broad host permission", () => {
+    expect(() => createExtensionConfig({ VITE_OPTIONAL_HOST_PERMISSIONS: "https://*/*" }, "production")).toThrow(/Unsupported broad/);
+    expect(() => createExtensionConfig({ VITE_OPTIONAL_HOST_PERMISSIONS: "<all_urls>" }, "production")).toThrow(/Unsupported/);
   });
 
-  it("builds manifest from allowlists", () => {
+  it("rejects web accessible resource matches outside controlled hosts", () => {
+    expect(() => createExtensionConfig({
+      VITE_OPTIONAL_HOST_PERMISSIONS: "https://example.com/*",
+      VITE_WEB_ACCESSIBLE_RESOURCE_MATCHES: "https://other.com/*"
+    }, "production")).toThrow(/controlled host permissions/);
+  });
+
+  it("builds manifest from host permission policy", () => {
     const manifest = createExtensionManifest({
       VITE_EXTENSION_ENV: "development",
-      VITE_ALLOWED_PAGE_MATCHES: "https://example.com/*,http://localhost/*",
+      VITE_OPTIONAL_HOST_PERMISSIONS: "https://example.com/*,https://*.example.com/*,http://localhost/*",
+      VITE_WEB_ACCESSIBLE_RESOURCE_MATCHES: "https://example.com/*,http://localhost/*",
       VITE_ALLOWED_API_ORIGINS: "https://api.example.com,http://localhost:8787",
       VITE_API_BASE_URL: "http://localhost:8787"
     }, "development");
 
-    expect(manifest.content_scripts[0].matches).toEqual(["https://example.com/*", "http://localhost/*"]);
-    expect(manifest.host_permissions).toContain("http://localhost/*");
+    expect(manifest.permissions).toContain("scripting");
+    expect(manifest.permissions).toContain("permissions");
+    expect(manifest.permissions).toContain("activeTab");
+    expect(manifest.optional_host_permissions).toEqual(["https://example.com/*", "https://*.example.com/*", "http://localhost/*"]);
     expect(manifest.host_permissions).toContain("https://api.example.com/*");
-    expect(manifest.host_permissions).not.toContain("https://*/*");
+    expect(manifest.web_accessible_resources).toEqual([
+      {
+        resources: ["sidepanel.html", "assets/*"],
+        matches: ["https://example.com/*", "http://localhost/*"]
+      }
+    ]);
+    expect(manifest).not.toHaveProperty("content_scripts");
   });
 });

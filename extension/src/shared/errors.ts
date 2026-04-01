@@ -6,7 +6,8 @@ export const ERROR_CODES = [
   "TIMEOUT_ERROR",
   "PERMISSION_ERROR",
   "RESTRICTED_PAGE_ERROR",
-  "AUTH_ERROR"
+  "AUTH_ERROR",
+  "RULE_NOT_MATCHED_ERROR"
 ] as const;
 
 export type ErrorCode =
@@ -17,7 +18,8 @@ export type ErrorCode =
   | "TIMEOUT_ERROR"
   | "PERMISSION_ERROR"
   | "RESTRICTED_PAGE_ERROR"
-  | "AUTH_ERROR";
+  | "AUTH_ERROR"
+  | "RULE_NOT_MATCHED_ERROR";
 
 export interface DomainError {
   code: ErrorCode;
@@ -47,6 +49,8 @@ export function toDisplayMessage(error: DomainError) {
       return `受限页面：${error.message}`;
     case "AUTH_ERROR":
       return `鉴权失败：${error.message}`;
+    case "RULE_NOT_MATCHED_ERROR":
+      return `规则未命中：${error.message}`;
     case "TIMEOUT_ERROR":
       return `请求超时：${error.message}`;
     case "NETWORK_ERROR":
