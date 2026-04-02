@@ -143,6 +143,8 @@ python3 -m pytest python_adapter/tests
 3. 构建并加载 extension
 4. 打开 `http://127.0.0.1:4173`
 5. 在 Side Panel 中保存规则并授权域名
+在添加规则时，若使用测试网站，务必在Hostname 模式填写`127.0.0.1`：
+![alt text](image.png)
 6. 触发一次 run，观察：
    - `software_version` / `selected_sr` 摘要
    - thinking/tool_call/question/result 事件流
