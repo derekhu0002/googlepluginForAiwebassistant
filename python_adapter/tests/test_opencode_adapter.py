@@ -185,3 +185,15 @@ def test_explicit_mock_fallback_keeps_flow_when_real_contract_fails() -> None:
         assert events[-1].data["opencode_mode"] == "mock-fallback"
 
     anyio.run(scenario)
+
+
+def test_default_client_factory_disables_environment_proxy_inheritance() -> None:
+    adapter = OpencodeAdapter(Settings(opencode_base_url="http://127.0.0.1:4096"))
+    client = adapter._default_client_factory(30.0)
+
+    try:
+        assert client.base_url == httpx.URL("http://127.0.0.1:4096")
+        assert client.timeout.connect == 30.0
+        assert client.trust_env is False
+    finally:
+        anyio.run(client.aclose)

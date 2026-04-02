@@ -22,7 +22,7 @@ class OpencodeAdapter:
         self._client_factory = client_factory or self._default_client_factory
 
     def _default_client_factory(self, timeout: float | None) -> httpx.AsyncClient:
-        return httpx.AsyncClient(base_url=self.settings.opencode_base_url, timeout=timeout)
+        return httpx.AsyncClient(base_url=self.settings.opencode_base_url, timeout=timeout, trust_env=False)
 
     def _query_params(self) -> dict[str, str]:
         params = {"directory": self.settings.opencode_directory}
