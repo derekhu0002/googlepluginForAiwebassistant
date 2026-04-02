@@ -9,6 +9,103 @@ import type { ActiveTabContext, AssistantState, FieldRuleDefinition, PageRule, R
 import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
 import { useRunHistory } from "./useRunHistory";
 
+const ASSISTANT_STATUS_RANK: Record<AssistantState["status"], number> = {
+  idle: 0,
+  collecting: 1,
+  streaming: 2,
+  waiting_for_answer: 3,
+  done: 4,
+  error: 4
+};
+
+const RUN_STATUS_RANK: Record<RunRecord["status"], number> = {
+  streaming: 0,
+  waiting_for_answer: 1,
+  done: 2,
+  error: 2
+};
+
+const STREAM_STATUS_RANK: Record<AssistantState["stream"]["status"], number> = {
+  idle: 0,
+  connecting: 1,
+  reconnecting: 2,
+  streaming: 2,
+  waiting_for_answer: 3,
+  done: 4,
+  error: 4
+};
+
+function getStateRunId(state: Pick<AssistantState, "stream" | "currentRun">) {
+  return state.stream.runId ?? state.currentRun?.runId ?? null;
+}
+
+function toTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+export function mergeStateUpdate(current: AssistantState, payload: AssistantState, history: AssistantState["history"], selectedHistoryDetail: AssistantState["selectedHistoryDetail"]): AssistantState {
+  const mergedState: AssistantState = {
+    ...current,
+    ...payload,
+    history,
+    selectedHistoryDetail
+  };
+
+  const currentRunId = getStateRunId(current);
+  const payloadRunId = getStateRunId(payload);
+  const isSameActiveRun = Boolean(currentRunId && payloadRunId && currentRunId === payloadRunId);
+
+  if (!isSameActiveRun) {
+    return mergedState;
+  }
+
+  const keepLocalRunEvents = current.runEvents.length > payload.runEvents.length;
+  const keepLocalCurrentRun = Boolean(
+    current.currentRun
+    && payload.currentRun
+    && current.currentRun.runId === payload.currentRun.runId
+    && (
+      keepLocalRunEvents
+      || toTimestamp(current.currentRun.updatedAt) > toTimestamp(payload.currentRun.updatedAt)
+      || RUN_STATUS_RANK[current.currentRun.status] > RUN_STATUS_RANK[payload.currentRun.status]
+    )
+  );
+  const keepLocalStream = (
+    keepLocalRunEvents
+    || STREAM_STATUS_RANK[current.stream.status] > STREAM_STATUS_RANK[payload.stream.status]
+    || (current.stream.pendingQuestionId === null && payload.stream.pendingQuestionId !== null)
+  );
+  const keepLocalStatus = (
+    keepLocalStream
+    || keepLocalCurrentRun
+    || ASSISTANT_STATUS_RANK[current.status] > ASSISTANT_STATUS_RANK[payload.status]
+    || (current.status === "streaming" && payload.status === "waiting_for_answer")
+  );
+
+  if (keepLocalRunEvents) {
+    mergedState.runEvents = current.runEvents;
+  }
+
+  if (keepLocalCurrentRun && current.currentRun) {
+    mergedState.currentRun = current.currentRun;
+  }
+
+  if (keepLocalStream) {
+    mergedState.stream = current.stream;
+  }
+
+  if (keepLocalStatus) {
+    mergedState.status = current.status;
+  }
+
+  return mergedState;
+}
+
 function cloneRule(rule: PageRule): PageRule {
   return {
     ...rule,
@@ -129,7 +226,7 @@ export function App() {
 
     const listener = (message: RuntimeMessage) => {
       if (message.type === "STATE_UPDATED") {
-        setState((current) => ({ ...current, ...message.payload, history, selectedHistoryDetail }));
+        setState((current) => mergeStateUpdate(current, message.payload, history, selectedHistoryDetail));
       }
     };
 

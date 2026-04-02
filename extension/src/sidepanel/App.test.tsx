@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialAssistantState } from "../shared/state";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
+import type { NormalizedRunEvent } from "../shared/protocol";
 
 const {
   mockCreateRunEventStream,
@@ -47,7 +48,7 @@ vi.mock("./useRunHistory", () => ({
   })
 }));
 
-const { App } = await import("./App");
+const { App, mergeStateUpdate } = await import("./App");
 
 interface ChromeStubOptions {
   contexts: ActiveTabContext[];
@@ -86,6 +87,32 @@ function createCurrentRun() {
     startedAt: "2026-04-02T00:00:00.000Z",
     updatedAt: "2026-04-02T00:00:00.000Z",
     finalOutput: ""
+  };
+}
+
+function createRunEvent(sequence: number, overrides: Partial<NormalizedRunEvent> = {}): NormalizedRunEvent {
+  return {
+    id: `event-${sequence}`,
+    runId: "run-1",
+    type: "thinking",
+    createdAt: `2026-04-02T00:00:0${sequence}.000Z`,
+    sequence,
+    message: `event ${sequence}`,
+    ...overrides
+  };
+}
+
+function createAssistantState(overrides: Partial<AssistantState> = {}): AssistantState {
+  return {
+    ...initialAssistantState,
+    currentRun: createCurrentRun(),
+    status: "streaming",
+    stream: {
+      runId: "run-1",
+      status: "streaming",
+      pendingQuestionId: null
+    },
+    ...overrides
   };
 }
 
@@ -279,5 +306,102 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("流连接：streaming");
+  });
+
+  it("keeps local run events when STATE_UPDATED carries empty events for the active run", () => {
+    const current = createAssistantState({
+      runEvents: [createRunEvent(1), createRunEvent(2)]
+    });
+    const payload = createAssistantState({
+      runEvents: [],
+      currentRun: {
+        ...createCurrentRun(),
+        updatedAt: "2026-04-02T00:00:01.000Z"
+      }
+    });
+
+    const merged = mergeStateUpdate(current, payload, [], null);
+
+    expect(merged.runEvents).toHaveLength(2);
+    expect(merged.runEvents.map((event) => event.id)).toEqual(["event-1", "event-2"]);
+    expect(merged.stream.status).toBe("streaming");
+    expect(merged.currentRun?.runId).toBe("run-1");
+  });
+
+  it("still syncs background state for a different run", () => {
+    const current = createAssistantState({
+      runEvents: [createRunEvent(1)],
+      capturedFields: { software_version: "v1" }
+    });
+    const payload = createAssistantState({
+      runEvents: [],
+      currentRun: {
+        ...createCurrentRun(),
+        runId: "run-2",
+        status: "done",
+        updatedAt: "2026-04-02T00:00:05.000Z",
+        finalOutput: "done"
+      },
+      stream: {
+        runId: "run-2",
+        status: "done",
+        pendingQuestionId: null
+      },
+      status: "done",
+      capturedFields: { software_version: "v2", selected_sr: "SR-2" }
+    });
+
+    const merged = mergeStateUpdate(current, payload, [], null);
+
+    expect(merged.runEvents).toEqual([]);
+    expect(merged.currentRun?.runId).toBe("run-2");
+    expect(merged.status).toBe("done");
+    expect(merged.stream.status).toBe("done");
+    expect(merged.capturedFields).toEqual({ software_version: "v2", selected_sr: "SR-2" });
+  });
+
+  it("keeps the final result state when a stale active-run update arrives after completion", () => {
+    const resultEvent = createRunEvent(3, {
+      type: "result",
+      message: "final answer"
+    });
+    const current = createAssistantState({
+      runEvents: [createRunEvent(1), resultEvent],
+      status: "done",
+      currentRun: {
+        ...createCurrentRun(),
+        status: "done",
+        updatedAt: "2026-04-02T00:00:03.000Z",
+        finalOutput: "final answer"
+      },
+      stream: {
+        runId: "run-1",
+        status: "done",
+        pendingQuestionId: null
+      }
+    });
+    const payload = createAssistantState({
+      runEvents: [],
+      currentRun: {
+        ...createCurrentRun(),
+        status: "streaming",
+        updatedAt: "2026-04-02T00:00:01.000Z",
+        finalOutput: ""
+      },
+      status: "streaming",
+      stream: {
+        runId: "run-1",
+        status: "streaming",
+        pendingQuestionId: null
+      }
+    });
+
+    const merged = mergeStateUpdate(current, payload, [], null);
+
+    expect(merged.status).toBe("done");
+    expect(merged.stream.status).toBe("done");
+    expect(merged.currentRun?.status).toBe("done");
+    expect(merged.currentRun?.finalOutput).toBe("final answer");
+    expect(merged.runEvents.at(-1)?.type).toBe("result");
   });
 });
