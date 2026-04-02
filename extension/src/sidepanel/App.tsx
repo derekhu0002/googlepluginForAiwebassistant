@@ -195,23 +195,26 @@ export function App() {
   const eventFeedRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const { history, selectedHistoryDetail, saveRun, saveEvent, saveAnswer, selectRun, refresh } = useRunHistory();
+  const historyRef = useRef(history);
+  const selectedHistoryDetailRef = useRef(selectedHistoryDetail);
 
   const isBusy = state.status === "collecting" || state.status === "streaming" || state.status === "waiting_for_answer";
   const isEmbedded = useMemo(() => new URLSearchParams(window.location.search).get("mode") === "embedded", []);
   const questionEvent = useMemo(() => getActiveQuestionEvent(state.runEvents, state.stream.pendingQuestionId), [state.runEvents, state.stream.pendingQuestionId]);
 
-  async function loadState() {
+  async function loadBaseState() {
     const [currentState, currentRules, context] = await Promise.all([
       sendMessage<AssistantState>({ type: "GET_STATE" }),
       sendMessage<PageRule[]>({ type: "GET_RULES" }),
       sendMessage<ActiveTabContext>({ type: "GET_ACTIVE_CONTEXT" }).catch(() => null as ActiveTabContext | null)
     ]);
 
-    setState({
-      ...(currentState ?? initialAssistantState),
-      history,
-      selectedHistoryDetail
-    });
+    setState((current) => mergeStateUpdate(
+      current,
+      currentState ?? initialAssistantState,
+      historyRef.current,
+      selectedHistoryDetailRef.current
+    ));
     setRules(currentRules);
     setActiveContext(context);
 
@@ -222,17 +225,27 @@ export function App() {
   }
 
   useEffect(() => {
-    loadState().catch(() => undefined);
+    historyRef.current = history;
+    selectedHistoryDetailRef.current = selectedHistoryDetail;
+  }, [history, selectedHistoryDetail]);
+
+  useEffect(() => {
+    loadBaseState().catch(() => undefined);
 
     const listener = (message: RuntimeMessage) => {
       if (message.type === "STATE_UPDATED") {
-        setState((current) => mergeStateUpdate(current, message.payload, history, selectedHistoryDetail));
+        setState((current) => mergeStateUpdate(
+          current,
+          message.payload,
+          historyRef.current,
+          selectedHistoryDetailRef.current
+        ));
       }
     };
 
     chrome.runtime.onMessage.addListener(listener as Parameters<typeof chrome.runtime.onMessage.addListener>[0]);
     return () => chrome.runtime.onMessage.removeListener(listener as Parameters<typeof chrome.runtime.onMessage.addListener>[0]);
-  }, [history, selectedHistoryDetail]);
+  }, []);
 
   useEffect(() => {
     if (!selectedRuleId && rules[0]) {
@@ -293,7 +306,7 @@ export function App() {
       const nextRules = await sendMessage<PageRule[]>({ type: "UPSERT_RULE", payload: draftRule });
       setRules(nextRules);
       setSelectedRuleId(draftRule.id);
-      await loadState();
+      await loadBaseState();
     } finally {
       setSavingRule(false);
     }
@@ -309,7 +322,7 @@ export function App() {
     const nextSelected = nextRules[0] ?? null;
     setSelectedRuleId(nextSelected?.id ?? null);
     setDraftRule(nextSelected ? cloneRule(nextSelected) : null);
-    await loadState();
+    await loadBaseState();
   }
 
   function addRule() {

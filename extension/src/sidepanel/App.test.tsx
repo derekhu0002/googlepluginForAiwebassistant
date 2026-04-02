@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialAssistantState } from "../shared/state";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
-import type { NormalizedRunEvent } from "../shared/protocol";
+import type { NormalizedRunEvent, RunRecord } from "../shared/protocol";
 
 const {
   mockCreateRunEventStream,
@@ -25,7 +25,7 @@ const {
   mockSelectRun: vi.fn(async () => undefined),
   mockStreamClose: vi.fn(),
   mockRunHistoryState: {
-    history: [] as never[],
+    history: [] as RunRecord[],
     selectedHistoryDetail: null as null
   }
 }));
@@ -55,6 +55,7 @@ interface ChromeStubOptions {
   permissionsRequest?: ReturnType<typeof vi.fn>;
   startRunResponse?: { ok: boolean; data?: { runId: string; currentRun: AssistantState["currentRun"] }; error?: { message: string } };
   rules?: PageRule[];
+  getStateResponse?: AssistantState;
 }
 
 function createContext(overrides: Partial<ActiveTabContext> = {}): ActiveTabContext {
@@ -118,10 +119,11 @@ function createAssistantState(overrides: Partial<AssistantState> = {}): Assistan
 
 function setupChromeStub(options: ChromeStubOptions) {
   const contextQueue = [...options.contexts];
+  const listeners = new Set<(message: RuntimeMessage) => void>();
   const runtimeSendMessage = vi.fn(async (message: RuntimeMessage) => {
     switch (message.type) {
       case "GET_STATE":
-        return initialAssistantState;
+        return options.getStateResponse ?? initialAssistantState;
       case "GET_RULES":
         return options.rules ?? [];
       case "GET_ACTIVE_CONTEXT":
@@ -134,8 +136,12 @@ function setupChromeStub(options: ChromeStubOptions) {
   });
 
   const onMessage = {
-    addListener: vi.fn(),
-    removeListener: vi.fn()
+    addListener: vi.fn((listener: (message: RuntimeMessage) => void) => {
+      listeners.add(listener);
+    }),
+    removeListener: vi.fn((listener: (message: RuntimeMessage) => void) => {
+      listeners.delete(listener);
+    })
   };
 
   vi.stubGlobal("chrome", {
@@ -151,7 +157,12 @@ function setupChromeStub(options: ChromeStubOptions) {
 
   return {
     runtimeSendMessage,
-    permissionsRequest: (globalThis.chrome.permissions.request as ReturnType<typeof vi.fn>)
+    permissionsRequest: (globalThis.chrome.permissions.request as ReturnType<typeof vi.fn>),
+    emitRuntimeMessage(message: RuntimeMessage) {
+      for (const listener of listeners) {
+        listener(message);
+      }
+    }
   };
 }
 
@@ -168,6 +179,8 @@ describe("side panel host permission request flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    mockRunHistoryState.history = [];
+    mockRunHistoryState.selectedHistoryDetail = null;
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     container = document.createElement("div");
     document.body.innerHTML = "";
@@ -403,5 +416,121 @@ describe("side panel host permission request flow", () => {
     expect(merged.currentRun?.status).toBe("done");
     expect(merged.currentRun?.finalOutput).toBe("final answer");
     expect(merged.runEvents.at(-1)?.type).toBe("result");
+  });
+
+  it("does not clear live run events when history refresh rerenders the app", async () => {
+    const { runtimeSendMessage } = setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集并开始 SSE Run"));
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
+    const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void> };
+    const thinkingEvent = createRunEvent(1);
+
+    await act(async () => {
+      await handlers.onEvent?.(thinkingEvent);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("event 1");
+
+    mockRunHistoryState.history = [{
+      ...createCurrentRun(),
+      status: "streaming",
+      updatedAt: thinkingEvent.createdAt
+    }];
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("event 1");
+    expect(container.textContent).not.toContain("暂无事件");
+    expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
+  });
+
+  it("does not regress done UI state after result when later history rerenders occur", async () => {
+    const { runtimeSendMessage, emitRuntimeMessage } = setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集并开始 SSE Run"));
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
+    const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void> };
+    const resultEvent = createRunEvent(2, {
+      type: "result",
+      message: "final answer"
+    });
+
+    await act(async () => {
+      await handlers.onEvent?.(resultEvent);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("状态：");
+    expect(container.textContent).toContain("done");
+    expect(container.textContent).toContain("final answer");
+
+    mockRunHistoryState.history = [{
+      ...createCurrentRun(),
+      status: "done",
+      updatedAt: resultEvent.createdAt,
+      finalOutput: "final answer"
+    }];
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    await act(async () => {
+      emitRuntimeMessage({
+        type: "STATE_UPDATED",
+        payload: createAssistantState({
+          runEvents: [],
+          status: "streaming",
+          currentRun: {
+            ...createCurrentRun(),
+            status: "streaming",
+            updatedAt: "2026-04-02T00:00:01.000Z",
+            finalOutput: ""
+          },
+          stream: {
+            runId: "run-1",
+            status: "streaming",
+            pendingQuestionId: null
+          }
+        })
+      });
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("done");
+    expect(container.textContent).toContain("final answer");
+    expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 });
