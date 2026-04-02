@@ -34,6 +34,7 @@ export interface NormalizedRunEvent {
   message: string;
   title?: string;
   data?: Record<string, unknown>;
+  logData?: Record<string, unknown>;
   question?: QuestionPayload;
 }
 

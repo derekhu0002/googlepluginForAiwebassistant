@@ -58,6 +58,7 @@ const streamEventSchema = z.object({
   message: z.string(),
   title: z.string().optional(),
   data: nullableOptional(z.record(z.string(), z.unknown())),
+  logData: nullableOptional(z.record(z.string(), z.unknown())),
   question: nullableOptional(questionPayloadSchema)
 });
 

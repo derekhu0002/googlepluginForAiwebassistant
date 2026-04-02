@@ -30,6 +30,21 @@ const {
   }
 }));
 
+const mockExtensionConfig = vi.hoisted(() => ({
+  extensionEnv: "production",
+  apiBaseUrl: "https://api.example.com",
+  apiKey: "",
+  requestTimeoutMs: 10000,
+  allowedApiOrigins: ["https://api.example.com"],
+  optionalHostPermissions: ["https://example.com/*"],
+  webAccessibleResourceMatches: ["https://example.com/*"],
+  apiHostPermissions: ["https://api.example.com/*"]
+}));
+
+vi.mock("../shared/config", () => ({
+  extensionConfig: mockExtensionConfig
+}));
+
 vi.mock("../shared/api", () => ({
   createRunEventStream: mockCreateRunEventStream,
   submitQuestionAnswer: mockSubmitQuestionAnswer
@@ -172,6 +187,20 @@ async function flushUi() {
   });
 }
 
+async function flushTimers() {
+  await act(async () => {
+    vi.runOnlyPendingTimers();
+    await Promise.resolve();
+  });
+}
+
+async function flushAllTimers() {
+  await act(async () => {
+    vi.runAllTimers();
+    await Promise.resolve();
+  });
+}
+
 describe("side panel host permission request flow", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
@@ -179,6 +208,7 @@ describe("side panel host permission request flow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    vi.useFakeTimers();
     mockRunHistoryState.history = [];
     mockRunHistoryState.selectedHistoryDetail = null;
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -192,6 +222,7 @@ describe("side panel host permission request flow", () => {
     await act(async () => {
       root.unmount();
     });
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -444,6 +475,8 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
+    await flushAllTimers();
+
     expect(container.textContent).toContain("event 1");
 
     mockRunHistoryState.history = [{
@@ -490,6 +523,7 @@ describe("side panel host permission request flow", () => {
       await handlers.onEvent?.(resultEvent);
     });
     await flushUi();
+    await flushAllTimers();
 
     expect(container.textContent).toContain("状态：");
     expect(container.textContent).toContain("done");
@@ -532,5 +566,85 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("done");
     expect(container.textContent).toContain("final answer");
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
+  });
+
+  it("hides raw json payload in production by default", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        runEvents: [createRunEvent(1, {
+          type: "tool_call",
+          title: "处理中",
+          message: "正在整理上下文并准备分析。",
+          data: { stage: "prepare_context", payload: { secret: true } }
+        })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("正在整理上下文并准备分析");
+    expect(container.textContent).not.toContain("prepare_context");
+    expect(container.textContent).not.toContain("secret");
+    expect(container.querySelector("pre")).toBeNull();
+  });
+
+  it("reveals messages progressively with typewriter effect", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集并开始 SSE Run"));
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
+    const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void> };
+    const thinkingEvent = createRunEvent(1, { type: "thinking", message: "逐步展示文本" });
+
+    await act(async () => {
+      await handlers.onEvent?.(thinkingEvent);
+    });
+    await flushUi();
+
+    expect(container.textContent).not.toContain("逐步展示文本");
+    await flushTimers();
+    expect(container.textContent).toContain("逐");
+    await flushAllTimers();
+    expect(container.textContent).toContain("逐步展示文本");
+  });
+
+  it("renders simplified tool call copy instead of raw payload details", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        runEvents: [createRunEvent(1, {
+          type: "tool_call",
+          title: "处理中",
+          message: "正在检索相关信息。",
+          data: { stage: "running" },
+          logData: { tool: "grep", args: ["token=123"] }
+        })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("正在检索相关信息");
+    expect(container.textContent).not.toContain("token=123");
+    expect(container.textContent).not.toContain("grep");
   });
 });

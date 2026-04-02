@@ -173,6 +173,34 @@ describe("streaming api client", () => {
     expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "tool_call", data: undefined }));
   });
 
+  it("accepts events with logData for internal diagnostics", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    global.EventSource = FakeEventSource as unknown as typeof EventSource;
+
+    const { createRunEventStream } = await import("./api");
+    const onEvent = vi.fn();
+    const onError = vi.fn();
+    const stream = createRunEventStream("run-log-data", { onEvent, onError }) as unknown as FakeEventSource;
+
+    stream.emit("message", JSON.stringify({
+      id: "event-tool-call",
+      runId: "run-log-data",
+      type: "tool_call",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      title: "处理中",
+      message: "正在处理当前分析步骤。",
+      data: { stage: "running" },
+      logData: { tool: "bash", args: ["secret"] }
+    }));
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ logData: { tool: "bash", args: ["secret"] } }));
+  });
+
   it("still parses valid question events", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
     vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");

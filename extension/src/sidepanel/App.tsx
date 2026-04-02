@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createRunEventStream, submitQuestionAnswer } from "../shared/api";
+import { extensionConfig } from "../shared/config";
 import { toDisplayMessage } from "../shared/errors";
 import { createDefaultFieldTemplates, createDefaultRule, createId } from "../shared/rules";
 import { initialAssistantState } from "../shared/state";
@@ -140,15 +141,83 @@ async function sendMessage<T>(message: RuntimeMessage): Promise<T> {
   return chrome.runtime.sendMessage(message) as Promise<T>;
 }
 
-function EventCard({ event }: { event: NormalizedRunEvent }) {
+const DEFAULT_EVENT_TITLES: Record<NormalizedRunEvent["type"], string> = {
+  thinking: "分析中",
+  tool_call: "处理中",
+  question: "需要确认",
+  result: "分析结果",
+  error: "运行失败"
+};
+
+const TYPEWRITER_EVENT_TYPES = new Set<NormalizedRunEvent["type"]>(["thinking", "result"]);
+const TYPEWRITER_INTERVAL_MS = 16;
+
+function getEventTitle(event: NormalizedRunEvent) {
+  if (event.title && event.title !== event.type) {
+    return event.title;
+  }
+
+  return DEFAULT_EVENT_TITLES[event.type];
+}
+
+function EventCard({ event, animate = false }: { event: NormalizedRunEvent; animate?: boolean }) {
+  const articleRef = useRef<HTMLElement | null>(null);
+  const shouldAnimate = animate && TYPEWRITER_EVENT_TYPES.has(event.type);
+  const [displayedMessage, setDisplayedMessage] = useState(shouldAnimate ? "" : event.message);
+  const showDebugData = extensionConfig.extensionEnv === "development" && Boolean(event.data);
+
+  useEffect(() => {
+    if (!shouldAnimate) {
+      setDisplayedMessage(event.message);
+      return;
+    }
+
+    let timer: number | undefined;
+    let cancelled = false;
+    let nextLength = 0;
+
+    setDisplayedMessage("");
+
+    const tick = () => {
+      if (cancelled) {
+        return;
+      }
+
+      nextLength += 1;
+      setDisplayedMessage(event.message.slice(0, nextLength));
+
+      if (nextLength < event.message.length) {
+        timer = window.setTimeout(tick, TYPEWRITER_INTERVAL_MS);
+      }
+    };
+
+    timer = window.setTimeout(tick, TYPEWRITER_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [event.id, event.message, shouldAnimate]);
+
+  useEffect(() => {
+    articleRef.current?.scrollIntoView?.({ block: "end" });
+  }, [displayedMessage]);
+
   return (
-    <article className={`event-card event-${event.type}`}>
+    <article className={`event-card event-${event.type}`} ref={articleRef}>
       <div className="event-card-header">
-        <strong>{event.title ?? event.type}</strong>
+        <strong>{getEventTitle(event)}</strong>
         <small>{new Date(event.createdAt).toLocaleTimeString()}</small>
       </div>
-      <p>{event.message}</p>
-      {event.data ? <pre>{JSON.stringify(event.data, null, 2)}</pre> : null}
+      <p>{displayedMessage}</p>
+      {showDebugData ? (
+        <details className="event-debug-panel">
+          <summary>查看调试数据</summary>
+          <pre>{JSON.stringify(event.data, null, 2)}</pre>
+        </details>
+      ) : null}
     </article>
   );
 }
@@ -569,7 +638,7 @@ export function App() {
           <small>自动滚动 / SSE</small>
         </div>
         <div className="event-feed" ref={eventFeedRef}>
-          {state.runEvents.length ? state.runEvents.map((event) => <EventCard key={event.id} event={event} />) : <p className="empty-state">暂无事件。</p>}
+          {state.runEvents.length ? state.runEvents.map((event) => <EventCard key={event.id} event={event} animate />) : <p className="empty-state">暂无事件。</p>}
         </div>
         {questionEvent?.question ? <QuestionCard question={questionEvent.question} onSubmit={handleQuestionSubmit} /> : null}
       </section>

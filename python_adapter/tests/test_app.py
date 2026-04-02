@@ -1,4 +1,7 @@
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock
+
+from python_adapter.app import main
 
 from python_adapter.app.main import app
 
@@ -55,3 +58,37 @@ def test_health_exposes_runtime_defaults() -> None:
     assert isinstance(payload["use_mock_opencode"], bool)
     assert isinstance(payload["allow_mock_fallback"], bool)
     assert payload["invocation_log_path"].endswith("python_adapter/logs/invocations.jsonl")
+
+
+def test_start_run_returns_explicit_error_when_primary_agent_guard_fails(monkeypatch) -> None:
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("TARA primary agent guard failed: missing agent")))
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "prompt": "hello",
+            "capture": {
+                "pageTitle": "Example",
+                "pageUrl": "https://example.com",
+                "software_version": "v1.0.0",
+                "selected_sr": "SR-1",
+            },
+            "context": {
+                "source": "chrome-extension",
+                "capturedAt": "2026-04-01T00:00:00.000Z",
+                "username": "alice",
+                "usernameSource": "dom_text",
+                "pageTitle": "Example",
+                "pageUrl": "https://example.com",
+            },
+        },
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "ok": False,
+        "error": {
+            "code": "ANALYSIS_ERROR",
+            "message": "TARA primary agent guard failed: missing agent",
+        },
+    }

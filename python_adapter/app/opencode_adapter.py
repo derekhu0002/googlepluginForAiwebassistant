@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -33,7 +34,7 @@ class OpencodeAdapter:
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _next_event(self, run: dict[str, Any], event_type: str, message: str, *, title: str | None = None, data: dict[str, Any] | None = None, question: QuestionPayload | None = None) -> NormalizedRunEvent:
+    def _next_event(self, run: dict[str, Any], event_type: str, message: str, *, title: str | None = None, data: dict[str, Any] | None = None, log_data: dict[str, Any] | None = None, question: QuestionPayload | None = None) -> NormalizedRunEvent:
         run["sequence"] += 1
         return NormalizedRunEvent(
             id=f"{run['run_id']}-{run['sequence']}",
@@ -44,10 +45,52 @@ class OpencodeAdapter:
             title=title or event_type,
             message=message,
             data=data,
+            logData=log_data if log_data is not None else data,
             question=question,
         )
 
+    def _next_tool_event(self, run: dict[str, Any], message: str, *, title: str = "处理中", data: dict[str, Any] | None = None, log_data: dict[str, Any] | None = None) -> NormalizedRunEvent:
+        return self._next_event(
+            run,
+            "tool_call",
+            message,
+            title=title,
+            data=data,
+            log_data=log_data if log_data is not None else data,
+        )
+
+    def _ensure_tara_primary_agent(self) -> None:
+        config_path = Path(self.settings.opencode_config_path)
+        agent_path = Path(self.settings.opencode_tara_agent_path)
+
+        try:
+            config_raw = config_path.read_text(encoding="utf-8")
+        except Exception as exc:
+            raise RuntimeError(f"TARA primary agent guard failed: unable to read {config_path}: {exc}") from exc
+
+        try:
+            config_payload = json.loads(config_raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"TARA primary agent guard failed: invalid JSON in {config_path}: {exc}") from exc
+
+        default_agent = config_payload.get("default_agent")
+        if default_agent != "TARA_analyst":
+            raise RuntimeError(
+                f"TARA primary agent guard failed: .opencode/opencode.json default_agent must be 'TARA_analyst', got {default_agent!r}"
+            )
+
+        try:
+            agent_contents = agent_path.read_text(encoding="utf-8")
+        except Exception as exc:
+            raise RuntimeError(f"TARA primary agent guard failed: unable to read {agent_path}: {exc}") from exc
+
+        if not agent_contents.strip():
+            raise RuntimeError(f"TARA primary agent guard failed: {agent_path} is empty")
+
     async def start_run(self, request: RunStartRequest) -> str:
+        if not self.settings.use_mock_opencode:
+            self._ensure_tara_primary_agent()
+
         run_id = f"run-{uuid4().hex}"
         run = {
             "run_id": run_id,
@@ -82,11 +125,18 @@ class OpencodeAdapter:
                     f"已创建 opencode session，准备提交 prompt。software_version={request.capture.get('software_version', '') or '(empty)'}；selected_sr={request.capture.get('selected_sr', '') or '(empty)'}。",
                     data={"session_id": session["id"]},
                 ),
-                self._next_event(
+                self._next_tool_event(
                     run,
-                    "tool_call",
-                    "通过 Python adapter 调用真实 opencode serve session/prompt_async 契约。",
+                    "已连接主分析代理，正在准备执行分析步骤。",
                     data={
+                        "stage": "dispatch_prompt",
+                        "target": self.settings.opencode_base_url,
+                        "session_id": session["id"],
+                        "event_endpoint": self.settings.opencode_global_event_endpoint,
+                        "mock_mode": False,
+                        "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                    },
+                    log_data={
                         "target": self.settings.opencode_base_url,
                         "session_id": session["id"],
                         "event_endpoint": self.settings.opencode_global_event_endpoint,
@@ -105,11 +155,11 @@ class OpencodeAdapter:
             else:
                 run["startup_error"] = str(exc)
                 run["events"] = [
-                    self._next_event(
+                    self._next_tool_event(
                         run,
-                        "tool_call",
-                        "尝试按真实 opencode SDK 契约创建 session/prompt_async。",
-                        data={"target": self.settings.opencode_base_url, "mock_mode": False},
+                        "正在校验主分析代理配置。",
+                        data={"stage": "preflight_check"},
+                        log_data={"target": self.settings.opencode_base_url, "mock_mode": False, "error": str(exc)},
                     )
                 ]
 
@@ -193,11 +243,17 @@ class OpencodeAdapter:
                 f"分析用户请求，并结合 software_version={request.capture.get('software_version', '') or '(empty)'}、selected_sr={request.capture.get('selected_sr', '') or '(empty)'} 构建推理上下文。",
                 data={"prompt": request.prompt, "username": request.context.username},
             ),
-            self._next_event(
+            self._next_tool_event(
                 run,
-                "tool_call",
-                "通过 Python adapter 调用 opencode serve 适配层。",
+                "正在整理上下文并准备分析。",
                 data={
+                    "stage": "prepare_context",
+                    "target": self.settings.opencode_base_url,
+                    "mock_mode": True,
+                    "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                    **({"fallback_reason": fallback_reason} if fallback_reason else {}),
+                },
+                log_data={
                     "target": self.settings.opencode_base_url,
                     "mock_mode": True,
                     "mock_fallback_enabled": self.settings.allow_mock_fallback,
@@ -304,8 +360,10 @@ class OpencodeAdapter:
             part_type = part.get("type")
             if part_type == "tool":
                 state = part.get("state") or {}
-                message = state.get("title") or f"工具 {part.get('tool', 'unknown')} 状态：{state.get('status', 'unknown')}"
-                return [self._next_event(run, "tool_call", message, data={"tool": part.get("tool"), "state": state})]
+                tool_name = str(part.get("tool") or "unknown")
+                state_status = str(state.get("status") or "running")
+                message = self._simplify_tool_call_message(tool_name, state_status, state.get("title"))
+                return [self._next_tool_event(run, message, data={"stage": state_status}, log_data={"tool": part.get("tool"), "state": state, "part": part})]
             if part_type == "reasoning":
                 return [self._next_event(run, "thinking", part.get("text") or "模型正在推理。")]
             if part_type == "text" and part.get("text"):
@@ -343,6 +401,23 @@ class OpencodeAdapter:
             return [result] if result else [self._next_event(run, "thinking", "opencode session 已空闲，等待消息同步。", data=properties)]
 
         return []
+
+    def _simplify_tool_call_message(self, tool_name: str, status: str, title: Any = None) -> str:
+        normalized_tool = tool_name.lower()
+        normalized_status = status.lower()
+        if "search" in normalized_tool or "grep" in normalized_tool or "glob" in normalized_tool:
+            return "正在检索相关信息。"
+        if "read" in normalized_tool:
+            return "正在读取所需内容。"
+        if "write" in normalized_tool or "edit" in normalized_tool or "patch" in normalized_tool:
+            return "正在整理并更新内容。"
+        if "bash" in normalized_tool or "command" in normalized_tool:
+            return "正在执行必要步骤。"
+        if normalized_status in {"completed", "done", "success"}:
+            return "当前步骤已完成，正在进入下一步。"
+        if isinstance(title, str) and title.strip():
+            return "正在处理当前分析步骤。"
+        return "正在处理当前分析步骤。"
 
     def _normalize_question_request(self, request_payload: dict[str, Any]) -> QuestionPayload:
         first_question = (request_payload.get("questions") or [{}])[0]

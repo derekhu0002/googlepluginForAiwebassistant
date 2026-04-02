@@ -242,6 +242,17 @@ textarea {
   font-size: 12px;
 }
 
+.event-debug-panel {
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 8px;
+}
+
+.event-debug-panel summary {
+  cursor: pointer;
+  color: #475569;
+  font-size: 12px;
+}
+
 .event-card-header,
 .history-layout {
   display: flex;

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections import deque
+from pathlib import Path
 
 import httpx
 import anyio
+import pytest
 
 from python_adapter.app.config import Settings
 from python_adapter.app.models import QuestionAnswerRequest, RunContext, RunStartRequest
@@ -197,3 +199,64 @@ def test_default_client_factory_disables_environment_proxy_inheritance() -> None
         assert client.trust_env is False
     finally:
         anyio.run(client.aclose)
+
+
+def test_tool_call_messages_are_simplified_for_users(tmp_path: Path) -> None:
+    config_path = tmp_path / "opencode.json"
+    agent_path = tmp_path / "TARA_analyst.md"
+    config_path.write_text('{"default_agent": "TARA_analyst"}', encoding="utf-8")
+    agent_path.write_text("# TARA analyst", encoding="utf-8")
+
+    adapter = OpencodeAdapter(Settings(
+        opencode_base_url="http://testserver",
+        opencode_config_path=str(config_path),
+        opencode_tara_agent_path=str(agent_path),
+    ))
+
+    message = adapter._simplify_tool_call_message("grep", "running", "raw title")
+    assert message == "正在检索相关信息。"
+
+
+def test_primary_agent_guard_rejects_wrong_default_agent(tmp_path: Path) -> None:
+    config_path = tmp_path / "opencode.json"
+    agent_path = tmp_path / "TARA_analyst.md"
+    config_path.write_text('{"default_agent": "other_agent"}', encoding="utf-8")
+    agent_path.write_text("# TARA analyst", encoding="utf-8")
+
+    adapter = OpencodeAdapter(Settings(
+        opencode_base_url="http://testserver",
+        opencode_config_path=str(config_path),
+        opencode_tara_agent_path=str(agent_path),
+    ))
+
+    with pytest.raises(RuntimeError, match="default_agent must be 'TARA_analyst'"):
+        adapter._ensure_tara_primary_agent()
+
+
+def test_primary_agent_guard_rejects_missing_agent_file(tmp_path: Path) -> None:
+    config_path = tmp_path / "opencode.json"
+    config_path.write_text('{"default_agent": "TARA_analyst"}', encoding="utf-8")
+
+    adapter = OpencodeAdapter(Settings(
+        opencode_base_url="http://testserver",
+        opencode_config_path=str(config_path),
+        opencode_tara_agent_path=str(tmp_path / "missing.md"),
+    ))
+
+    with pytest.raises(RuntimeError, match="unable to read"):
+        adapter._ensure_tara_primary_agent()
+
+
+def test_primary_agent_guard_accepts_valid_configuration(tmp_path: Path) -> None:
+    config_path = tmp_path / "opencode.json"
+    agent_path = tmp_path / "TARA_analyst.md"
+    config_path.write_text('{"default_agent": "TARA_analyst"}', encoding="utf-8")
+    agent_path.write_text("# TARA analyst", encoding="utf-8")
+
+    adapter = OpencodeAdapter(Settings(
+        opencode_base_url="http://testserver",
+        opencode_config_path=str(config_path),
+        opencode_tara_agent_path=str(agent_path),
+    ))
+
+    adapter._ensure_tara_primary_agent()

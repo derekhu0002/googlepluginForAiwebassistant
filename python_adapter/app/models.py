@@ -53,6 +53,7 @@ class NormalizedRunEvent(BaseModel):
     message: str
     title: str | None = None
     data: dict[str, Any] | None = None
+    logData: dict[str, Any] | None = None
     question: QuestionPayload | None = None
 
 

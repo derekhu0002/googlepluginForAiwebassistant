@@ -35,6 +35,8 @@ class Settings:
     opencode_session_messages_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_SESSION_MESSAGES_ENDPOINT", "/session/{session_id}/message"))
     opencode_global_event_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_GLOBAL_EVENT_ENDPOINT", "/global/event"))
     opencode_health_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_HEALTH_ENDPOINT", "/global/health"))
+    opencode_config_path: str = field(default_factory=lambda: os.getenv("OPENCODE_CONFIG_PATH", str(ADAPTER_ROOT.parent / ".opencode" / "opencode.json")))
+    opencode_tara_agent_path: str = field(default_factory=lambda: os.getenv("OPENCODE_TARA_AGENT_PATH", str(ADAPTER_ROOT.parent / ".opencode" / "agents" / "TARA_analyst.md")))
     log_dir: str = field(default_factory=lambda: os.getenv("PYTHON_ADAPTER_LOG_DIR", str(ADAPTER_ROOT / "logs")))
     use_mock_opencode: bool = field(default_factory=lambda: _bool("PYTHON_ADAPTER_USE_MOCK_OPENCODE", False))
     allow_mock_fallback: bool = field(default_factory=lambda: _bool("PYTHON_ADAPTER_ALLOW_MOCK_FALLBACK", False))
@@ -48,6 +50,14 @@ class Settings:
         if not log_dir.is_absolute():
             log_dir = ADAPTER_ROOT / log_dir
         object.__setattr__(self, "log_dir", str(log_dir))
+        config_path = Path(self.opencode_config_path)
+        if not config_path.is_absolute():
+            config_path = ADAPTER_ROOT.parent / config_path
+        object.__setattr__(self, "opencode_config_path", str(config_path))
+        tara_agent_path = Path(self.opencode_tara_agent_path)
+        if not tara_agent_path.is_absolute():
+            tara_agent_path = ADAPTER_ROOT.parent / tara_agent_path
+        object.__setattr__(self, "opencode_tara_agent_path", str(tara_agent_path))
 
 
 settings = Settings()

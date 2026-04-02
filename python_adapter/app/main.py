@@ -58,7 +58,10 @@ async def health() -> dict[str, object]:
 
 @app.post("/api/runs")
 async def start_run(request: RunStartRequest, _auth: None = Depends(enforce_api_key)) -> JSONResponse:
-    run_id = await adapter.start_run(request)
+    try:
+        run_id = await adapter.start_run(request)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail={"code": "ANALYSIS_ERROR", "message": str(exc)}) from exc
     logger.write({
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "run_id": run_id,
@@ -80,6 +83,7 @@ async def stream_run_events(run_id: str, _auth: None = Depends(enforce_stream_ap
                 "run_id": run_id,
                 "phase": "stream_event",
                 "event": event.model_dump(),
+                "raw_event": event.logData,
             })
             yield {"event": "message", "data": json.dumps(event.model_dump())}
 
