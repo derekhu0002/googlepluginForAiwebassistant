@@ -1,88 +1,78 @@
 {
   "version": 1,
-  "activeGoal": "修复 extension 前端对 EventSource SSE `error` 事件的误判问题。当前 `/api/runs/{runId}/events` 已返回 200 OK 且会重连，但插件将任何 `error` 事件都显示为 `SS",
-  "designSummary": "TASK-036 refinement for direct coding: preserve Chrome Extension -> Python adapter -> opencode serve chain and existing SSE payload structure. Limit implementation to extension SSE client behavior and minimal side panel consumption. createRunEventStream in extension/src/shared/api.ts should distinguish initial connect failure from post-connect transient EventSource error/reconnect and from expected close after terminal result/error events. Side panel should avoid surfacing transient EventSource error as terminal user error and may optionally show reconnecting via local stream state only.",
+  "activeGoal": "基于 ELM-003，为当前 Chrome extension + Python adapter + real opencode serve 链路实现：1) 右侧推理事件流面向用户可读化展示，默认隐藏原始 JSON；2) thinking/",
+  "designSummary": "ELM-003 最小可实施架构：在不重构 extension → python adapter → real opencode serve 主链路前提下，新增三层职责分离。前端显示层负责用户态事件卡片与 thinking/result 打字机渲染，生产态默认隐藏原始 JSON；adapter 事件映射层负责将底层事件规范化为 user_message/debug_payload 双轨结构并对 tool_call 输出简化阶段提示，同时完整保留原始事件到日志；opencode 入口约束层负责以 .opencode/agents/TARA_analyst.md 为唯一 primary agent 入口，启动前校验 opencode.json default_agent、agent 文件存在与可解析性，失败即返回显式配置错误，禁止静默降级。软件单元包括：SU-EXT-SIDEPANEL、SU-ADAPTER-EVENT-MAPPER、SU-OPENCODE-ENTRY-GUARD。",
   "designDecisions": [
-    "Decision for TASK-036: 在 extension/src/shared/api.ts 的 createRunEventStream() 引入最小本地状态机标记（hasConnected、hasReceivedEvent、terminalEventReceived、closedByClient，必要时可含 reconnectSince）。EventSource.onerror 仅在从未成功建立连接且尚未收到任何业务事件时上报 SSE connection failed；已连接后的 error 视为浏览器重连或暂态断流，不直接报错，而通过最小 onStatusChange/等价通知让 side panel 呈现 reconnecting。收到 result 或 error 终止事件后应先设置 terminalEventReceived 再 close，后续 error/close 一律静默。若已有事件但长期未恢复，可由前端本地容忍窗口转为失败，但不改协议。",
-    "TASK-036 decision: implement a minimal client-side EventSource state machine in extension/src/shared/api.ts with flags such as hasConnected, hasReceivedEvent, terminalEventReceived, and closedByClient. onerror before any successful stream message may map to user-visible connection failure; onerror after connection or after any valid event must be treated as transient/non-fatal reconnect unless a separate local timeout policy is later added. When result or error terminal business events arrive, mark terminalEventReceived before closing EventSource so subsequent browser error callbacks are ignored."
+    "ELM-003 Decision 1: 采用‘展示视图与原始调试信息分层’而非修改底层事件协议语义。生产 UI 仅消费用户态 message/title/phase_hint；原始 data/raw payload 保留在 adapter 日志与开发模式能力中。",
+    "ELM-003 Decision 2: thinking/result 的打字机效果落在 extension sidepanel 渲染层实现，不要求 adapter 做文本重写；adapter 仅提供稳定的可读文本字段。",
+    "ELM-003 Decision 3: tool_call 采用 adapter 固定词典映射生成简化阶段提示，未知工具回退到通用阶段文案，但仍记录完整原始事件到 debug/log。",
+    "ELM-003 Decision 4: TARA_analyst 主入口约束同时落在配置校验与请求分发前校验。必须校验 .opencode/opencode.json default_agent=TARA_analyst、.opencode/agents/TARA_analyst.md 存在且可读取；任一失败均返回显式错误并终止真实链路，不允许 fallback 到其他 agent。",
+    "ELM-003 Task Mapping: TASK-042 -> SU-EXT-SIDEPANEL/ELM-APP-003A；TASK-043 -> SU-OPENCODE-ENTRY-GUARD/ELM-APP-003C；TASK-044 -> SU-ADAPTER-EVENT-MAPPER + SU-OPENCODE-ENTRY-GUARD/ELM-APP-003B,ELM-APP-003C。",
+    "ELM-003 Review Result: human-reviewed and approved. Approved minimal architecture baseline covers strategy/business/application/technology layers and preserves existing extension → python adapter → real opencode serve main flow while adding sidepanel presentation, adapter event mapping, and primary agent guard responsibilities."
   ],
   "tasks": [
     {
-      "id": "TASK-036",
-      "title": "修复 extension 前端对 EventSource SSE `error` 事件的误判问题。当前 `/api/runs/{runId}/events` 已返回 200 OK 且会重连，但插件将任何 `error` 事件都显示为 `SS",
+      "id": "TASK-042",
+      "title": "基于 ELM-003，为当前 Chrome extension + Python adapter + real opencode serve 链路实现：1) 右侧推理事件流面向用户可读化展示，默认隐藏原始 JSON；2) thinking/",
       "status": "done",
       "kind": "planning",
       "owner": "SystemArchitect",
-      "summary": "Completed approved fix for extension SSE error misclassification by adjusting only extension-side SSE client state machine and validating with extension tests/typecheck/build.",
-      "details": "Completed approved fix for extension SSE error misclassification by adjusting only extension-side SSE client state machine and validating with extension tests/typecheck/build.",
-      "createdAt": "2026-04-02T04:46:42.683Z",
-      "updatedAt": "2026-04-02T05:22:50.424Z"
+      "summary": "Implemented side panel event UX updates for ELM-003: production now hides raw JSON by default, thinking/result cards render with typewriter progression, tool_call cards show user-readable stage text, and existing auto-scroll/stream behavior remains covered by tests.",
+      "details": "Implemented side panel event UX updates for ELM-003: production now hides raw JSON by default, thinking/result cards render with typewriter progression, tool_call cards show user-readable stage text, and existing auto-scroll/stream behavior remains covered by tests.",
+      "createdAt": "2026-04-02T10:43:14.207Z",
+      "updatedAt": "2026-04-02T11:23:59.572Z",
+      "commitId": "97d2981197f86393e6695ae2addf89ecf35aae1a"
     },
     {
-      "id": "TASK-037",
-      "title": "Implement SSE client error-state refinement for TASK-036",
+      "id": "TASK-043",
+      "title": "opencode/agents/TARA_analyst",
       "status": "done",
-      "kind": "implementation",
-      "owner": "Implementation",
-      "summary": "Implemented minimal EventSource SSE client state machine with open/message/error handling, terminal close suppression, and reconnect status updates in extension SSE client.",
-      "details": "Implemented minimal EventSource SSE client state machine with open/message/error handling, terminal close suppression, and reconnect status updates in extension SSE client.",
-      "softwareUnitId": "SU-EXT-SSE-CLIENT",
-      "softwareUnitTitle": "Extension SSE Client",
-      "architectureElementId": "PROJECT-CURRENT",
-      "createdAt": "2026-04-02T04:55:04.377Z",
-      "updatedAt": "2026-04-02T05:22:50.177Z"
+      "kind": "planning",
+      "owner": "SystemArchitect",
+      "summary": "Implemented TARA primary-agent guard enforcement for real runs by validating .opencode/opencode.json default_agent and readable .opencode/agents/TARA_analyst.md before session startup, with explicit failure responses and regression coverage for success and failure paths.",
+      "details": "Implemented TARA primary-agent guard enforcement for real runs by validating .opencode/opencode.json default_agent and readable .opencode/agents/TARA_analyst.md before session startup, with explicit failure responses and regression coverage for success and failure paths.",
+      "createdAt": "2026-04-02T10:43:14.207Z",
+      "updatedAt": "2026-04-02T11:23:59.908Z",
+      "commitId": "97d2981197f86393e6695ae2addf89ecf35aae1a"
     },
     {
-      "id": "TASK-038",
-      "title": "Update side panel stream handling tests for TASK-036",
+      "id": "TASK-044",
+      "title": "md` 作为 primary agent 入口，若缺失或加载失败则显式报错，不允许静默降级；5) 保留开发/日志链路中的原始事件与调试信息。",
       "status": "done",
-      "kind": "implementation",
-      "owner": "Implementation",
-      "summary": "Updated side panel stream status handling and added regression tests covering initial failure, reconnecting, terminal close/error suppression, and recovery after reopen.",
-      "details": "Updated side panel stream status handling and added regression tests covering initial failure, reconnecting, terminal close/error suppression, and recovery after reopen.",
-      "softwareUnitId": "SU-EXT-SIDEPANEL-RUN-VIEW",
-      "softwareUnitTitle": "Side Panel Run View",
-      "architectureElementId": "PROJECT-CURRENT",
-      "createdAt": "2026-04-02T04:55:04.377Z",
-      "updatedAt": "2026-04-02T05:22:50.360Z"
-    },
-    {
-      "id": "TASK-039",
-      "title": "Fix extension SSE null schema parsing",
-      "status": "done",
-      "kind": "implementation",
-      "owner": "Implementation",
-      "summary": "Completed minimal SSE schema compatibility fix by accepting null question/data values in extension stream event parsing and normalizing them to undefined for existing consumers. Added regression tests for question:null, data:null, and valid question events; extension test/typecheck/build all passed.",
-      "details": "Completed minimal SSE schema compatibility fix by accepting null question/data values in extension stream event parsing and normalizing them to undefined for existing consumers. Added regression tests for question:null, data:null, and valid question events; extension test/typecheck/build all passed.",
-      "softwareUnitId": "SU-EXT-SSE-CLIENT",
-      "softwareUnitTitle": "Extension SSE Client",
-      "architectureElementId": "PROJECT-CURRENT",
-      "createdAt": "2026-04-02T06:11:38.773Z",
-      "updatedAt": "2026-04-02T06:14:00.465Z"
+      "kind": "planning",
+      "owner": "SystemArchitect",
+      "summary": "Implemented adapter event mapping updates that simplify tool_call copy for user display while preserving raw event details in logData/invocation logs, without breaking thinking/question/result flow; added targeted adapter and API parsing tests.",
+      "details": "Implemented adapter event mapping updates that simplify tool_call copy for user display while preserving raw event details in logData/invocation logs, without breaking thinking/question/result flow; added targeted adapter and API parsing tests.",
+      "createdAt": "2026-04-02T10:43:14.207Z",
+      "updatedAt": "2026-04-02T11:24:00.796Z",
+      "commitId": "97d2981197f86393e6695ae2addf89ecf35aae1a"
     }
   ],
   "issues": [],
   "validations": {
     "qa": {
       "status": "passed",
-      "summary": "QA passed for extension SSE null schema compatibility fix. Verified extension/src/shared/api.ts streamEventSchema uses nullableOptional preprocessing so question/data accept null and normalize to undefined (lines 38-41, 52-61). Verified regression tests in extension/src/shared/api.test.ts cover question:null, data:null, and valid question events without onError calls (lines 114-209). Verified side panel reconnect/status handling test does not surface terminal SSE/zod error during non-terminal status changes in extension/src/sidepanel/App.test.tsx (lines 245-282), and App onError only sets streamError if parsing fails (App.tsx lines 329-340). Commands passed in /extension: npm test (43/43), npm run typecheck, npm run build.",
-      "details": "QA passed for extension SSE null schema compatibility fix. Verified extension/src/shared/api.ts streamEventSchema uses nullableOptional preprocessing so question/data accept null and normalize to undefined (lines 38-41, 52-61). Verified regression tests in extension/src/shared/api.test.ts cover question:null, data:null, and valid question events without onError calls (lines 114-209). Verified side panel reconnect/status handling test does not surface terminal SSE/zod error during non-terminal status changes in extension/src/sidepanel/App.test.tsx (lines 245-282), and App onError only sets streamError if parsing fails (App.tsx lines 329-340). Commands passed in /extension: npm test (43/43), npm run typecheck, npm run build.",
-      "updatedAt": "2026-04-02T06:16:06.044Z"
+      "summary": "QA passed for ELM-003 on commit 97d2981197f86393e6695ae2addf89ecf35aae1a. Verified production UI hides raw JSON by default, thinking/result use progressive typewriter rendering, tool_call display is simplified for users, raw event/logData is preserved in adapter and SSE/logging paths, TARA primary-agent guard is enforced via .opencode/opencode.json and .opencode/agents/TARA_analyst.md, and extension plus python adapter test suites passed (extension: 52 tests; python adapter: 15 tests).",
+      "details": "QA passed for ELM-003 on commit 97d2981197f86393e6695ae2addf89ecf35aae1a. Verified production UI hides raw JSON by default, thinking/result use progressive typewriter rendering, tool_call display is simplified for users, raw event/logData is preserved in adapter and SSE/logging paths, TARA primary-agent guard is enforced via .opencode/opencode.json and .opencode/agents/TARA_analyst.md, and extension plus python adapter test suites passed (extension: 52 tests; python adapter: 15 tests).",
+      "commitId": "97d2981197f86393e6695ae2addf89ecf35aae1a",
+      "updatedAt": "2026-04-02T11:28:44.446Z"
     },
     "audit": {
-      "status": "not_run",
-      "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-02T04:46:42.683Z"
+      "status": "passed",
+      "summary": "Audit passed for ELM-003 implementation commit 97d2981197f86393e6695ae2addf89ecf35aae1a. Verified user-facing event stream hides raw JSON by default and presents readable text, tool_call events no longer expose raw payload in the main UI, TARA_analyst is enforced as the primary agent with explicit startup errors on misconfiguration, raw events are still preserved in logData/invocation logging and development-mode debug UI, and the extension -> python adapter -> real opencode serve main flow remains covered by passing targeted tests.",
+      "details": "Audit passed for ELM-003 implementation commit 97d2981197f86393e6695ae2addf89ecf35aae1a. Verified user-facing event stream hides raw JSON by default and presents readable text, tool_call events no longer expose raw payload in the main UI, TARA_analyst is enforced as the primary agent with explicit startup errors on misconfiguration, raw events are still preserved in logData/invocation logging and development-mode debug UI, and the extension -> python adapter -> real opencode serve main flow remains covered by passing targeted tests.",
+      "commitId": "97d2981197f86393e6695ae2addf89ecf35aae1a",
+      "updatedAt": "2026-04-02T11:29:20.996Z"
     }
   },
   "release": {
     "status": "not_started",
     "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-02T04:46:42.683Z"
+    "updatedAt": "2026-04-02T10:43:14.207Z"
   },
   "counters": {
-    "task": 39,
+    "task": 44,
     "issue": 4
   },
-  "updatedAt": "2026-04-02T06:16:06.045Z"
+  "updatedAt": "2026-04-02T11:29:20.996Z"
 }
