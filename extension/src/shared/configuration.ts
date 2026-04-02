@@ -17,9 +17,9 @@ type RawEnv = Record<string, string | undefined>;
 
 const DEFAULT_TIMEOUT_MS = 10000;
 const DEFAULT_PROD_API_BASE_URL = "https://api.example.com";
-const DEFAULT_DEV_API_BASE_URL = "http://localhost:8787";
+const DEFAULT_DEV_API_BASE_URL = "http://localhost:8000";
 const DEFAULT_PROD_API_ORIGINS = ["https://api.example.com"];
-const DEFAULT_DEV_API_ORIGINS = ["http://localhost:8787"];
+const DEFAULT_DEV_API_ORIGINS = ["http://localhost:8000"];
 const DEFAULT_OPTIONAL_HOST_PERMISSIONS = ["https://example.com/*", "https://*.example.com/*"];
 const DEFAULT_DEV_OPTIONAL_HOST_PERMISSIONS = [
   ...DEFAULT_OPTIONAL_HOST_PERMISSIONS,
@@ -201,7 +201,7 @@ export function createExtensionManifest(rawEnv: RawEnv, mode = "production") {
     manifest_version: 3,
     name: "AI Web Assistant MVP",
     version: "0.1.0",
-    description: "Collect page fields and analyze them through a mock backend service.",
+    description: "Collect page fields and stream AI runs through a Python adapter.",
     permissions: ["storage", "tabs", "sidePanel", "scripting", "activeTab", "permissions"],
     host_permissions: config.apiHostPermissions,
     optional_host_permissions: config.optionalHostPermissions,
@@ -215,6 +215,13 @@ export function createExtensionManifest(rawEnv: RawEnv, mode = "production") {
     side_panel: {
       default_path: "sidepanel.html"
     },
+    content_scripts: [
+      {
+        matches: config.webAccessibleResourceMatches,
+        js: ["content.js"],
+        run_at: "document_idle"
+      }
+    ],
     web_accessible_resources: [
       {
         resources: ["sidepanel.html", "assets/*"],

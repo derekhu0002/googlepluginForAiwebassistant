@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="logged-in-user" content="test-user-meta" />
+    <title>AI Web Assistant Test Site</title>
+    <style>
+      body { font-family: sans-serif; margin: 0; padding: 24px; background: #f8fafc; color: #0f172a; }
+      .card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+      .selected { padding: 8px 12px; border-radius: 999px; background: #dbeafe; display: inline-block; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Repo-local Test Site</h1>
+      <p data-username="dom-user">当前登录用户：<strong>dom-user</strong></p>
+      <p>用于验证用户名提取、software_version / selected_sr 采集、question 流程与历史记录。</p>
+    </div>
+
+    <div class="card">
+      <h2>采集字段</h2>
+      <p>软件版本：<span data-software-version>v2026.04.01</span></p>
+      <p>当前 SR：<span data-selected-sr>SR-DEMO-001</span></p>
+      <p class="selected">建议在此页面选中一段文本后触发插件。</p>
+    </div>
+
+    <div class="card">
+      <h2>页面全局登录态</h2>
+      <pre>window.__CURRENT_USER__ = { username: "global-user" }</pre>
+    </div>
+
+    <script>
+      window.__CURRENT_USER__ = { username: "global-user" };
+    </script>
+  </body>
+</html>

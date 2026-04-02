@@ -1,11 +1,12 @@
-import { requestAnalysis } from "../shared/api";
+import { startRun } from "../shared/api";
 import { initialAssistantState, STORAGE_KEY } from "../shared/state";
 import { extensionConfig } from "../shared/config";
 import { createDomainError, normalizeDomainError, toDisplayMessage } from "../shared/errors";
 import { evaluatePageAccess, matchesChromePattern, toOriginPermissionPattern } from "../shared/pageAccess";
-import { ensureContentScriptInjected } from "../shared/scripting";
+import { ensureContentScriptReady, isReceivingEndMissingError } from "../shared/scripting";
 import { findMatchingRule, getStoredRules, removeRule, RULES_STORAGE_KEY, saveRules, toCanonicalCapturedFields, upsertRule } from "../shared/rules";
-import type { ActiveTabContext, AssistantState, CapturedFields, PageRule, RuntimeMessage } from "../shared/types";
+import type { ActiveTabContext, AssistantState, CapturedFields, PageRule, RuntimeMessage, UsernameContext } from "../shared/types";
+import type { RunRecord } from "../shared/protocol";
 
 async function getState(): Promise<AssistantState> {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
@@ -119,18 +120,19 @@ async function ensureActiveTabAllowed() {
   return await getActiveTab();
 }
 
-async function requestHostPermission() {
-  const context = await getActiveTabContext();
-  if (!context.permissionOrigin || !context.canRequestPermission) {
-    throw createDomainError("PERMISSION_ERROR", "当前页面域名不在受控可申请权限清单内。请先在扩展配置中登记该域名后重试。");
-  }
+async function sendMessageToReadyContent<T>(tabId: number, message: RuntimeMessage): Promise<T | undefined> {
+  await ensureContentScriptReady(tabId);
 
-  const granted = await chrome.permissions.request({ origins: [context.permissionOrigin] });
-  if (!granted) {
-    throw createDomainError("PERMISSION_ERROR", "用户拒绝了当前域名授权，请手动重试授权。");
-  }
+  try {
+    return await chrome.tabs.sendMessage(tabId, message) as T | undefined;
+  } catch (error) {
+    if (!isReceivingEndMissingError(error)) {
+      throw error;
+    }
 
-  return await getActiveTabContext();
+    await ensureContentScriptReady(tabId);
+    return await chrome.tabs.sendMessage(tabId, message) as T | undefined;
+  }
 }
 
 async function collectFromActiveTab(): Promise<CapturedFields> {
@@ -142,17 +144,22 @@ async function collectFromActiveTab(): Promise<CapturedFields> {
     throw createDomainError("RULE_NOT_MATCHED_ERROR", "当前页面未命中任何启用规则，请先配置规则。");
   }
 
-  await ensureContentScriptInjected(activeTab.id!);
-  const response = await chrome.tabs.sendMessage(activeTab.id!, {
+  const response = await sendMessageToReadyContent<CapturedFields>(activeTab.id!, {
     type: "COLLECT_FIELDS",
     payload: { fields: matchedRule.fields }
-  } satisfies RuntimeMessage) as CapturedFields | undefined;
+  } satisfies RuntimeMessage);
 
   if (!response) {
     throw createDomainError("CAPTURE_ERROR", "Failed to collect fields from current page");
   }
 
   return response;
+}
+
+async function getUsernameContextFromActiveTab(): Promise<UsernameContext> {
+  const activeTab = await ensureActiveTabAllowed();
+  const response = await sendMessageToReadyContent<UsernameContext>(activeTab.id!, { type: "GET_USERNAME_CONTEXT" } satisfies RuntimeMessage);
+  return response ?? { username: "unknown", usernameSource: "unresolved_login_state" };
 }
 
 async function runCaptureOnly() {
@@ -172,12 +179,14 @@ async function runCaptureOnly() {
     status: "done",
     capturedFields,
     error: null,
-    analysisMarkdown: "",
+    runEvents: [],
+    currentRun: null,
+    answers: [],
     lastCapturedUrl: activeTab.url ?? null
   });
 }
 
-async function runCaptureAndAnalyze() {
+async function startRunFromActiveTab(prompt: string) {
   const activeTab = await getActiveTab();
   const rules = await getRules();
   const matchedRule = findMatchingRule(activeTab.url, rules);
@@ -190,37 +199,71 @@ async function runCaptureAndAnalyze() {
   });
 
   const capturedFields = await collectFromActiveTab();
-  await patchState({
-    status: "analyzing",
-    capturedFields,
-    error: null,
-    analysisMarkdown: ""
-  });
+  const usernameContext = await getUsernameContextFromActiveTab();
+  const canonicalCapture = toCanonicalCapturedFields(capturedFields);
+  const runResponse = await startRun(prompt, {
+    ...capturedFields,
+    pageTitle: canonicalCapture.pageTitle,
+    pageUrl: canonicalCapture.pageUrl,
+    metaDescription: canonicalCapture.metaDescription,
+    h1: canonicalCapture.h1,
+    selectedText: canonicalCapture.selectedText
+  }, usernameContext);
 
-  const analysisResponse = await requestAnalysis(toCanonicalCapturedFields(capturedFields));
-  if (!analysisResponse.ok) {
-    const domainError = normalizeDomainError(analysisResponse.error, createDomainError("ANALYSIS_ERROR", analysisResponse.error.message));
-    await patchState({
-      status: "error",
-      error: domainError,
-      errorMessage: toDisplayMessage(domainError),
-      analysisMarkdown: ""
-    });
-    return;
+  if (!runResponse.ok) {
+    const domainError = normalizeDomainError(runResponse.error, createDomainError("ANALYSIS_ERROR", runResponse.error.message));
+    await patchState({ status: "error", error: domainError, errorMessage: toDisplayMessage(domainError) });
+    return { ok: false, error: domainError };
   }
 
+  const currentRun: RunRecord = {
+    runId: runResponse.data.runId,
+    prompt,
+    username: usernameContext.username,
+    usernameSource: usernameContext.usernameSource,
+    softwareVersion: capturedFields.software_version ?? "",
+    selectedSr: capturedFields.selected_sr ?? "",
+    pageTitle: canonicalCapture.pageTitle,
+    pageUrl: canonicalCapture.pageUrl,
+    status: "streaming",
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    finalOutput: ""
+  };
+
   await patchState({
-    status: "done",
+    status: "streaming",
+    capturedFields,
     error: null,
     errorMessage: "",
-    analysisMarkdown: analysisResponse.data.markdown,
-    lastCapturedUrl: activeTab.url ?? null
+    lastCapturedUrl: activeTab.url ?? null,
+    currentRun,
+    usernameContext,
+    runPrompt: prompt,
+    runEvents: [],
+    answers: [],
+    stream: {
+      runId: currentRun.runId,
+      status: "streaming",
+      pendingQuestionId: null
+    }
   });
+
+  return {
+    ok: true,
+    data: {
+      runId: currentRun.runId,
+      capturedFields,
+      usernameContext,
+      currentRun
+    }
+  };
 }
 
 async function clearResult() {
   await setState({
     ...initialAssistantState,
+    capturedFields: null,
     lastUpdatedAt: new Date().toISOString()
   });
 }
@@ -248,8 +291,7 @@ async function openPanelWithFallback(senderTabId?: number) {
     // 仅当用户已显式点击扩展动作、且 side panel API 不可用时，才使用 activeTab 支撑当前标签页的一次性嵌入式 UI。
     // 该兜底不替代 host permission 授权，后续采集仍需命中规则并持有对应域名权限。
     await patchState({ uiMode: "embedded", error: null, errorMessage: "" });
-    await ensureContentScriptInjected(tabId);
-    await chrome.tabs.sendMessage(tabId, { type: "TOGGLE_EMBEDDED_PANEL" } satisfies RuntimeMessage).catch(() => undefined);
+    await sendMessageToReadyContent(tabId, { type: "TOGGLE_EMBEDDED_PANEL" } satisfies RuntimeMessage).catch(() => undefined);
   }
 }
 
@@ -295,12 +337,8 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
         case "GET_ACTIVE_CONTEXT":
           sendResponse(await getActiveTabContext());
           break;
-        case "REQUEST_HOST_PERMISSION":
-          sendResponse(await requestHostPermission());
-          break;
-        case "CAPTURE_AND_ANALYZE":
-          await runCaptureAndAnalyze();
-          sendResponse({ ok: true });
+        case "START_RUN":
+          sendResponse(await startRunFromActiveTab(message.payload.prompt));
           break;
         case "RECAPTURE":
           await runCaptureOnly();

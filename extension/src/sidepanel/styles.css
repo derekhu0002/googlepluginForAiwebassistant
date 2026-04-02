@@ -15,7 +15,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -55,6 +56,12 @@ select {
 .panel-block h2,
 .panel-block h3 {
   margin: 0 0 6px;
+}
+
+.event-card p,
+.question-card p,
+.history-detail p {
+  margin: 0;
 }
 
 .app-header p,
@@ -156,12 +163,18 @@ label,
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   padding: 8px 10px;
   background: #ffffff;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 72px;
 }
 
 .checkbox-row {
@@ -192,6 +205,96 @@ select {
 .empty-state,
 .empty-value {
   color: #94a3b8;
+}
+
+.compact-list {
+  gap: 6px;
+}
+
+.event-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.event-card,
+.question-card,
+.history-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.event-card pre {
+  margin: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 8px;
+  border-radius: 8px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.event-card-header,
+.history-layout {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.event-thinking {
+  border-left: 4px solid #2563eb;
+}
+
+.event-tool_call {
+  border-left: 4px solid #7c3aed;
+}
+
+.event-question {
+  border-left: 4px solid #d97706;
+}
+
+.event-result {
+  border-left: 4px solid #059669;
+}
+
+.event-error {
+  border-left: 4px solid #dc2626;
+}
+
+.question-options,
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-row {
+  flex-direction: row;
+  align-items: center;
+}
+
+.history-layout {
+  align-items: flex-start;
+}
+
+.history-list {
+  width: 180px;
+}
+
+.history-detail {
+  flex: 1;
+}
+
+.history-events {
+  max-height: 220px;
 }
 
 .error-text {

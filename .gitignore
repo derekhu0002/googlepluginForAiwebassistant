@@ -5,3 +5,7 @@ coverage/
 .env
 .env.local
 npm-debug.log*
+.venv/
+python_adapter/logs/
+__pycache__/
+.pytest_cache/

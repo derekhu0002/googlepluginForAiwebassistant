@@ -1,0 +1,150 @@
+import type { AnswerRecord, NormalizedRunEvent, RunHistoryDetail, RunRecord } from "./protocol";
+
+const DB_NAME = "ai-web-assistant-history";
+const DB_VERSION = 1;
+const RUNS_STORE = "runs";
+const EVENTS_STORE = "events";
+const ANSWERS_STORE = "answers";
+
+const memoryDb = {
+  runs: new Map<string, RunRecord>(),
+  events: new Map<string, NormalizedRunEvent>(),
+  answers: new Map<string, AnswerRecord>()
+};
+
+export interface HistoryStore {
+  saveRun(run: RunRecord): Promise<void>;
+  listRuns(): Promise<RunRecord[]>;
+  getRunDetail(runId: string): Promise<RunHistoryDetail | null>;
+  saveEvent(event: NormalizedRunEvent): Promise<void>;
+  saveAnswer(answer: AnswerRecord): Promise<void>;
+}
+
+function promisifyRequest<T>(request: IDBRequest<T>) {
+  return new Promise<T>((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function promisifyTransaction(transaction: IDBTransaction) {
+  return new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+}
+
+function openDatabase() {
+  if (typeof indexedDB === "undefined") {
+    return Promise.resolve(null);
+  }
+
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+
+      if (!db.objectStoreNames.contains(RUNS_STORE)) {
+        db.createObjectStore(RUNS_STORE, { keyPath: "runId" });
+      }
+
+      if (!db.objectStoreNames.contains(EVENTS_STORE)) {
+        const store = db.createObjectStore(EVENTS_STORE, { keyPath: "id" });
+        store.createIndex("by_run", "runId", { unique: false });
+        store.createIndex("by_run_sequence", ["runId", "sequence"], { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains(ANSWERS_STORE)) {
+        const store = db.createObjectStore(ANSWERS_STORE, { keyPath: "id" });
+        store.createIndex("by_run", "runId", { unique: false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function withStore<T>(storeNames: string[], mode: IDBTransactionMode, fn: (tx: IDBTransaction) => Promise<T>) {
+  const db = await openDatabase();
+  if (!db) {
+    return fn({} as IDBTransaction);
+  }
+  try {
+    const tx = db.transaction(storeNames, mode);
+    const result = await fn(tx);
+    await promisifyTransaction(tx);
+    return result;
+  } finally {
+    db.close();
+  }
+}
+
+export function createIndexedDbHistoryStore(): HistoryStore {
+  return {
+    async saveRun(run) {
+      if (typeof indexedDB === "undefined") {
+        memoryDb.runs.set(run.runId, run);
+        return;
+      }
+      await withStore([RUNS_STORE], "readwrite", async (tx) => {
+        tx.objectStore(RUNS_STORE).put(run);
+      });
+    },
+    async listRuns() {
+      if (typeof indexedDB === "undefined") {
+        return [...memoryDb.runs.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      }
+      return withStore([RUNS_STORE], "readonly", async (tx) => {
+        const records = await promisifyRequest(tx.objectStore(RUNS_STORE).getAll() as IDBRequest<RunRecord[]>);
+        return records.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      });
+    },
+    async getRunDetail(runId) {
+      if (typeof indexedDB === "undefined") {
+        const run = memoryDb.runs.get(runId);
+        if (!run) {
+          return null;
+        }
+        return {
+          run,
+          events: [...memoryDb.events.values()].filter((event) => event.runId === runId).sort((left, right) => left.sequence - right.sequence),
+          answers: [...memoryDb.answers.values()].filter((answer) => answer.runId === runId).sort((left, right) => left.submittedAt.localeCompare(right.submittedAt))
+        };
+      }
+      return withStore([RUNS_STORE, EVENTS_STORE, ANSWERS_STORE], "readonly", async (tx) => {
+        const run = await promisifyRequest(tx.objectStore(RUNS_STORE).get(runId) as IDBRequest<RunRecord | undefined>);
+        if (!run) {
+          return null;
+        }
+
+        const events = await promisifyRequest(tx.objectStore(EVENTS_STORE).index("by_run").getAll(runId) as IDBRequest<NormalizedRunEvent[]>);
+        const answers = await promisifyRequest(tx.objectStore(ANSWERS_STORE).index("by_run").getAll(runId) as IDBRequest<AnswerRecord[]>);
+
+        return {
+          run,
+          events: events.sort((left, right) => left.sequence - right.sequence),
+          answers: answers.sort((left, right) => left.submittedAt.localeCompare(right.submittedAt))
+        };
+      });
+    },
+    async saveEvent(event) {
+      if (typeof indexedDB === "undefined") {
+        memoryDb.events.set(event.id, event);
+        return;
+      }
+      await withStore([EVENTS_STORE], "readwrite", async (tx) => {
+        tx.objectStore(EVENTS_STORE).put(event);
+      });
+    },
+    async saveAnswer(answer) {
+      if (typeof indexedDB === "undefined") {
+        memoryDb.answers.set(answer.id, answer);
+        return;
+      }
+      await withStore([ANSWERS_STORE], "readwrite", async (tx) => {
+        tx.objectStore(ANSWERS_STORE).put(answer);
+      });
+    }
+  };
+}

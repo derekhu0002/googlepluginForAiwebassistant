@@ -1,4 +1,5 @@
 import type { DomainError } from "./errors";
+import type { AnswerRecord, NormalizedRunEvent, QuestionAnswerRequest, RunHistoryDetail, RunRecord, UsernameSource } from "./protocol";
 
 export type CapturedFields = Record<string, string>;
 
@@ -8,6 +9,8 @@ export interface CanonicalCapturedFields {
   metaDescription: string;
   h1: string;
   selectedText: string;
+  software_version?: string;
+  selected_sr?: string;
 }
 
 export type FieldSourceType =
@@ -59,45 +62,80 @@ export interface ActiveTabContext {
   message: string;
 }
 
+export interface UsernameContext {
+  username: string;
+  usernameSource: UsernameSource;
+}
+
+export interface StreamConnectionState {
+  runId: string | null;
+  status: "idle" | "connecting" | "streaming" | "reconnecting" | "waiting_for_answer" | "done" | "error";
+  pendingQuestionId: string | null;
+}
+
 export interface AssistantState {
-  status: "idle" | "collecting" | "analyzing" | "done" | "error";
+  status: "idle" | "collecting" | "streaming" | "waiting_for_answer" | "done" | "error";
   capturedFields: CapturedFields | null;
-  analysisMarkdown: string;
+  runPrompt: string;
+  runEvents: NormalizedRunEvent[];
+  currentRun: RunRecord | null;
+  history: RunRecord[];
+  selectedHistoryDetail: RunHistoryDetail | null;
+  answers: AnswerRecord[];
   error: DomainError | null;
   errorMessage: string;
   lastUpdatedAt: string | null;
   uiMode: "sidepanel" | "embedded";
   matchedRule: MatchedRuleSummary | null;
   lastCapturedUrl: string | null;
+  usernameContext: UsernameContext | null;
+  stream: StreamConnectionState;
 }
 
-export interface AnalyzeSuccessResponse {
+export interface StartRunResponse {
   ok: true;
   data: {
-    markdown: string;
-    provider: string;
-    durationMs: number;
+    runId: string;
   };
 }
 
-export interface AnalyzeFailureResponse {
+export interface ExtensionApiFailureResponse {
   ok: false;
   error: DomainError;
 }
 
-export type AnalyzeApiResponse = AnalyzeSuccessResponse | AnalyzeFailureResponse;
+export type StartRunApiResponse = StartRunResponse | ExtensionApiFailureResponse;
+
+export interface AnswerSuccessResponse {
+  ok: true;
+  data: {
+    accepted: true;
+    runId: string;
+    questionId: string;
+  };
+}
+
+export type AnswerApiResponse = AnswerSuccessResponse | ExtensionApiFailureResponse;
+
+export interface ContentScriptReadyResponse {
+  ready: true;
+}
 
 export type RuntimeMessage =
   | { type: "OPEN_PANEL" }
+  | { type: "PING" }
   | { type: "TOGGLE_EMBEDDED_PANEL" }
   | { type: "COLLECT_FIELDS"; payload: { fields: FieldRuleDefinition[] } }
+  | { type: "GET_USERNAME_CONTEXT" }
   | { type: "GET_STATE" }
   | { type: "GET_RULES" }
   | { type: "UPSERT_RULE"; payload: PageRule }
   | { type: "DELETE_RULE"; payload: { ruleId: string } }
   | { type: "GET_ACTIVE_CONTEXT" }
-  | { type: "REQUEST_HOST_PERMISSION" }
-  | { type: "CAPTURE_AND_ANALYZE" }
+  | { type: "START_RUN"; payload: { prompt: string } }
+  | { type: "SUBMIT_QUESTION_ANSWER"; payload: QuestionAnswerRequest }
   | { type: "RECAPTURE" }
   | { type: "CLEAR_RESULT" }
+  | { type: "SELECT_HISTORY_RUN"; payload: { runId: string } }
+  | { type: "HISTORY_UPDATED"; payload: { history: RunRecord[]; selectedHistoryDetail: RunHistoryDetail | null } }
   | { type: "STATE_UPDATED"; payload: AssistantState };

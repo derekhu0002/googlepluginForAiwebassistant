@@ -62,4 +62,42 @@ describe("content script fallback behavior", () => {
       h1: "Heading"
     });
   });
+
+  it("responds to readiness ping", async () => {
+    const listeners: Array<(message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean> = [];
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue({ ok: true }),
+        onMessage: { addListener: vi.fn((handler) => listeners.push(handler)) }
+      }
+    } as unknown as typeof chrome);
+
+    await import("../content/index");
+
+    const response = await new Promise<unknown>((resolve) => {
+      listeners[0]?.({ type: "PING" }, {}, resolve);
+    });
+
+    expect(response).toEqual({ ready: true });
+  });
+
+  it("extracts username context from page", async () => {
+    const listeners: Array<(message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean> = [];
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue({ ok: true }),
+        onMessage: { addListener: vi.fn((handler) => listeners.push(handler)) }
+      }
+    } as unknown as typeof chrome);
+
+    document.body.innerHTML = '<div data-username="casey"></div>';
+
+    await import("../content/index");
+
+    const response = await new Promise<unknown>((resolve) => {
+      listeners[0]?.({ type: "GET_USERNAME_CONTEXT" }, {}, resolve);
+    });
+
+    expect(response).toEqual({ username: "casey", usernameSource: "dom_data_attribute" });
+  });
 });

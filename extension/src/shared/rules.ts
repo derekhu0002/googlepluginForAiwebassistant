@@ -32,18 +32,18 @@ export function createDefaultFieldTemplates(): FieldRuleDefinition[] {
     },
     {
       id: createId("field"),
-      key: "metaDescription",
-      label: "Meta Description",
-      source: "meta",
-      metaName: "description",
+      key: "software_version",
+      label: "软件版本",
+      source: "selectorText",
+      selector: "[data-software-version]",
       enabled: true
     },
     {
       id: createId("field"),
-      key: "h1",
-      label: "首个 H1",
+      key: "selected_sr",
+      label: "选中 SR",
       source: "selectorText",
-      selector: "h1",
+      selector: "[data-selected-sr]",
       enabled: true
     },
     {
@@ -146,9 +146,11 @@ export function toCanonicalCapturedFields(captured: CapturedFields): CanonicalCa
   return {
     pageTitle: captured.pageTitle ?? "",
     pageUrl: captured.pageUrl ?? "",
-    metaDescription: captured.metaDescription ?? "",
-    h1: captured.h1 ?? "",
-    selectedText: captured.selectedText ?? ""
+    metaDescription: captured.metaDescription ?? captured.software_version ?? "",
+    h1: captured.h1 ?? captured.selected_sr ?? "",
+    selectedText: captured.selectedText ?? "",
+    software_version: captured.software_version ?? "",
+    selected_sr: captured.selected_sr ?? ""
   };
 }
 

@@ -15,7 +15,7 @@ describe("configurable page rules", () => {
 
   it("collects fields from configured field rules", () => {
     document.head.innerHTML = `<meta name="description" content="Demo description">`;
-    document.body.innerHTML = `<h1>Main Heading</h1><div data-price="188">Price</div>`;
+    document.body.innerHTML = `<div data-software-version>v9.9.9</div><div data-selected-sr>SR-42</div><div data-price="188">Price</div>`;
     document.title = "Demo Title";
 
     Object.defineProperty(window, "location", {
@@ -39,8 +39,8 @@ describe("configurable page rules", () => {
     expect(captureFields(document, window, fields)).toEqual({
       pageTitle: "Demo Title",
       pageUrl: "https://example.com/page",
-      metaDescription: "Demo description",
-      h1: "Main Heading",
+      software_version: "v9.9.9",
+      selected_sr: "SR-42",
       selectedText: "selected demo text",
       price: "188"
     });

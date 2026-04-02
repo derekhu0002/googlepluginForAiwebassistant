@@ -1,0 +1,27 @@
+from pathlib import Path
+
+from python_adapter.app.config import Settings
+
+
+def test_settings_default_to_real_opencode_and_canonical_log_path(monkeypatch) -> None:
+    monkeypatch.delenv("PYTHON_ADAPTER_USE_MOCK_OPENCODE", raising=False)
+    monkeypatch.delenv("PYTHON_ADAPTER_ALLOW_MOCK_FALLBACK", raising=False)
+    monkeypatch.delenv("PYTHON_ADAPTER_LOG_DIR", raising=False)
+
+    settings = Settings()
+
+    assert settings.use_mock_opencode is False
+    assert settings.allow_mock_fallback is False
+    assert settings.log_dir == str(Path(__file__).resolve().parents[1] / "logs")
+    assert settings.opencode_health_endpoint == "/global/health"
+    assert settings.opencode_global_event_endpoint == "/global/event"
+
+
+def test_settings_allow_explicit_mock_mode(monkeypatch) -> None:
+    monkeypatch.setenv("PYTHON_ADAPTER_USE_MOCK_OPENCODE", "1")
+    monkeypatch.setenv("PYTHON_ADAPTER_ALLOW_MOCK_FALLBACK", "1")
+
+    settings = Settings()
+
+    assert settings.use_mock_opencode is True
+    assert settings.allow_mock_fallback is True

@@ -14,8 +14,8 @@ describe("extension configuration", () => {
   it("allows localhost only during development", () => {
     const config = createExtensionConfig({ VITE_EXTENSION_ENV: "development" }, "development");
 
-    expect(config.apiBaseUrl).toBe("http://localhost:8787");
-    expect(config.allowedApiOrigins).toContain("http://localhost:8787");
+    expect(config.apiBaseUrl).toBe("http://localhost:8000");
+    expect(config.allowedApiOrigins).toContain("http://localhost:8000");
     expect(config.optionalHostPermissions).toContain("http://localhost/*");
     expect(config.webAccessibleResourceMatches).toContain("http://localhost/*");
   });
@@ -37,8 +37,8 @@ describe("extension configuration", () => {
       VITE_EXTENSION_ENV: "development",
       VITE_OPTIONAL_HOST_PERMISSIONS: "https://example.com/*,https://*.example.com/*,http://localhost/*",
       VITE_WEB_ACCESSIBLE_RESOURCE_MATCHES: "https://example.com/*,http://localhost/*",
-      VITE_ALLOWED_API_ORIGINS: "https://api.example.com,http://localhost:8787",
-      VITE_API_BASE_URL: "http://localhost:8787"
+      VITE_ALLOWED_API_ORIGINS: "https://api.example.com,http://localhost:8000",
+      VITE_API_BASE_URL: "http://localhost:8000"
     }, "development");
 
     expect(manifest.permissions).toContain("scripting");
@@ -52,6 +52,12 @@ describe("extension configuration", () => {
         matches: ["https://example.com/*", "http://localhost/*"]
       }
     ]);
-    expect(manifest).not.toHaveProperty("content_scripts");
+    expect(manifest.content_scripts).toEqual([
+      {
+        matches: ["https://example.com/*", "http://localhost/*"],
+        js: ["content.js"],
+        run_at: "document_idle"
+      }
+    ]);
   });
 });

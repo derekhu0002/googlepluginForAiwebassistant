@@ -1,0 +1,466 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from datetime import datetime, timezone
+from typing import Any, Callable
+from uuid import uuid4
+
+import httpx
+
+from .config import Settings
+from .models import NormalizedRunEvent, QuestionAnswerRequest, QuestionOption, QuestionPayload, RunStartRequest
+
+
+ClientFactory = Callable[[float | None], httpx.AsyncClient]
+
+
+class OpencodeAdapter:
+    def __init__(self, settings: Settings, client_factory: ClientFactory | None = None) -> None:
+        self.settings = settings
+        self._runs: dict[str, dict[str, Any]] = {}
+        self._client_factory = client_factory or self._default_client_factory
+
+    def _default_client_factory(self, timeout: float | None) -> httpx.AsyncClient:
+        return httpx.AsyncClient(base_url=self.settings.opencode_base_url, timeout=timeout)
+
+    def _query_params(self) -> dict[str, str]:
+        params = {"directory": self.settings.opencode_directory}
+        if self.settings.opencode_workspace:
+            params["workspace"] = self.settings.opencode_workspace
+        return params
+
+    def _now(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    def _next_event(self, run: dict[str, Any], event_type: str, message: str, *, title: str | None = None, data: dict[str, Any] | None = None, question: QuestionPayload | None = None) -> NormalizedRunEvent:
+        run["sequence"] += 1
+        return NormalizedRunEvent(
+            id=f"{run['run_id']}-{run['sequence']}",
+            runId=run["run_id"],
+            type=event_type,  # type: ignore[arg-type]
+            createdAt=self._now(),
+            sequence=run["sequence"],
+            title=title or event_type,
+            message=message,
+            data=data,
+            question=question,
+        )
+
+    async def start_run(self, request: RunStartRequest) -> str:
+        run_id = f"run-{uuid4().hex}"
+        run = {
+            "run_id": run_id,
+            "request": request,
+            "answers": [],
+            "waiting_question_id": None,
+            "completed": False,
+            "sequence": 0,
+            "events": [],
+            "session_id": None,
+            "startup_error": None,
+            "mode": "mock-adapter" if self.settings.use_mock_opencode else "real",
+            "question_requests": {},
+            "assistant_message_id": None,
+            "last_text": "",
+            "result_emitted": False,
+        }
+        self._runs[run_id] = run
+
+        if self.settings.use_mock_opencode:
+            run["events"] = self._build_mock_initial_events(run)
+            run["waiting_question_id"] = "question-1"
+            return run_id
+
+        try:
+            session = await self._create_session(request)
+            run["session_id"] = session["id"]
+            run["events"] = [
+                self._next_event(
+                    run,
+                    "thinking",
+                    f"已创建 opencode session，准备提交 prompt。software_version={request.capture.get('software_version', '') or '(empty)'}；selected_sr={request.capture.get('selected_sr', '') or '(empty)'}。",
+                    data={"session_id": session["id"]},
+                ),
+                self._next_event(
+                    run,
+                    "tool_call",
+                    "通过 Python adapter 调用真实 opencode serve session/prompt_async 契约。",
+                    data={
+                        "target": self.settings.opencode_base_url,
+                        "session_id": session["id"],
+                        "event_endpoint": self.settings.opencode_global_event_endpoint,
+                        "mock_mode": False,
+                        "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                    },
+                ),
+            ]
+            await self._prompt_session(session["id"], request)
+        except Exception as exc:
+            if self.settings.allow_mock_fallback:
+                run["mode"] = "mock-fallback"
+                run["fallback_reason"] = str(exc)
+                run["events"] = self._build_mock_initial_events(run, fallback_reason=str(exc))
+                run["waiting_question_id"] = "question-1"
+            else:
+                run["startup_error"] = str(exc)
+                run["events"] = [
+                    self._next_event(
+                        run,
+                        "tool_call",
+                        "尝试按真实 opencode SDK 契约创建 session/prompt_async。",
+                        data={"target": self.settings.opencode_base_url, "mock_mode": False},
+                    )
+                ]
+
+        return run_id
+
+    async def stream_events(self, run_id: str):
+        run = self._runs[run_id]
+
+        for event in run["events"]:
+            await asyncio.sleep(0.01)
+            yield event
+
+        if run["mode"] in {"mock-adapter", "mock-fallback"}:
+            while run["waiting_question_id"] and not run["completed"]:
+                await asyncio.sleep(0.05)
+
+            if not run["completed"]:
+                yield self._build_mock_result(run)
+                run["completed"] = True
+            return
+
+        if run["startup_error"]:
+            yield self._next_event(
+                run,
+                "error",
+                f"opencode serve 初始化失败：{run['startup_error']}",
+                data={"opencode_mode": "real", "target": self.settings.opencode_base_url},
+            )
+            run["completed"] = True
+            return
+
+        async for event in self._stream_real_events(run):
+            yield event
+            if event.type in {"result", "error"}:
+                run["completed"] = True
+                break
+
+    async def submit_answer(self, run_id: str, answer: QuestionAnswerRequest) -> None:
+        run = self._runs[run_id]
+        run["answers"].append(answer.model_dump())
+        run["waiting_question_id"] = None
+
+        if run["mode"] in {"mock-adapter", "mock-fallback"}:
+            return
+
+        request_payload = run["question_requests"].get(answer.questionId)
+        if not request_payload:
+            questions = await self._list_questions()
+            request_payload = next((item for item in questions if item.get("id") == answer.questionId), None)
+            if request_payload:
+                run["question_requests"][answer.questionId] = request_payload
+
+        answers = [self._build_question_answer_payload(answer, request_payload)]
+
+        async with self._client_factory(30.0) as client:
+            response = await client.post(
+                self.settings.opencode_question_reply_endpoint.format(request_id=answer.questionId),
+                params=self._query_params(),
+                json={"answers": answers},
+            )
+            response.raise_for_status()
+
+    def _build_mock_initial_events(self, run: dict[str, Any], fallback_reason: str | None = None) -> list[NormalizedRunEvent]:
+        request: RunStartRequest = run["request"]
+        question = QuestionPayload(
+            questionId="question-1",
+            title="请选择优先级",
+            message="如果没有合适选项，也可以输入自定义答案。",
+            options=[
+                QuestionOption(id="p1", label="高优先级", value="high"),
+                QuestionOption(id="p2", label="中优先级", value="medium"),
+                QuestionOption(id="p3", label="低优先级", value="low"),
+            ],
+            allowFreeText=True,
+            placeholder="例如：需要今天内完成验证",
+        )
+        events = [
+            self._next_event(
+                run,
+                "thinking",
+                f"分析用户请求，并结合 software_version={request.capture.get('software_version', '') or '(empty)'}、selected_sr={request.capture.get('selected_sr', '') or '(empty)'} 构建推理上下文。",
+                data={"prompt": request.prompt, "username": request.context.username},
+            ),
+            self._next_event(
+                run,
+                "tool_call",
+                "通过 Python adapter 调用 opencode serve 适配层。",
+                data={
+                    "target": self.settings.opencode_base_url,
+                    "mock_mode": True,
+                    "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                    **({"fallback_reason": fallback_reason} if fallback_reason else {}),
+                },
+            ),
+            self._next_event(run, "question", "为了继续，请确认当前 SR 的处理优先级。", question=question),
+        ]
+        return events
+
+    def _build_mock_result(self, run: dict[str, Any]) -> NormalizedRunEvent:
+        request: RunStartRequest = run["request"]
+        answer = run["answers"][-1] if run["answers"] else {"answer": "未提供"}
+        data: dict[str, Any] = {
+            "summary": "建议先核对 SR 影响范围，再安排针对版本的回归验证。",
+            "opencode_mode": run["mode"],
+        }
+        if run.get("fallback_reason"):
+            data["fallback_reason"] = run["fallback_reason"]
+        return self._next_event(
+            run,
+            "result",
+            (
+                f"已完成对 selected_sr={request.capture.get('selected_sr', '') or '(empty)'} 的分析。"
+                f" software_version={request.capture.get('software_version', '') or '(empty)'}；"
+                f"用户优先级回答：{answer.get('answer', '未提供')}。"
+            ),
+            data=data,
+        )
+
+    async def _create_session(self, request: RunStartRequest) -> dict[str, Any]:
+        title = f"SR {request.capture.get('selected_sr', '').strip() or 'analysis'}"
+        async with self._client_factory(30.0) as client:
+            response = await client.post(
+                self.settings.opencode_session_endpoint,
+                params=self._query_params(),
+                json={"title": title},
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or not payload.get("id"):
+                raise ValueError("Invalid session create response")
+            return payload
+
+    async def _prompt_session(self, session_id: str, request: RunStartRequest) -> None:
+        async with self._client_factory(30.0) as client:
+            response = await client.post(
+                self.settings.opencode_prompt_async_endpoint.format(session_id=session_id),
+                params=self._query_params(),
+                json={
+                    "parts": [{"type": "text", "text": request.prompt}],
+                },
+            )
+            response.raise_for_status()
+
+    async def _list_questions(self) -> list[dict[str, Any]]:
+        async with self._client_factory(30.0) as client:
+            response = await client.get(self.settings.opencode_question_list_endpoint, params=self._query_params())
+            response.raise_for_status()
+            payload = response.json()
+            return payload if isinstance(payload, list) else []
+
+    async def _stream_real_events(self, run: dict[str, Any]):
+        async with self._client_factory(None) as client:
+            async with client.stream("GET", self.settings.opencode_global_event_endpoint, params=self._query_params()) as response:
+                response.raise_for_status()
+                async for global_event in self._iter_sse_payloads(response):
+                    if not self._event_matches_session(run, global_event):
+                        continue
+
+                    normalized_events = await self._normalize_global_event(run, global_event)
+                    for event in normalized_events:
+                        if event is None:
+                            continue
+                        yield event
+                        if event.type in {"result", "error"}:
+                            return
+
+        if not run["result_emitted"]:
+            final_event = await self._build_result_from_session(run)
+            if final_event:
+                yield final_event
+
+    async def _normalize_global_event(self, run: dict[str, Any], global_event: dict[str, Any]) -> list[NormalizedRunEvent | None]:
+        payload = global_event.get("payload") or {}
+        event_type = payload.get("type")
+        properties = payload.get("properties") or {}
+
+        if event_type == "session.status":
+            status = properties.get("status") or {}
+            status_type = status.get("type", "unknown")
+            details = f"（attempt={status.get('attempt')}）" if status_type == "retry" else ""
+            return [self._next_event(run, "thinking", f"opencode session 状态更新：{status_type}{details}", data={"status": status})]
+
+        if event_type == "message.part.delta":
+            delta = properties.get("delta") or ""
+            if delta:
+                run["last_text"] = f"{run.get('last_text', '')}{delta}"
+                return [self._next_event(run, "thinking", delta, data={"field": properties.get("field"), "message_id": properties.get("messageID")})]
+            return []
+
+        if event_type == "message.part.updated":
+            part = properties.get("part") or {}
+            part_type = part.get("type")
+            if part_type == "tool":
+                state = part.get("state") or {}
+                message = state.get("title") or f"工具 {part.get('tool', 'unknown')} 状态：{state.get('status', 'unknown')}"
+                return [self._next_event(run, "tool_call", message, data={"tool": part.get("tool"), "state": state})]
+            if part_type == "reasoning":
+                return [self._next_event(run, "thinking", part.get("text") or "模型正在推理。")]
+            if part_type == "text" and part.get("text"):
+                run["last_text"] = part["text"]
+            return []
+
+        if event_type == "message.updated":
+            info = properties.get("info") or {}
+            if info.get("role") == "assistant":
+                run["assistant_message_id"] = info.get("id")
+                if info.get("error"):
+                    return [self._next_event(run, "error", f"opencode session 返回错误：{info['error']}", data={"info": info})]
+                if info.get("time", {}).get("completed") and not run["result_emitted"]:
+                    result = await self._build_result_from_session(run)
+                    return [result] if result else []
+            return []
+
+        if event_type == "question.asked":
+            request_id = properties.get("id")
+            if request_id:
+                run["question_requests"][request_id] = properties
+                run["waiting_question_id"] = request_id
+            normalized = self._normalize_question_request(properties)
+            return [self._next_event(run, "question", normalized.message, question=normalized, data={"session_id": run.get("session_id")})]
+
+        if event_type == "question.replied":
+            run["waiting_question_id"] = None
+            return [self._next_event(run, "thinking", "问题已回答，继续等待 opencode 输出。", data=properties)]
+
+        if event_type == "session.error":
+            return [self._next_event(run, "error", f"opencode session 错误：{properties.get('error') or 'unknown'}", data=properties)]
+
+        if event_type == "session.idle":
+            result = await self._build_result_from_session(run)
+            return [result] if result else [self._next_event(run, "thinking", "opencode session 已空闲，等待消息同步。", data=properties)]
+
+        return []
+
+    def _normalize_question_request(self, request_payload: dict[str, Any]) -> QuestionPayload:
+        first_question = (request_payload.get("questions") or [{}])[0]
+        options = [
+            QuestionOption(
+                id=f"{request_payload.get('id', 'question')}-option-{index}",
+                label=option.get("label") or f"选项 {index + 1}",
+                value=option.get("label") or f"选项 {index + 1}",
+            )
+            for index, option in enumerate(first_question.get("options") or [])
+        ]
+        return QuestionPayload(
+            questionId=request_payload.get("id") or f"question-{uuid4().hex}",
+            title=first_question.get("header") or "需要用户回答",
+            message=first_question.get("question") or "请继续回答以便完成推理。",
+            options=options,
+            allowFreeText=first_question.get("custom", True),
+            placeholder="请输入答案",
+        )
+
+    async def _build_result_from_session(self, run: dict[str, Any]) -> NormalizedRunEvent | None:
+        if run["result_emitted"] or not run.get("session_id"):
+            return None
+
+        async with self._client_factory(30.0) as client:
+            response = await client.get(
+                self.settings.opencode_session_messages_endpoint.format(session_id=run["session_id"]),
+                params={**self._query_params(), "limit": 20},
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+        if not isinstance(payload, list):
+            return None
+
+        final_item = next(
+            (
+                item
+                for item in reversed(payload)
+                if isinstance(item, dict) and isinstance(item.get("info"), dict) and item["info"].get("role") == "assistant"
+            ),
+            None,
+        )
+
+        if not final_item:
+            if run.get("last_text"):
+                run["result_emitted"] = True
+                return self._next_event(run, "result", run["last_text"], data={"opencode_mode": "real", "session_id": run.get("session_id")})
+            return None
+
+        parts = final_item.get("parts") or []
+        text_parts = [part.get("text", "") for part in parts if isinstance(part, dict) and part.get("type") == "text" and part.get("text")]
+        reasoning_parts = [part.get("text", "") for part in parts if isinstance(part, dict) and part.get("type") == "reasoning" and part.get("text")]
+        message = "\n".join(text_parts).strip() or "\n".join(reasoning_parts).strip() or run.get("last_text") or "opencode serve 已完成但未返回可展示文本。"
+        run["result_emitted"] = True
+        return self._next_event(
+            run,
+            "result",
+            message,
+            data={
+                "opencode_mode": "real",
+                "session_id": run.get("session_id"),
+                "message_id": (final_item.get("info") or {}).get("id"),
+            },
+        )
+
+    def _event_matches_session(self, run: dict[str, Any], global_event: dict[str, Any]) -> bool:
+        session_id = run.get("session_id")
+        if not session_id:
+            return False
+        payload = global_event.get("payload") or {}
+        properties = payload.get("properties") or {}
+        direct = properties.get("sessionID")
+        if direct:
+            return direct == session_id
+        info = properties.get("info") or {}
+        if isinstance(info, dict) and info.get("sessionID"):
+            return info["sessionID"] == session_id
+        part = properties.get("part") or {}
+        if isinstance(part, dict) and part.get("sessionID"):
+            return part["sessionID"] == session_id
+        return False
+
+    async def _iter_sse_payloads(self, response: httpx.Response):
+        data_lines: list[str] = []
+        async for line in response.aiter_lines():
+            if line.startswith("data:"):
+                data_lines.append(line[5:].strip())
+                continue
+            if line == "":
+                if data_lines:
+                    raw = "\n".join(data_lines)
+                    data_lines = []
+                    try:
+                        payload = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(payload, dict):
+                        yield payload
+        if data_lines:
+            try:
+                payload = json.loads("\n".join(data_lines))
+            except json.JSONDecodeError:
+                return
+            if isinstance(payload, dict):
+                yield payload
+
+    def _build_question_answer_payload(self, answer: QuestionAnswerRequest, request_payload: dict[str, Any] | None) -> list[str]:
+        if answer.answer:
+            return [answer.answer]
+
+        if request_payload and answer.choiceId:
+            for index, option in enumerate((request_payload.get("questions") or [{}])[0].get("options") or []):
+                option_id = f"{request_payload.get('id', 'question')}-option-{index}"
+                if option_id == answer.choiceId:
+                    return [option.get("label") or answer.choiceId]
+
+        if answer.choiceId:
+            return [answer.choiceId]
+
+        return [""]
