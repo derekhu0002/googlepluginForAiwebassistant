@@ -26,7 +26,7 @@ const {
   mockStreamClose: vi.fn(),
   mockRunHistoryState: {
     history: [] as RunRecord[],
-    selectedHistoryDetail: null as null
+    selectedHistoryDetail: null as AssistantState["selectedHistoryDetail"]
   }
 }));
 
@@ -622,6 +622,64 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("逐");
     await flushAllTimers();
     expect(container.textContent).toContain("逐步展示文本");
+  });
+
+  it("groups compact thinking events into a single timeline card with details on demand", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        runEvents: [
+          createRunEvent(1, { type: "thinking", message: "读取页面上下文" }),
+          createRunEvent(2, { type: "thinking", message: "整理可用字段" })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("已合并 2 条连续事件");
+    const detailsButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("查看细节（2 条）"));
+    expect(detailsButton).toBeTruthy();
+
+    await act(async () => {
+      detailsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("读取页面上下文");
+    expect(container.textContent).toContain("整理可用字段");
+  });
+
+  it("reuses the same reasoning timeline in history detail", async () => {
+    mockRunHistoryState.selectedHistoryDetail = {
+      run: {
+        ...createCurrentRun(),
+        status: "done",
+        finalOutput: "历史结果",
+        updatedAt: "2026-04-02T00:00:03.000Z"
+      },
+      events: [
+        createRunEvent(1, { type: "thinking", message: "历史思考 1" }),
+        createRunEvent(2, { type: "thinking", message: "历史思考 2" }),
+        createRunEvent(3, { type: "result", message: "历史结果" })
+      ],
+      answers: []
+    };
+
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("历史结果");
+    expect(container.textContent).toContain("已合并 2 条连续事件");
   });
 
   it("renders simplified tool call copy instead of raw payload details", async () => {

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createRunEventStream, submitQuestionAnswer } from "../shared/api";
-import { extensionConfig } from "../shared/config";
 import { toDisplayMessage } from "../shared/errors";
 import { createDefaultFieldTemplates, createDefaultRule, createId } from "../shared/rules";
 import { initialAssistantState } from "../shared/state";
-import type { NormalizedRunEvent, QuestionPayload, RunRecord } from "../shared/protocol";
+import type { QuestionPayload, RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
+import { ReasoningTimeline } from "./reasoningTimelineView";
 import { useRunHistory } from "./useRunHistory";
 
 const ASSISTANT_STATUS_RANK: Record<AssistantState["status"], number> = {
@@ -141,87 +141,6 @@ async function sendMessage<T>(message: RuntimeMessage): Promise<T> {
   return chrome.runtime.sendMessage(message) as Promise<T>;
 }
 
-const DEFAULT_EVENT_TITLES: Record<NormalizedRunEvent["type"], string> = {
-  thinking: "分析中",
-  tool_call: "处理中",
-  question: "需要确认",
-  result: "分析结果",
-  error: "运行失败"
-};
-
-const TYPEWRITER_EVENT_TYPES = new Set<NormalizedRunEvent["type"]>(["thinking", "result"]);
-const TYPEWRITER_INTERVAL_MS = 16;
-
-function getEventTitle(event: NormalizedRunEvent) {
-  if (event.title && event.title !== event.type) {
-    return event.title;
-  }
-
-  return DEFAULT_EVENT_TITLES[event.type];
-}
-
-function EventCard({ event, animate = false }: { event: NormalizedRunEvent; animate?: boolean }) {
-  const articleRef = useRef<HTMLElement | null>(null);
-  const shouldAnimate = animate && TYPEWRITER_EVENT_TYPES.has(event.type);
-  const [displayedMessage, setDisplayedMessage] = useState(shouldAnimate ? "" : event.message);
-  const showDebugData = extensionConfig.extensionEnv === "development" && Boolean(event.data);
-
-  useEffect(() => {
-    if (!shouldAnimate) {
-      setDisplayedMessage(event.message);
-      return;
-    }
-
-    let timer: number | undefined;
-    let cancelled = false;
-    let nextLength = 0;
-
-    setDisplayedMessage("");
-
-    const tick = () => {
-      if (cancelled) {
-        return;
-      }
-
-      nextLength += 1;
-      setDisplayedMessage(event.message.slice(0, nextLength));
-
-      if (nextLength < event.message.length) {
-        timer = window.setTimeout(tick, TYPEWRITER_INTERVAL_MS);
-      }
-    };
-
-    timer = window.setTimeout(tick, TYPEWRITER_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, [event.id, event.message, shouldAnimate]);
-
-  useEffect(() => {
-    articleRef.current?.scrollIntoView?.({ block: "end" });
-  }, [displayedMessage]);
-
-  return (
-    <article className={`event-card event-${event.type}`} ref={articleRef}>
-      <div className="event-card-header">
-        <strong>{getEventTitle(event)}</strong>
-        <small>{new Date(event.createdAt).toLocaleTimeString()}</small>
-      </div>
-      <p>{displayedMessage}</p>
-      {showDebugData ? (
-        <details className="event-debug-panel">
-          <summary>查看调试数据</summary>
-          <pre>{JSON.stringify(event.data, null, 2)}</pre>
-        </details>
-      ) : null}
-    </article>
-  );
-}
-
 function QuestionCard({ question, onSubmit }: { question: QuestionPayload; onSubmit: (answer: { answer: string; choiceId?: string }) => void }) {
   const [choiceId, setChoiceId] = useState<string>(question.options[0]?.id ?? "");
   const [freeText, setFreeText] = useState("");
@@ -261,7 +180,6 @@ export function App() {
   const [savingRule, setSavingRule] = useState(false);
   const [prompt, setPrompt] = useState(initialAssistantState.runPrompt);
   const [streamError, setStreamError] = useState<string>("");
-  const eventFeedRef = useRef<HTMLDivElement | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const { history, selectedHistoryDetail, saveRun, saveEvent, saveAnswer, selectRun, refresh } = useRunHistory();
   const historyRef = useRef(history);
@@ -330,12 +248,6 @@ export function App() {
       }
     }
   }, [rules, selectedRuleId]);
-
-  useEffect(() => {
-    if (eventFeedRef.current) {
-      eventFeedRef.current.scrollTop = eventFeedRef.current.scrollHeight;
-    }
-  }, [state.runEvents]);
 
   useEffect(() => {
     setState((current) => ({ ...current, history, selectedHistoryDetail }));
@@ -635,11 +547,27 @@ export function App() {
       <section className="panel-block">
         <div className="section-header compact">
           <h2>推理事件流</h2>
-          <small>自动滚动 / SSE</small>
+          <small>聚合时间线 / 渐进展示</small>
         </div>
-        <div className="event-feed" ref={eventFeedRef}>
-          {state.runEvents.length ? state.runEvents.map((event) => <EventCard key={event.id} event={event} animate />) : <p className="empty-state">暂无事件。</p>}
-        </div>
+        {state.currentRun?.status === "done" && state.currentRun.finalOutput ? (
+          <div className="run-outcome-banner success-banner">
+            <strong>已完成</strong>
+            <p>{state.currentRun.finalOutput}</p>
+          </div>
+        ) : null}
+        {state.currentRun?.status === "error" && state.currentRun.errorMessage ? (
+          <div className="run-outcome-banner error-banner">
+            <strong>运行失败</strong>
+            <p>{state.currentRun.errorMessage}</p>
+          </div>
+        ) : null}
+        <ReasoningTimeline
+          events={state.runEvents}
+          live
+          streamStatus={state.stream.status}
+          runStatus={state.currentRun?.status}
+          emptyText="暂无事件。"
+        />
         {questionEvent?.question ? <QuestionCard question={questionEvent.question} onSubmit={handleQuestionSubmit} /> : null}
       </section>
 
@@ -666,9 +594,11 @@ export function App() {
                   <div className="field-item"><dt>software_version</dt><dd>{selectedHistoryDetail.run.softwareVersion}</dd></div>
                   <div className="field-item"><dt>selected_sr</dt><dd>{selectedHistoryDetail.run.selectedSr}</dd></div>
                 </div>
-                <div className="event-feed history-events">
-                  {selectedHistoryDetail.events.map((event) => <EventCard key={event.id} event={event} />)}
-                </div>
+                <ReasoningTimeline
+                  events={selectedHistoryDetail.events}
+                  runStatus={selectedHistoryDetail.run.status}
+                  emptyText="该历史记录暂无推理事件。"
+                />
               </>
             ) : <p className="empty-state">选择一条历史记录查看详情。</p>}
           </div>

@@ -218,6 +218,7 @@ textarea {
   max-height: 320px;
   overflow: auto;
   padding-right: 4px;
+  scroll-behavior: smooth;
 }
 
 .event-card,
@@ -230,6 +231,85 @@ textarea {
   border-radius: 10px;
   padding: 12px;
   background: #f8fafc;
+}
+
+.timeline-shell,
+.timeline-toolbar,
+.timeline-details,
+.timeline-details-panel,
+.timeline-entry-list,
+.event-card-heading,
+.run-outcome-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeline-toolbar {
+  margin-top: 10px;
+}
+
+.event-card-header {
+  align-items: flex-start;
+}
+
+.event-card-heading {
+  gap: 6px;
+}
+
+.event-summary {
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+
+.detail-muted {
+  color: #64748b;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-active {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.status-complete {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-waiting {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-attention {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.event-card.is-active {
+  box-shadow: 0 0 0 1px #bfdbfe;
+}
+
+.event-card.is-complete {
+  opacity: 0.98;
+}
+
+.event-card.is-waiting {
+  background: #fffaf0;
+}
+
+.event-card.is-attention {
+  background: #fff5f5;
 }
 
 .event-card pre {
@@ -251,6 +331,55 @@ textarea {
   cursor: pointer;
   color: #475569;
   font-size: 12px;
+}
+
+.ghost-button {
+  align-self: flex-start;
+  padding: 6px 10px;
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.timeline-details-panel {
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 8px;
+}
+
+.timeline-entry-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.timeline-entry-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.unread-indicator {
+  align-self: flex-start;
+}
+
+.run-outcome-banner {
+  margin-bottom: 10px;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.run-outcome-banner p {
+  margin: 0;
+}
+
+.success-banner {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.error-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
 }
 
 .event-card-header,
