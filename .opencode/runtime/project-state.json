@@ -1,81 +1,21 @@
 {
-  "version": 1,
-  "activeGoal": "ELM-005: 将当前插件界面的“对话过程展示”升级为类似 VS Code Copilot 的会话式过程体验，以更接近对话消息流的方式呈现用户输入、系统响应、生成中状态与过程推进，让用户能够直观理解正在处理什么、处理到了哪里、最终产出了什",
-  "designSummary": "ELM-005 follows a brownfield-first refinement of ELM-004. Extend the existing Chrome extension sidepanel implementation instead of creating a new chat stack or changing backend protocols. The implementation boundary remains extension/src/sidepanel/App.tsx, reasoningTimeline.ts, reasoningTimelineView.tsx, styles.css, and useRunHistory.ts. Introduce a Conversation Shell responsibility at the App.tsx layer so the UI is reorganized around a conversation-first flow: user message, assistant processing state, progressively forming assistant reply, summarized/collapsible process layer, and clear completion state. Reuse the existing reasoning timeline, event presentation, stream UX, and history reuse seams to map raw NormalizedRunEvent data into stable user-facing stage summaries with low noise and low jitter.",
-  "designDecisions": [
-    "Decision: Select extension/src/sidepanel/App.tsx as the primary ownership seam for ELM-005 because the requirement expands from ELM-004's reasoning timeline refinement into whole-sidepanel conversation orchestration. The top-level sidepanel shell already owns prompt submission, live run state, question handling, and completion banners, so the Copilot-like conversation flow must be composed there rather than introduced as a parallel UI path.",
-    "Decision: Reuse extension/src/sidepanel/reasoningTimeline.ts as the event-to-conversation mapping seam for ELM-005. It already converts NormalizedRunEvent items into aggregated readable units, so it is the correct brownfield boundary for evolving raw event aggregation into stable stage summaries and assistant-turn conversation models.",
-    "Decision: Reuse extension/src/sidepanel/reasoningTimelineView.tsx and extension/src/sidepanel/styles.css as the rendering seam for ELM-005 because they already own buffered typewriter behavior, details-on-demand, auto-follow, unread indicators, and history rendering reuse. ELM-005 should evolve these modules from event-card presentation into conversation-style message rendering instead of introducing a separate renderer stack.",
-    "Decision: Reuse extension/src/sidepanel/useRunHistory.ts for history compatibility. ELM-005 does not change history management scope, but the approved design requires live and history views to reuse the same conversation-style presentation so that the interaction model stays consistent across active and past runs.",
-    "Decision: Reject extension/src/shared/protocol.ts, extension/src/shared/api.ts, extension/src/background/index.ts, backend/src/**, and python_adapter/** as primary ownership modules for ELM-005. Existing NormalizedRunEvent and SSE contracts already provide enough information for front-end mapping, and the formal requirement explicitly excludes backend capability or protocol redesign. Therefore the change remains an extension-side presentation and orchestration refinement."
-  ],
+  "version": 2,
+  "activeGoal": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati",
+  "designSummary": "",
+  "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-050",
-      "title": "ELM-005: 将当前插件界面的“对话过程展示”升级为类似 VS Code Copilot 的会话式过程体验，以更接近对话消息流的方式呈现用户输入、系统响应、生成中状态与过程推进，让用户能够直观理解正在处理什么、处理到了哪里、最终产出了什",
-      "status": "todo",
+      "id": "TASK-071",
+      "title": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati",
+      "status": "done",
+      "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
-      "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
-      "details": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks.",
-      "createdAt": "2026-04-07T06:32:25.088Z",
-      "updatedAt": "2026-04-07T06:32:25.088Z"
-    },
-    {
-      "id": "TASK-051",
-      "title": "Refactor sidepanel App into conversation-first run shell for ELM-005",
-      "status": "in_progress",
-      "kind": "implementation",
-      "owner": "Implementation",
-      "summary": "Started implementing conversation-first sidepanel shell for ELM-005.",
-      "details": "Started implementing conversation-first sidepanel shell for ELM-005.",
-      "softwareUnitId": "SU-EXT-CONVERSATION-SHELL",
-      "softwareUnitTitle": "Extension Sidepanel Conversation Shell",
-      "architectureElementId": "ELM-APP-EXT-CONVERSATION-SHELL",
-      "createdAt": "2026-04-07T06:58:08.148Z",
-      "updatedAt": "2026-04-07T07:00:44.544Z"
-    },
-    {
-      "id": "TASK-052",
-      "title": "Evolve reasoning timeline mapping into conversation-stage models for ELM-005",
-      "status": "in_progress",
-      "kind": "implementation",
-      "owner": "Implementation",
-      "summary": "Started evolving reasoning timeline mapping into conversation-stage models for ELM-005.",
-      "details": "Started evolving reasoning timeline mapping into conversation-stage models for ELM-005.",
-      "softwareUnitId": "SU-EXT-RUN-CONVERSATION-MAPPER",
-      "softwareUnitTitle": "Extension Run Conversation Mapper",
-      "architectureElementId": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
-      "createdAt": "2026-04-07T06:58:08.148Z",
-      "updatedAt": "2026-04-07T07:00:44.580Z"
-    },
-    {
-      "id": "TASK-053",
-      "title": "Implement conversation-style message rendering and hierarchy for ELM-005",
-      "status": "in_progress",
-      "kind": "implementation",
-      "owner": "Implementation",
-      "summary": "Started implementing conversation-style rendering hierarchy for ELM-005.",
-      "details": "Started implementing conversation-style rendering hierarchy for ELM-005.",
-      "softwareUnitId": "SU-EXT-CONVERSATION-RENDERER",
-      "softwareUnitTitle": "Extension Conversation Renderer",
-      "architectureElementId": "ELM-APP-EXT-CONVERSATION-RENDERER",
-      "createdAt": "2026-04-07T06:58:08.148Z",
-      "updatedAt": "2026-04-07T07:00:44.611Z"
-    },
-    {
-      "id": "TASK-054",
-      "title": "Harden live/history conversation UX reuse and streaming stability for ELM-005",
-      "status": "in_progress",
-      "kind": "implementation",
-      "owner": "Implementation",
-      "summary": "Started hardening live/history conversation UX and streaming stability for ELM-005.",
-      "details": "Started hardening live/history conversation UX and streaming stability for ELM-005.",
-      "softwareUnitId": "SU-EXT-CONVERSATION-LIVE-HISTORY-UX",
-      "softwareUnitTitle": "Extension Conversation Live and History UX",
-      "architectureElementId": "ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX",
-      "createdAt": "2026-04-07T06:58:08.148Z",
-      "updatedAt": "2026-04-07T07:00:44.643Z"
+      "summary": "Completed localized sidepanel fast-track fix: removed reasoning-process UI from conversation rendering, guarded same-run terminal merges so completion only appears with real terminal evidence, restored light sidepanel styling, and updated targeted UI tests.",
+      "details": "Completed localized sidepanel fast-track fix: removed reasoning-process UI from conversation rendering, guarded same-run terminal merges so completion only appears with real terminal evidence, restored light sidepanel styling, and updated targeted UI tests.",
+      "createdAt": "2026-04-07T12:17:54.974Z",
+      "updatedAt": "2026-04-07T12:42:25.997Z",
+      "commitId": "cb40ec6745ddfaca9b93379f88fd693c75f948e1"
     }
   ],
   "issues": [],
@@ -83,22 +23,22 @@
     "qa": {
       "status": "not_run",
       "summary": "QA not run for the current goal.",
-      "updatedAt": "2026-04-07T06:32:25.088Z"
+      "updatedAt": "2026-04-07T12:17:54.974Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-07T06:32:25.088Z"
+      "updatedAt": "2026-04-07T12:17:54.974Z"
     }
   },
   "release": {
     "status": "not_started",
     "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-07T06:32:25.088Z"
+    "updatedAt": "2026-04-07T12:17:54.974Z"
   },
   "counters": {
-    "task": 54,
-    "issue": 5
+    "task": 71,
+    "issue": 7
   },
-  "updatedAt": "2026-04-07T07:00:44.643Z"
+  "updatedAt": "2026-04-07T12:42:25.998Z"
 }

@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "ELM-005 follows a brownfield-first refinement of ELM-004. Extend the existing Chrome extension sidepanel implementation instead of creating a new chat stack or changing backend protocols. The implementation boundary remains extension/src/sidepanel/App.tsx, reasoningTimeline.ts, reasoningTimelineView.tsx, styles.css, and useRunHistory.ts. Introduce a Conversation Shell responsibility at the App.tsx layer so the UI is reorganized around a conversation-first flow: user message, assistant processing state, progressively forming assistant reply, summarized/collapsible process layer, and clear completion state. Reuse the existing reasoning timeline, event presentation, stream UX, and history reuse seams to map raw NormalizedRunEvent data into stable user-facing stage summaries with low noise and low jitter."
+      "value": "ELM-007 approved design: restructure the extension sidepanel into a chat-first single continuous conversation surface. Extend the existing conversation shell, event mapper, renderer, and live/history UX so user prompt, live reasoning summary, stage progress, inline question options, final answer, and follow-up turns appear in one stream. Preserve existing SSE transport, question submission, and history persistence contracts. Default-hide or visually demote legacy context/status/result-summary/history cards so they remain auxiliary rather than primary."
     }
   ],
   "metadata": {
@@ -19,36 +19,30 @@
     "ai4pb": {
       "managedBy": "opencode",
       "counters": {
-        "ELM": 5
+        "ELM": 7
       },
-      "designSummary": "ELM-005 follows a brownfield-first refinement of ELM-004. Extend the existing Chrome extension sidepanel implementation instead of creating a new chat stack or changing backend protocols. The implementation boundary remains extension/src/sidepanel/App.tsx, reasoningTimeline.ts, reasoningTimelineView.tsx, styles.css, and useRunHistory.ts. Introduce a Conversation Shell responsibility at the App.tsx layer so the UI is reorganized around a conversation-first flow: user message, assistant processing state, progressively forming assistant reply, summarized/collapsible process layer, and clear completion state. Reuse the existing reasoning timeline, event presentation, stream UX, and history reuse seams to map raw NormalizedRunEvent data into stable user-facing stage summaries with low noise and low jitter.",
-      "designDecisions": [
-        "Decision: Select extension/src/sidepanel/App.tsx as the primary ownership seam for ELM-005 because the requirement expands from ELM-004's reasoning timeline refinement into whole-sidepanel conversation orchestration. The top-level sidepanel shell already owns prompt submission, live run state, question handling, and completion banners, so the Copilot-like conversation flow must be composed there rather than introduced as a parallel UI path.",
-        "Decision: Reuse extension/src/sidepanel/reasoningTimeline.ts as the event-to-conversation mapping seam for ELM-005. It already converts NormalizedRunEvent items into aggregated readable units, so it is the correct brownfield boundary for evolving raw event aggregation into stable stage summaries and assistant-turn conversation models.",
-        "Decision: Reuse extension/src/sidepanel/reasoningTimelineView.tsx and extension/src/sidepanel/styles.css as the rendering seam for ELM-005 because they already own buffered typewriter behavior, details-on-demand, auto-follow, unread indicators, and history rendering reuse. ELM-005 should evolve these modules from event-card presentation into conversation-style message rendering instead of introducing a separate renderer stack.",
-        "Decision: Reuse extension/src/sidepanel/useRunHistory.ts for history compatibility. ELM-005 does not change history management scope, but the approved design requires live and history views to reuse the same conversation-style presentation so that the interaction model stays consistent across active and past runs.",
-        "Decision: Reject extension/src/shared/protocol.ts, extension/src/shared/api.ts, extension/src/background/index.ts, backend/src/**, and python_adapter/** as primary ownership modules for ELM-005. Existing NormalizedRunEvent and SSE contracts already provide enough information for front-end mapping, and the formal requirement explicitly excludes backend capability or protocol redesign. Therefore the change remains an extension-side presentation and orchestration refinement."
-      ],
+      "designSummary": "",
+      "designDecisions": [],
       "runtime": {
-        "activeGoal": "ELM-005: 将当前插件界面的“对话过程展示”升级为类似 VS Code Copilot 的会话式过程体验，以更接近对话消息流的方式呈现用户输入、系统响应、生成中状态与过程推进，让用户能够直观理解正在处理什么、处理到了哪里、最终产出了什",
+        "activeGoal": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati",
         "validations": {
           "qa": {
             "status": "not_run",
             "summary": "QA not run for the current goal.",
-            "updatedAt": "2026-04-07T06:32:25.088Z"
+            "updatedAt": "2026-04-07T12:17:54.974Z"
           },
           "audit": {
             "status": "not_run",
             "summary": "Audit not run for the current goal.",
-            "updatedAt": "2026-04-07T06:32:25.088Z"
+            "updatedAt": "2026-04-07T12:17:54.974Z"
           }
         },
         "release": {
           "status": "not_started",
           "summary": "Release not prepared for the current goal.",
-          "updatedAt": "2026-04-07T06:32:25.088Z"
+          "updatedAt": "2026-04-07T12:17:54.974Z"
         },
-        "updatedAt": "2026-04-07T07:00:44.612Z"
+        "updatedAt": "2026-04-07T12:20:23.975Z"
       }
     }
   },
@@ -144,7 +138,7 @@
         ],
         "documentation": [
           {
-            "value": "Primary business actor interacting with the product."
+            "value": "Describe the element as a business actor: an organizational entity that is capable of performing behavior and owning or using business roles, processes, or services. In this architecture, Primary User defines, constrains, or supports traceable solution intent within the managed model. Primary business actor interacting with the product."
           }
         ],
         "extensions": {
@@ -207,7 +201,7 @@
         ],
         "documentation": [
           {
-            "value": "Application layer baseline that supports the core business flow for: 开发一个 Google Chrome 浏览器插件：插件启动后在浏览器页面右侧边沿显示悬浮入口；点击后展开右侧侧边操作台；操作台包含多个按钮，其中一个“采集并分析”按钮用于从当前网页按预定义规则采集指定字段并展示，同时发送到后台服务；后台服务."
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Core Application System defines, constrains, or supports traceable solution intent within the managed model. Application layer baseline that supports the core business flow for: 开发一个 Google Chrome 浏览器插件：插件启动后在浏览器页面右侧边沿显示悬浮入口；点击后展开右侧侧边操作台；操作台包含多个按钮，其中一个“采集并分析”按钮用于从当前网页按预定义规则采集指定字段并展示，同时发送到后台服务；后台服务."
           }
         ],
         "extensions": {
@@ -228,7 +222,7 @@
         ],
         "documentation": [
           {
-            "value": "Application service boundary implementing the core business service."
+            "value": "Describe the element as an application service: externally visible automated behavior provided by an application component. In this architecture, Core Application Service defines, constrains, or supports traceable solution intent within the managed model. Application service boundary implementing the core business service."
           }
         ],
         "extensions": {
@@ -361,7 +355,7 @@
         ],
         "documentation": [
           {
-            "value": "分析入口必须强制使用 .opencode/agents/TARA_analyst.md，失败显式报错，禁止静默降级。"
+            "value": "Describe the element as a constraint: a restriction or limitation that the architecture and implementation must respect. In this architecture, TARA Primary Agent Hard Constraint defines, constrains, or supports traceable solution intent within the managed model. 分析入口必须强制使用 .opencode/agents/TARA_analyst.md，失败显式报错，禁止静默降级。."
           }
         ],
         "extensions": {
@@ -424,7 +418,7 @@
         ],
         "documentation": [
           {
-            "value": "Chrome extension sidepanel 中的事件展示模块，负责用户态卡片与打字机渲染。"
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Extension Event Presentation Module defines, constrains, or supports traceable solution intent within the managed model. Chrome extension sidepanel 中的事件展示模块，负责用户态卡片与打字机渲染。."
           }
         ],
         "extensions": {
@@ -446,7 +440,7 @@
         ],
         "documentation": [
           {
-            "value": "Python adapter 中的事件规范化与阶段提示映射模块，保留 debug/raw event。"
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Adapter Event Mapping Module defines, constrains, or supports traceable solution intent within the managed model. Python adapter 中的事件规范化与阶段提示映射模块，保留 debug/raw event。."
           }
         ],
         "extensions": {
@@ -468,7 +462,7 @@
         ],
         "documentation": [
           {
-            "value": "对 opencode primary agent 配置、文件存在性与加载结果进行前置校验并在失败时显式报错。"
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Opencode Primary Agent Guard defines, constrains, or supports traceable solution intent within the managed model. 对 opencode primary agent 配置、文件存在性与加载结果进行前置校验并在失败时显式报错。."
           }
         ],
         "extensions": {
@@ -656,38 +650,66 @@
         }
       },
       {
-        "identifier": "PROJECT-CURRENT",
-        "type": "WorkPackage",
+        "identifier": "ELM-006",
+        "type": "Requirement",
         "name": [
           {
-            "value": "ELM-005: 将当前插件界面的“对话过程展示”升级为类似 VS Code Copilot 的会话式过程体验，以更接近对话消息流的方式呈现用户输入、系统响应、生成中状态与过程推进，让用户能够直观理解正在处理什么、处理到了哪里、最终产出了什"
+            "value": "Formal Requirement"
           }
         ],
         "documentation": [
           {
-            "value": "ELM-005 follows a brownfield-first refinement of ELM-004. Extend the existing Chrome extension sidepanel implementation instead of creating a new chat stack or changing backend protocols. The implementation boundary remains extension/src/sidepanel/App.tsx, reasoningTimeline.ts, reasoningTimelineView.tsx, styles.css, and useRunHistory.ts. Introduce a Conversation Shell responsibility at the App.tsx layer so the UI is reorganized around a conversation-first flow: user message, assistant processing state, progressively forming assistant reply, summarized/collapsible process layer, and clear completion state. Reuse the existing reasoning timeline, event presentation, stream UX, and history reuse seams to map raw NormalizedRunEvent data into stable user-facing stage summaries with low noise and low jitter."
+            "value": "# Formal Requirement Draft\n\n## Goal\nCorrect the plugin’s session-to-UI conversation flow so that:\n- the AI reply already present in session state is displayed reliably in the plugin conversation box,\n- the reasoning panel is collapsed by default and only expanded by explicit user action,\n- every newly created session actually uses `TARA_analyst` as the primary agent, matching product expectation and configured defaults.\n\n## Scope\nIn scope:\n- Session creation and session initialization contract between the extension and `python_adapter`\n- Verification/enforcement of remote session agent assignment\n- Retrieval/rendering contract for assistant messages in the sidepanel conversation UI\n- Reasoning panel interaction model and default state\n- End-to-end correction of these behaviors across extension UI and adapter integration points\n\nOut of scope:\n- Redesign of the reasoning content itself\n- Changes to model prompts beyond what is required to ensure the correct primary agent is assigned\n- Broader multi-agent routing behavior outside the affected session creation path\n\n## User Stories / Usage Scenarios\n1. As a user, when I open a plugin conversation that already has an AI reply in session state, I want that reply to appear reliably in the conversation box so I can continue the workflow without confusion.\n2. As a user, I want reasoning details hidden by default so the main conversation remains readable unless I explicitly expand reasoning.\n3. As a product owner, I want every new session to actually run with `TARA_analyst` as the primary agent so the system behavior matches the intended product contract.\n4. As an engineer/operator, I want the system to verify or fail clearly when session agent assignment does not match expectation so silent misconfiguration does not propagate into the UX.\n\n## Acceptance Criteria\n1. **Conversation reply rendering**\n   - If `GET /session/{sessionID}/message` returns an assistant reply for the active session, the extension conversation box must render that reply deterministically.\n   - Rendering must not depend on reasoning panel visibility.\n   - The UI must not show an empty or stale conversation state when a valid assistant reply is already available from the session API.\n   - On refresh/reopen of the sidepanel, the latest persisted assistant reply for the active session must still appear.\n\n2. **Reasoning panel default behavior**\n   - The reasoning panel must be collapsed by default on initial render for a conversation/session.\n   - The user must have an explicit control to expand and collapse the reasoning panel.\n   - Expanding/collapsing reasoning must not alter or suppress the main conversation message rendering.\n   - The collapsed state must be visually clear and discoverable.\n\n3. **Primary agent enforcement**\n   - New session creation must explicitly set or verify `TARA_analyst` as the session’s actual primary agent in the remote OpenCode session contract.\n   - Reliance on `.opencode/opencode.json` default configuration alone is insufficient unless the runtime session creation path confirms the remote session uses that agent.\n   - If the created remote session does not resolve to `TARA_analyst`, the adapter/system must either:\n     - correct the assignment before prompting, or\n     - fail with an explicit error state rather than proceeding silently with the wrong agent.\n\n4. **End-to-end contract integrity**\n   - The `python_adapter` session creation flow and subsequent `prompt_async` / message retrieval flow must preserve the correct session identity and agent identity throughout the request lifecycle.\n   - The extension and adapter must use a documented contract for which response fields drive:\n     - displayed conversation text,\n     - displayed reasoning content,\n     - agent identity validation.\n\n## Constraints\n- Existing repository context indicates:\n  - `.opencode/opencode.json` declares `default_agent = TARA_analyst`\n  - current adapter logic checks config content but does not clearly force/verify actual remote session agent assignment\n  - session creation currently appears to send only a title at creation time\n  - the sidepanel currently renders reasoning directly without a default-collapsed wrapper\n- The fix must be architecture-safe and must not assume local config defaults are equivalent to confirmed remote session state.\n- The UI must preserve usability for users who never expand reasoning.\n\n## Open Questions / Assumptions\n- Assumption: the remote OpenCode session API supports either explicit agent assignment at session creation or a retrievable field that can be validated before prompt execution.\n- Assumption: the missing/reliable reply display issue is caused by the current UI/rendering contract rather than missing upstream message generation.\n- Open implementation question: whether collapsed/expanded reasoning state should reset per session open or persist per session/user; default requirement here is only “collapsed by default.”"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-007",
+        "type": "Requirement",
+        "name": [
+          {
+            "value": "Formal Requirement"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "# Formal Requirement Draft\n\n## Goal\n将扩展中的当前卡片式分区对话体验，重构为接近参考图左侧红框的“完整会话流”聊天界面，使对话区成为主交互表面，统一承载用户提问、助手推理进展、探索摘要、最终回答、问题选项交互与后续追问。\n\n## Scope\n- 重构扩展内的对话主界面布局，使聊天流替代当前右侧卡片式主展示方式。\n- 将以下内容统一纳入单一会话流中展示：\n  - 用户问题\n  - 助手实时推理/执行进展\n  - 阶段性探索摘要\n  - 最终回答\n  - 可选问题答案/快捷选项\n  - 用户继续追问产生的后续轮次消息\n- 在流式运行期间持续展示实时进展，避免用户只能在独立卡片区查看状态。\n- 旧的 context / status / result summary / history 等卡片区默认隐藏，不再主导主视图；如保留，也只能作为弱化的辅助区域存在。\n\n## User Stories / Usage Scenarios\n1. 作为用户，我发起一个问题后，希望立即在聊天流中看到系统开始处理，并持续看到推理摘要与阶段进展，而不是跳到多个分区卡片中寻找状态。\n2. 作为用户，我希望同一条会话流中依次看到我的问题、系统的分析过程、阶段性结论和最终答案，形成完整上下文。\n3. 作为用户，当系统给出可回答的问题选项时，我希望这些选项直接出现在聊天流中，并可通过气泡内快捷按钮点击作答。\n4. 作为用户，我在点击选项后，希望该选择以一条新的用户消息或等效聊天事件写入会话流，保持上下文连续。\n5. 作为用户，我不想被限制在选项内；我也可以继续手动输入新的问题或追问，继续当前会话。\n6. 作为用户，我希望推理过程默认显示为“摘要可见、详情可展开”，既能实时感知系统在推进，又不至于被过多细节打断。\n7. 作为产品/设计方，我希望整体视觉和交互效果更接近 opencode 左图的会话式体验，而不是当前右图的卡片式信息分仓布局。\n\n## Acceptance Criteria\n1. 主界面以单一聊天流为中心，聊天流是默认主视觉与主要交互区域。\n2. 用户输入问题后，会话流中必须先出现用户消息，再出现助手的处理中/推理中消息状态。\n3. 系统在流式执行期间，必须实时向聊天流追加或更新进展内容，用户无需切换到其他卡片区查看运行状态。\n4. 会话流中必须按时间顺序统一展示以下至少四类信息：用户提问、助手推理摘要、阶段性探索/执行结果、最终回答。\n5. 推理过程展示默认采用“摘要可见、详情可展开”的形式：\n   - 默认显示阶段性摘要；\n   - 用户可展开查看更详细的推理/执行内容；\n   - 折叠状态下不影响阅读主会话。\n6. 当系统提出候选问题答案或需要用户选择时，选项必须直接渲染在对应聊天消息内。\n7. 选项交互形式为聊天气泡内快捷按钮；点击后应立即反馈，并将该选择纳入会话流上下文。\n8. 用户在存在选项时，仍必须可以继续自由输入文本问题，不因选项存在而被阻断。\n9. 新的自由输入追问必须与当前会话流连续衔接，而非跳转到新的卡片区域。\n10. 旧的 context / status / result summary / history 卡片区域默认隐藏，不得继续作为主导布局占据用户主要注意力。\n11. 如果旧卡片能力仍需保留，也只能作为次级、可选、弱化的辅助区域，不得打断会话流连续性。\n12. 整体布局、信息组织与交互节奏应明显更接近参考图左侧的连续对话体验，而非当前右侧的卡片分区体验。\n\n## Constraints\n- 必须保持“实时流式进展可见”这一能力，不能因改版而退化为仅最终结果可见。\n- 必须支持多轮对话连续性，不能将中间过程、选项交互和最终答案拆散到不同主视图容器中。\n- 推理内容展示需兼顾可读性与信息量，默认以摘要展示，详细内容通过展开查看。\n- 交互设计以聊天流优先，任何历史、状态、上下文等附属信息都应服从于会话流主结构。\n- 最终实现应以参考图左侧红框体验为对齐目标，不以当前右侧卡片式布局为演进基线。\n\n## Open Questions / Assumptions\n- 假设“实时展示推理过程”在产品层面指可见的阶段摘要与执行进度，不要求暴露不可控或不宜直接展示的底层原始内部链路细节。\n- 假设旧卡片区不是完全删除，而是产品默认隐藏；如工程上仍需存在，可作为非主路径能力保留。\n- 假设本次需求聚焦扩展内对话体验重构，不额外定义模型能力、后端推理逻辑或数据源改造范围。"
+          }
+        ]
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati"
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "ELM-005: 将当前插件界面的“对话过程展示”升级为类似 VS Code Copilot 的会话式过程体验，以更接近对话消息流的方式呈现用户输入、系统响应、生成中状态与过程推进，让用户能够直观理解正在处理什么、处理到了哪里、最终产出了什",
+            "rawRequirement": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-050",
+        "identifier": "TASK-071",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "ELM-005: 将当前插件界面的“对话过程展示”升级为类似 VS Code Copilot 的会话式过程体验，以更接近对话消息流的方式呈现用户输入、系统响应、生成中状态与过程推进，让用户能够直观理解正在处理什么、处理到了哪里、最终产出了什"
+            "value": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati"
           }
         ],
         "documentation": [
           {
-            "value": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks."
+            "value": "Completed localized sidepanel fast-track fix: removed reasoning-process UI from conversation rendering, guarded same-run terminal merges so completion only appears with real terminal evidence, restored light sidepanel styling, and updated targeted UI tests."
           }
         ],
         "extensions": {
@@ -695,130 +717,15 @@
             "managedBy": "opencode-runtime",
             "kind": "Task",
             "taskKind": "planning",
-            "status": "ToDo",
+            "status": "Done",
+            "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
-            "commitId": "",
+            "summary": "Completed localized sidepanel fast-track fix: removed reasoning-process UI from conversation rendering, guarded same-run terminal merges so completion only appears with real terminal evidence, restored light sidepanel styling, and updated targeted UI tests.",
+            "commitId": "cb40ec6745ddfaca9b93379f88fd693c75f948e1",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-07T06:32:25.088Z"
-          }
-        }
-      },
-      {
-        "identifier": "TASK-051",
-        "type": "WorkPackage",
-        "name": [
-          {
-            "value": "Refactor sidepanel App into conversation-first run shell for ELM-005"
-          }
-        ],
-        "documentation": [
-          {
-            "value": "Started implementing conversation-first sidepanel shell for ELM-005."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "Task",
-            "taskKind": "implementation",
-            "status": "InProgress",
-            "assignee": "Implementation",
-            "summary": "Started implementing conversation-first sidepanel shell for ELM-005.",
-            "commitId": "",
-            "softwareUnitId": "SU-EXT-CONVERSATION-SHELL",
-            "softwareUnitTitle": "Extension Sidepanel Conversation Shell",
-            "architectureElementId": "ELM-APP-EXT-CONVERSATION-SHELL",
-            "updatedAt": "2026-04-07T07:00:44.544Z"
-          }
-        }
-      },
-      {
-        "identifier": "TASK-052",
-        "type": "WorkPackage",
-        "name": [
-          {
-            "value": "Evolve reasoning timeline mapping into conversation-stage models for ELM-005"
-          }
-        ],
-        "documentation": [
-          {
-            "value": "Started evolving reasoning timeline mapping into conversation-stage models for ELM-005."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "Task",
-            "taskKind": "implementation",
-            "status": "InProgress",
-            "assignee": "Implementation",
-            "summary": "Started evolving reasoning timeline mapping into conversation-stage models for ELM-005.",
-            "commitId": "",
-            "softwareUnitId": "SU-EXT-RUN-CONVERSATION-MAPPER",
-            "softwareUnitTitle": "Extension Run Conversation Mapper",
-            "architectureElementId": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
-            "updatedAt": "2026-04-07T07:00:44.580Z"
-          }
-        }
-      },
-      {
-        "identifier": "TASK-053",
-        "type": "WorkPackage",
-        "name": [
-          {
-            "value": "Implement conversation-style message rendering and hierarchy for ELM-005"
-          }
-        ],
-        "documentation": [
-          {
-            "value": "Started implementing conversation-style rendering hierarchy for ELM-005."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "Task",
-            "taskKind": "implementation",
-            "status": "InProgress",
-            "assignee": "Implementation",
-            "summary": "Started implementing conversation-style rendering hierarchy for ELM-005.",
-            "commitId": "",
-            "softwareUnitId": "SU-EXT-CONVERSATION-RENDERER",
-            "softwareUnitTitle": "Extension Conversation Renderer",
-            "architectureElementId": "ELM-APP-EXT-CONVERSATION-RENDERER",
-            "updatedAt": "2026-04-07T07:00:44.611Z"
-          }
-        }
-      },
-      {
-        "identifier": "TASK-054",
-        "type": "WorkPackage",
-        "name": [
-          {
-            "value": "Harden live/history conversation UX reuse and streaming stability for ELM-005"
-          }
-        ],
-        "documentation": [
-          {
-            "value": "Started hardening live/history conversation UX and streaming stability for ELM-005."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "Task",
-            "taskKind": "implementation",
-            "status": "InProgress",
-            "assignee": "Implementation",
-            "summary": "Started hardening live/history conversation UX and streaming stability for ELM-005.",
-            "commitId": "",
-            "softwareUnitId": "SU-EXT-CONVERSATION-LIVE-HISTORY-UX",
-            "softwareUnitTitle": "Extension Conversation Live and History UX",
-            "architectureElementId": "ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX",
-            "updatedAt": "2026-04-07T07:00:44.643Z"
+            "updatedAt": "2026-04-07T12:42:25.997Z"
           }
         }
       }
@@ -838,7 +745,7 @@
         "target": "ELM-STRATEGY-GOAL",
         "documentation": [
           {
-            "value": "Core product capability realizes the product delivery goal."
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Product Capability connects to Product Delivery Goal through a traceable Realization relation. Core product capability realizes the product delivery goal."
           }
         ],
         "extensions": {
@@ -860,7 +767,7 @@
         "target": "ELM-STRATEGY-CAPABILITY",
         "documentation": [
           {
-            "value": "The MVP delivery course of action realizes the core product capability."
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, MVP Delivery Course Of Action connects to Core Product Capability through a traceable Realization relation. The MVP delivery course of action realizes the core product capability."
           }
         ],
         "extensions": {
@@ -882,7 +789,7 @@
         "target": "ELM-STRATEGY-CAPABILITY",
         "documentation": [
           {
-            "value": "Core business flow realizes the strategic capability."
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Business Flow connects to Core Product Capability through a traceable Realization relation. Core business flow realizes the strategic capability."
           }
         ],
         "extensions": {
@@ -904,7 +811,7 @@
         "target": "ELM-BUSINESS-PROCESS",
         "documentation": [
           {
-            "value": "Primary user participates in the core business flow."
+            "value": "Describe the relationship as an assignment: the allocation of responsibility, behavior, or execution from an active structure element to a behavior element, or vice versa where appropriate in ArchiMate. In this architecture, Primary User connects to Core Business Flow through a traceable Assignment relation. Primary user participates in the core business flow."
           }
         ],
         "extensions": {
@@ -926,7 +833,7 @@
         "target": "ELM-BUSINESS-SERVICE",
         "documentation": [
           {
-            "value": "Core business flow realizes the core user service."
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Business Flow connects to Core User Service through a traceable Realization relation. Core business flow realizes the core user service."
           }
         ],
         "extensions": {
@@ -948,7 +855,7 @@
         "target": "ELM-BUSINESS-ACTOR",
         "documentation": [
           {
-            "value": "Core user service serves the primary user."
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Core User Service connects to Primary User through a traceable Serving relation. Core user service serves the primary user."
           }
         ],
         "extensions": {
@@ -970,7 +877,7 @@
         "target": "ELM-BUSINESS-SERVICE",
         "documentation": [
           {
-            "value": "Application service serves the business-facing core user service."
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Core Application Service connects to Core User Service through a traceable Serving relation. Application service serves the business-facing core user service."
           }
         ],
         "extensions": {
@@ -992,7 +899,7 @@
         "target": "ELM-APPLICATION-SERVICE",
         "documentation": [
           {
-            "value": "Core application system realizes the application service boundary."
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Application System connects to Core Application Service through a traceable Realization relation. Core application system realizes the application service boundary."
           }
         ],
         "extensions": {
@@ -1014,7 +921,7 @@
         "target": "ELM-APPLICATION-DATA",
         "documentation": [
           {
-            "value": "Core application system accesses and manages the core domain data."
+            "value": "Describe the relationship as an access relationship: the source behavior or active structure concept reads, writes, or otherwise uses the target passive structure concept. In this architecture, Core Application System connects to Core Domain Data through a traceable Access relation. Core application system accesses and manages the core domain data."
           }
         ],
         "extensions": {
@@ -1036,7 +943,7 @@
         "target": "ELM-APPLICATION-COMPONENT",
         "documentation": [
           {
-            "value": "Core technology runtime supports the application execution environment."
+            "value": "Describe the relationship as an association: a generic structural or semantic link used when no more specific ArchiMate relationship type applies. In this architecture, Core Technology Runtime connects to Core Application System through a traceable Association relation. Core technology runtime supports the application execution environment."
           }
         ],
         "extensions": {
@@ -1058,7 +965,7 @@
         "target": "ELM-APPLICATION-SERVICE",
         "documentation": [
           {
-            "value": "Core technology runtime hosts the application service boundary."
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Core Technology Runtime connects to Core Application Service through a traceable Serving relation. Core technology runtime hosts the application service boundary."
           }
         ],
         "extensions": {
@@ -1080,7 +987,7 @@
         "target": "ELM-APPLICATION-COMPONENT",
         "documentation": [
           {
-            "value": "Deployable artifact realizes the application system in deployable form."
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Deployable Solution Artifact connects to Core Application System through a traceable Realization relation. Deployable artifact realizes the application system in deployable form."
           }
         ],
         "extensions": {
@@ -1331,15 +1238,79 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-050",
+        "identifier": "REL-ELM007-CONVERSATION-SHELL-REALIZES",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Conversation shell realizes ELM-007"
+          }
+        ],
+        "source": "ELM-APP-EXT-CONVERSATION-SHELL",
+        "target": "ELM-007",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Extension Sidepanel Conversation Shell fulfills ELM-007 by making the single chat stream the primary surface and demoting legacy cards to secondary utilities."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ELM007-MAPPER-REALIZES",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Conversation mapper realizes ELM-007"
+          }
+        ],
+        "source": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "target": "ELM-007",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Extension Run Conversation Mapper fulfills ELM-007 by transforming raw run events into unified in-stream conversation items for reasoning, results, and interactive questions."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ELM007-RENDERER-REALIZES",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Conversation renderer realizes ELM-007"
+          }
+        ],
+        "source": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "target": "ELM-007",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Extension Conversation Renderer fulfills ELM-007 by rendering one continuous chat-first stream with collapsible reasoning detail, inline stage updates, and final answers."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ELM007-LIVE-HISTORY-UX-REALIZES",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Live/history UX realizes ELM-007"
+          }
+        ],
+        "source": "ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX",
+        "target": "ELM-007",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Extension Conversation Live and History UX fulfills ELM-007 by aligning live runs and replayed runs around the same conversation-first interaction model."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-071",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-050"
+            "value": "Project aggregates TASK-071"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-050",
+        "target": "TASK-071",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -1349,182 +1320,6 @@
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "ProjectTaskLink"
-          }
-        }
-      },
-      {
-        "identifier": "REL-PROJECT-TASK-051",
-        "type": "Aggregation",
-        "name": [
-          {
-            "value": "Project aggregates TASK-051"
-          }
-        ],
-        "source": "PROJECT-CURRENT",
-        "target": "TASK-051",
-        "documentation": [
-          {
-            "value": "Runtime task relationship managed by OpenCode runtime."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "ProjectTaskLink"
-          }
-        }
-      },
-      {
-        "identifier": "REL-TASK-051-ARCH",
-        "type": "Association",
-        "name": [
-          {
-            "value": "TASK-051 traces to ELM-APP-EXT-CONVERSATION-SHELL"
-          }
-        ],
-        "source": "TASK-051",
-        "target": "ELM-APP-EXT-CONVERSATION-SHELL",
-        "documentation": [
-          {
-            "value": "Runtime task traceability relationship managed by OpenCode runtime."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "TaskArchitectureTrace"
-          }
-        }
-      },
-      {
-        "identifier": "REL-PROJECT-TASK-052",
-        "type": "Aggregation",
-        "name": [
-          {
-            "value": "Project aggregates TASK-052"
-          }
-        ],
-        "source": "PROJECT-CURRENT",
-        "target": "TASK-052",
-        "documentation": [
-          {
-            "value": "Runtime task relationship managed by OpenCode runtime."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "ProjectTaskLink"
-          }
-        }
-      },
-      {
-        "identifier": "REL-TASK-052-ARCH",
-        "type": "Association",
-        "name": [
-          {
-            "value": "TASK-052 traces to ELM-APP-EXT-RUN-CONVERSATION-MAPPER"
-          }
-        ],
-        "source": "TASK-052",
-        "target": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
-        "documentation": [
-          {
-            "value": "Runtime task traceability relationship managed by OpenCode runtime."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "TaskArchitectureTrace"
-          }
-        }
-      },
-      {
-        "identifier": "REL-PROJECT-TASK-053",
-        "type": "Aggregation",
-        "name": [
-          {
-            "value": "Project aggregates TASK-053"
-          }
-        ],
-        "source": "PROJECT-CURRENT",
-        "target": "TASK-053",
-        "documentation": [
-          {
-            "value": "Runtime task relationship managed by OpenCode runtime."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "ProjectTaskLink"
-          }
-        }
-      },
-      {
-        "identifier": "REL-TASK-053-ARCH",
-        "type": "Association",
-        "name": [
-          {
-            "value": "TASK-053 traces to ELM-APP-EXT-CONVERSATION-RENDERER"
-          }
-        ],
-        "source": "TASK-053",
-        "target": "ELM-APP-EXT-CONVERSATION-RENDERER",
-        "documentation": [
-          {
-            "value": "Runtime task traceability relationship managed by OpenCode runtime."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "TaskArchitectureTrace"
-          }
-        }
-      },
-      {
-        "identifier": "REL-PROJECT-TASK-054",
-        "type": "Aggregation",
-        "name": [
-          {
-            "value": "Project aggregates TASK-054"
-          }
-        ],
-        "source": "PROJECT-CURRENT",
-        "target": "TASK-054",
-        "documentation": [
-          {
-            "value": "Runtime task relationship managed by OpenCode runtime."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "ProjectTaskLink"
-          }
-        }
-      },
-      {
-        "identifier": "REL-TASK-054-ARCH",
-        "type": "Association",
-        "name": [
-          {
-            "value": "TASK-054 traces to ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX"
-          }
-        ],
-        "source": "TASK-054",
-        "target": "ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX",
-        "documentation": [
-          {
-            "value": "Runtime task traceability relationship managed by OpenCode runtime."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "TaskArchitectureTrace"
           }
         }
       }

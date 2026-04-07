@@ -1,58 +1,46 @@
-# 发布总结：Chrome 插件 + Backend MVP
+# Release Summary: ELM-007 sidepanel conversation redesign
 
-## 发布状态
+## Release Status
 
-- 状态：completed
-- 日期：2026-04-01
-- 范围：Chrome Extension MV3 + Node.js/Express backend
+- Status: completed
+- Date: 2026-04-07
+- Goal: Rebuild the extension conversation into a single chat-first stream closer to the left opencode-style reference, with real-time reasoning/progress, final result, inline question options/answers, continued follow-up input, and default-hidden/demoted legacy cards.
+- Final validated commit: `e96c41d9432a89604d314c4ac3f6dd585f00a31f`
 
-## 本次交付内容
+## Release Summary
 
-- 已完成 Chrome Extension MV3 基础骨架：manifest、background service worker、content script、side panel。
-- 已完成页面右侧悬浮入口与侧边操作台，支持“采集并分析 / 重新采集 / 清空结果”。
-- 已完成网页字段采集规则与 DOM 抽取，默认覆盖 `pageTitle`、`pageUrl`、`metaDescription`、`h1`、`selectedText`。
-- 已完成 backend `/api/analyze`，包含鉴权、字段校验、超时控制、错误映射与 Markdown 返回。
-- 已完成 `AnalysisProvider` 适配边界与 `MockAnalysisProvider`，支持后续切换真实 LLM 服务。
-- 已完成最小权限与显式白名单治理，修复 extension → backend 的 API Key 鉴权闭环，并统一 extension/backend 错误域展示。
-- 已补充 README、自动化测试、一键验证脚本与手工验收步骤。
+- TASK-065 refactored `extension/src/sidepanel/App.tsx` into a chat-first shell with a primary conversation surface, persistent composer, and demoted secondary utility panels.
+- TASK-066 added unified stream mapping in `extension/src/sidepanel/reasoningTimeline.ts` to merge prompts, reasoning/progress, inline questions and answers, final results, and errors into one ordered conversation model.
+- TASK-067 updated `extension/src/sidepanel/reasoningTimelineView.tsx` to render inline question options, answer controls, and collapsible reasoning directly in the assistant flow.
+- TASK-068 restyled `extension/src/sidepanel/styles.css` to match the chat-first opencode-like hierarchy and visually demote legacy cards behind collapsed secondary panels.
+- TASK-069 aligned live and history rendering in `extension/src/sidepanel/App.tsx` and `extension/src/sidepanel/useRunHistory.ts` so both use the same conversation contract and new live runs clear stale history selection.
+- TASK-070 expanded `extension/src/sidepanel/App.test.tsx` regression coverage for chat-first interaction flows, inline question answering, collapsed reasoning, and preserved run-start and permission behavior.
 
-## 验证结果
+## Completed Scope
 
-- QA：passed
-  - 已执行 `npm run verify:rework`
-  - backend 测试通过：5/5
-  - extension 测试通过：12/12
-  - `typecheck` 通过
-  - `build` 通过
-- Audit：passed
-  - 已确认最小权限、HTTPS-first、固定 allowlist、API Key 透传、统一错误域、README 与验证覆盖均已闭合。
+- TASK-065: Refactor `App.tsx` into a chat-first sidepanel shell for ELM-007.
+- TASK-066: Add unified chat-stream view-model mapping in `reasoningTimeline.ts` for ELM-007.
+- TASK-067: Render inline question options and collapsible reasoning in `reasoningTimelineView.tsx` for ELM-007.
+- TASK-068: Restyle sidepanel to opencode-like chat-first hierarchy in `styles.css` for ELM-007.
+- TASK-069: Align live and history conversation rendering in `App.tsx`/`useRunHistory.ts` for ELM-007.
+- TASK-070: Expand sidepanel chat-first regression coverage in `App.test.tsx` for ELM-007.
 
-## 主要产物与查看方式
+## Validation Results
 
-- 总体说明：`README.md`
-- 插件构建产物：`extension/dist/`
-- 插件 manifest：`extension/dist/manifest.json`
-- 后端工程：`backend/`
-- 插件工程：`extension/`
-- 根校验命令：`package.json` 中 `verify:rework`
+- QA: passed
+  - Validated commit `e96c41d9432a89604d314c4ac3f6dd585f00a31f` across the chat-first shell, unified conversation mapper, inline question renderer, history alignment, styling changes, and regression coverage.
+  - Evidence: targeted vitest execution for `src/sidepanel/App.test.tsx` and `src/sidepanel/reasoningTimeline.test.ts` passed (29 tests), extension typecheck passed, and extension production build passed.
+  - Confirmed chat-first primary layout, in-stream reasoning/progress, in-stream final result, inline question answering, continued follow-up composer, shared live/history presentation contract, and default-collapsed secondary panels.
+- Audit: passed
+  - Confirmed ELM-007 implementation aligns with intended chat-first redesign across `App.tsx`, `reasoningTimeline.ts`, `reasoningTimelineView.tsx`, `useRunHistory.ts`, and `styles.css`.
+  - Confirmed ArchitectureID evidence for ELM-APP-EXT-CONVERSATION-SHELL, ELM-APP-EXT-RUN-CONVERSATION-MAPPER, ELM-APP-EXT-CONVERSATION-RENDERER, and ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX, with regression protection in `App.test.tsx`.
 
-### 运行方式
+## Release Artifacts
 
-1. 安装依赖：`npm install`
-2. 启动 backend：`npm run dev --workspace backend`
-3. 构建 extension：`npm run build --workspace extension`
-4. 打开 `chrome://extensions`，加载 `extension/dist`
-5. 打开白名单页面，点击右侧 `AI` 悬浮入口，执行“采集并分析”
+- Release log: `SprintRleaseLog.md`
+- Final validated commit: `e96c41d9432a89604d314c4ac3f6dd585f00a31f`
+- Completed tasks: `TASK-065`, `TASK-066`, `TASK-067`, `TASK-068`, `TASK-069`, `TASK-070`
 
-## 已知限制
+## Release Conclusion
 
-- 当前 CLI 环境下尚未完成真实 Chrome Side Panel 的全自动真机 E2E。
-- 真机侧边栏行为仍需依赖 README 中的手工验收步骤确认。
-- `chrome-extension://<extension-id>` 为动态值，backend 联调时需将实际 extension origin 加入 `ALLOWED_ORIGINS`。
-- 白名单策略为保守设计；如需支持更多站点，应显式追加配置，而不是放开全站权限。
-
-## 下一步建议
-
-- 补齐真实 Chrome 环境下的自动化 E2E（含 Side Panel 交互）。
-- 将 `MockAnalysisProvider` 替换为真实 LLM Provider，并补充生产级监控与失败重试策略。
-- 为更多目标站点扩展显式白名单与字段采集规则。
+ELM-007 sidepanel conversation redesign is complete, QA-validated, and audit-approved for release recording. The extension sidepanel now presents a unified chat-first conversation with real-time reasoning/progress, inline questions and answers, continued follow-up input, aligned live/history rendering, and legacy cards demoted behind default-collapsed secondary panels.
