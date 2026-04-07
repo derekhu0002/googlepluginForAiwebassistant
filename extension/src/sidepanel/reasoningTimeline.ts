@@ -10,6 +10,31 @@ const DEFAULT_EVENT_TITLES: Record<NormalizedEventType, string> = {
 
 const AGGREGATED_EVENT_TYPES = new Set<NormalizedEventType>(["thinking", "tool_call"]);
 const SMALL_EVENT_MESSAGE_LIMIT = 140;
+const ORCHESTRATION_NOISE_PATTERNS = [
+  /^已创建\s+opencode\s+session/iu,
+  /^已连接主分析代理/iu,
+  /opencode\s+session\s+状态更新/iu,
+  /^opencode\s+session/iu,
+  /^正在处理当前分析步骤/iu,
+  /^当前步骤已完成，正在进入下一步/iu,
+  /^正在整理上下文并准备分析/iu,
+  /^正在检索相关信息/iu,
+  /^读取页面上下文/iu,
+  /^整理可用字段/iu,
+  /^查询历史/iu,
+  /^调用工具/iu,
+  /^逐步展示文本/iu,
+  /^connected\s+main\s+agent/iu,
+  /^session\s+created/iu,
+  /^session\s+status/iu,
+  /\bbusy\b/iu,
+  /\bstep\b/iu
+];
+const REASONING_SIGNAL_PATTERNS = [
+  /[。！？!?；;]/u,
+  /因为|所以|因此|先|再|然后|基于|为了|需要|判断|推断|分析|结论|建议|我会|我先|看起来|可能|可以|接下来/iu
+];
+const PROCESS_PREFIX_PATTERN = /^(正在|已|当前|读取|整理|查询|检索|调用|连接|创建|收集|准备|同步|进入|更新|完成)/u;
 
 export type TimelineCardStatus = "active" | "complete" | "waiting" | "attention";
 export type ConversationTurnKind = "assistant" | "question" | "error";
@@ -122,36 +147,52 @@ function joinUniqueParagraphs(parts: string[]) {
   return uniqueParts.join("\n\n");
 }
 
-function summarizeProcessItems(items: TimelineCardModel[]) {
-  if (!items.length) {
-    return "";
-  }
-
-  const highlights = items
-    .map((item) => item.summary.split("\n").find((line) => line.trim()) ?? item.title)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const uniqueHighlights = Array.from(new Set(highlights));
-
-  if (uniqueHighlights.length <= 2) {
-    return uniqueHighlights.join(" · ");
-  }
-
-  return `${uniqueHighlights.slice(0, 2).join(" · ")} 等 ${uniqueHighlights.length} 项过程`;
+function hasReasoningSignals(message: string) {
+  return REASONING_SIGNAL_PATTERNS.some((pattern) => pattern.test(message));
 }
 
-function createAssistantTurn(item: TimelineCardModel): ConversationTurnModel {
+function isMeaningfulThinkingMessage(message: string) {
+  const normalized = normalizeMessage(message).replace(/\s+/gu, " ");
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (ORCHESTRATION_NOISE_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return false;
+  }
+
+  if (/^(called\s+|已?调用[:：]?)/iu.test(normalized)) {
+    return false;
+  }
+
+  if (normalized.length <= 18 && !hasReasoningSignals(normalized)) {
+    return false;
+  }
+
+  if (PROCESS_PREFIX_PATTERN.test(normalized) && !hasReasoningSignals(normalized)) {
+    return false;
+  }
+
+  return true;
+}
+
+function getVisibleThinkingSummary(item: TimelineCardModel) {
+  return joinUniqueParagraphs(item.entries.map((entry) => entry.message).filter(isMeaningfulThinkingMessage));
+}
+
+function createAssistantTurn(item: TimelineCardModel, summary: string): ConversationTurnModel {
   return {
     id: item.id,
     runId: item.runId,
     kind: "assistant",
     primaryType: item.type,
     title: "Assistant",
-    summary: item.summary,
+    summary,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
-    processItems: item.type === "result" ? [] : [item],
-    processSummary: item.type === "result" ? "" : summarizeProcessItems([item])
+    processItems: [],
+    processSummary: ""
   };
 }
 
@@ -197,35 +238,53 @@ export function buildConversationTurns(events: NormalizedRunEvent[]): Conversati
   const items = buildReasoningTimelineItems(events);
   const turns: ConversationTurnModel[] = [];
   let currentAssistantTurn: ConversationTurnModel | null = null;
+  let currentAssistantTurnVisible = false;
 
   for (const item of items) {
-    if (item.type === "thinking" || item.type === "tool_call") {
+    if (item.type === "tool_call") {
       if (!currentAssistantTurn) {
-        currentAssistantTurn = createAssistantTurn(item);
-        turns.push(currentAssistantTurn);
+        currentAssistantTurn = createAssistantTurn(item, "");
+        currentAssistantTurnVisible = false;
       } else {
-        currentAssistantTurn.processItems.push(item);
         currentAssistantTurn.updatedAt = item.updatedAt;
       }
+      continue;
+    }
 
-      currentAssistantTurn.processSummary = summarizeProcessItems(currentAssistantTurn.processItems);
+    if (item.type === "thinking") {
+      const visibleSummary = getVisibleThinkingSummary(item);
 
-      if (item.type === "thinking") {
-        currentAssistantTurn.summary = joinUniqueParagraphs([currentAssistantTurn.summary, item.summary]);
+      if (!visibleSummary) {
+        if (!currentAssistantTurn) {
+          currentAssistantTurn = createAssistantTurn(item, "");
+          currentAssistantTurnVisible = false;
+        } else {
+          currentAssistantTurn.updatedAt = item.updatedAt;
+        }
+        continue;
+      }
+
+      if (!currentAssistantTurn) {
+        currentAssistantTurn = createAssistantTurn(item, visibleSummary);
+        turns.push(currentAssistantTurn);
+        currentAssistantTurnVisible = true;
+      } else {
+        currentAssistantTurn.primaryType = "thinking";
+        currentAssistantTurn.summary = joinUniqueParagraphs([currentAssistantTurn.summary, visibleSummary]);
+        currentAssistantTurn.updatedAt = item.updatedAt;
+        if (!currentAssistantTurnVisible) {
+          turns.push(currentAssistantTurn);
+          currentAssistantTurnVisible = true;
+        }
       }
 
       continue;
     }
 
     if (item.type === "result") {
-      if (!currentAssistantTurn) {
-        currentAssistantTurn = createAssistantTurn(item);
-        turns.push(currentAssistantTurn);
-      }
-
-      currentAssistantTurn.primaryType = "result";
-      currentAssistantTurn.updatedAt = item.updatedAt;
-      currentAssistantTurn.summary = item.summary || currentAssistantTurn.summary || currentAssistantTurn.processSummary;
+      turns.push(createAssistantTurn(item, item.summary));
+      currentAssistantTurn = null;
+      currentAssistantTurnVisible = false;
       continue;
     }
 
@@ -244,6 +303,7 @@ export function buildConversationTurns(events: NormalizedRunEvent[]): Conversati
         question: item.question
       });
       currentAssistantTurn = null;
+      currentAssistantTurnVisible = false;
       continue;
     }
 
@@ -256,15 +316,20 @@ export function buildConversationTurns(events: NormalizedRunEvent[]): Conversati
       summary: item.summary,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
-      processItems: currentAssistantTurn?.processItems ?? [],
-      processSummary: currentAssistantTurn?.processSummary ?? ""
+      processItems: [],
+      processSummary: ""
     });
     currentAssistantTurn = null;
+    currentAssistantTurnVisible = false;
+  }
+
+  if (currentAssistantTurn && !currentAssistantTurnVisible) {
+    turns.push(currentAssistantTurn);
   }
 
   return turns.map((turn) => ({
     ...turn,
-    summary: turn.summary || turn.processSummary || (turn.kind === "assistant" ? "正在处理中…" : "")
+    summary: turn.summary || turn.processSummary || ""
   }));
 }
 
@@ -306,6 +371,6 @@ export function getTimelineStatusCopy(runStatus?: "streaming" | "waiting_for_ans
     case "waiting_for_answer":
       return "助手正在等待你的补充信息。";
     default:
-      return "助手会持续补充回答，并在需要时展示过程。";
+      return "助手会持续补充回答，并优先展示可读的思考与结论。";
   }
 }

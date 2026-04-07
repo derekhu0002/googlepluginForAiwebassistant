@@ -5,9 +5,7 @@ import {
   buildConversationTurns,
   getTimelineCardStatus,
   getTimelineStatusCopy,
-  type ConversationTurnModel,
-  type TimelineCardModel,
-  type TimelineEventEntry
+  type ConversationTurnModel
 } from "./reasoningTimeline";
 
 const TYPEWRITER_EVENT_TYPES = new Set<NormalizedEventType>(["thinking"]);
@@ -94,46 +92,6 @@ function getStatusLabel(status: ReturnType<typeof getTimelineCardStatus>) {
   }
 }
 
-function getProcessStepLabel(entry: TimelineEventEntry) {
-  const rawLabel = (entry.message || entry.title || "").trim();
-  if (!rawLabel) {
-    return "Called assistant step";
-  }
-
-  const normalizedLabel = rawLabel
-    .replace(/^called\s+/i, "")
-    .replace(/^已?调用[:：]?/u, "")
-    .replace(/[。.]$/u, "")
-    .trim();
-
-  return normalizedLabel ? `Called ${normalizedLabel}` : "Called assistant step";
-}
-
-function getProcessEntries(items: TimelineCardModel[]) {
-  return items.flatMap((item) => item.entries).filter((entry) => Boolean((entry.message || entry.title || "").trim()));
-}
-
-function ProcessLayer({ items }: { items: TimelineCardModel[] }) {
-  const entries = useMemo(() => getProcessEntries(items), [items]);
-
-  if (!entries.length) {
-    return null;
-  }
-
-  return (
-    <div className="conversation-process-layer">
-      <ol className="conversation-process-list">
-        {entries.map((entry) => (
-          <li key={entry.id} className="conversation-process-item">
-            <span className="conversation-process-copy">{getProcessStepLabel(entry)}</span>
-            <small>{formatTimestamp(entry.createdAt)}</small>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
-
 function ConversationTurn({
   turn,
   status,
@@ -150,7 +108,7 @@ function ConversationTurn({
   const isProcessing = live && status === "active" && turn.kind === "assistant";
   const hasFinalReply = turn.kind === "assistant" && turn.primaryType === "result";
   const messageText = turn.kind === "assistant"
-    ? (hasFinalReply ? displayedSummary : (live ? "正在生成回答…" : displayedSummary || "尚未形成最终回答。"))
+    ? (hasFinalReply ? displayedSummary : (displayedSummary || (live ? "正在生成回答…" : "尚未形成最终回答。")))
     : displayedSummary;
   const messageClassName = [
     "conversation-message",
@@ -170,8 +128,6 @@ function ConversationTurn({
           </div>
           <small>{formatTimestamp(turn.updatedAt)}</small>
         </div>
-
-        {turn.processItems.length ? <ProcessLayer items={turn.processItems} /> : null}
 
         {messageText ? <p className={messageClassName}>{messageText}</p> : null}
 

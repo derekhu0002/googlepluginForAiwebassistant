@@ -53,20 +53,20 @@ describe("reasoning timeline view-model", () => {
 
   it("maps reasoning events into conversation-first assistant turns", () => {
     const turns = buildConversationTurns([
-      createEvent(1, { type: "thinking", message: "读取页面上下文" }),
+      createEvent(1, { type: "thinking", message: "我先核对页面上下文，再判断哪些字段会影响结论。" }),
       createEvent(2, { type: "tool_call", message: "调用工具检查历史" }),
       createEvent(3, { type: "result", message: "总结结论" })
     ]);
 
-    expect(turns).toHaveLength(1);
+    expect(turns).toHaveLength(2);
     expect(turns[0]?.kind).toBe("assistant");
-    expect(turns[0]?.primaryType).toBe("result");
-    expect(turns[0]?.summary).toContain("总结结论");
-    expect(turns[0]?.processItems).toHaveLength(2);
-    expect(turns[0]?.processSummary).toContain("读取页面上下文");
+    expect(turns[0]?.primaryType).toBe("thinking");
+    expect(turns[0]?.summary).toContain("我先核对页面上下文");
+    expect(turns[1]?.primaryType).toBe("result");
+    expect(turns[1]?.summary).toContain("总结结论");
   });
 
-  it("keeps process steps after a final result so the full conversation can be rendered", () => {
+  it("hides orchestration-style process entries while keeping the final result visible", () => {
     const turns = buildConversationTurns([
       createEvent(1, { type: "thinking", message: "读取页面上下文" }),
       createEvent(2, { type: "tool_call", message: "查询历史 SR" }),
@@ -75,12 +75,25 @@ describe("reasoning timeline view-model", () => {
 
     expect(turns).toHaveLength(1);
     expect(turns[0]?.summary).toBe("完整回答正文");
-    expect(turns[0]?.processItems.map((item) => item.entries[0]?.message)).toEqual(["读取页面上下文", "查询历史 SR"]);
+    expect(turns[0]?.primaryType).toBe("result");
+  });
+
+  it("keeps user-meaningful thinking while filtering session and step noise", () => {
+    const turns = buildConversationTurns([
+      createEvent(1, { type: "thinking", message: "已创建 opencode session，准备提交 prompt..." }),
+      createEvent(2, { type: "thinking", message: "opencode session 状态更新：busy" }),
+      createEvent(3, { type: "thinking", message: "我先比较历史记录与当前上下文，再给出建议。" }),
+      createEvent(4, { type: "result", message: "最终建议" })
+    ]);
+
+    expect(turns).toHaveLength(2);
+    expect(turns[0]?.summary).toBe("我先比较历史记录与当前上下文，再给出建议。");
+    expect(turns[1]?.summary).toBe("最终建议");
   });
 
   it("breaks conversation turns when a question arrives", () => {
     const turns = buildConversationTurns([
-      createEvent(1, { type: "thinking", message: "准备提问" }),
+      createEvent(1, { type: "thinking", message: "我需要先确认你的偏好，再继续分析。" }),
       createEvent(2, {
         type: "question",
         message: "请选择下一步",
@@ -92,7 +105,7 @@ describe("reasoning timeline view-model", () => {
           allowFreeText: true
         }
       }),
-      createEvent(3, { type: "thinking", message: "继续处理" })
+      createEvent(3, { type: "thinking", message: "我会根据你的选择继续处理。" })
     ]);
 
     expect(turns).toHaveLength(3);

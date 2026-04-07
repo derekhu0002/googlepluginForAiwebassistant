@@ -480,7 +480,7 @@ describe("side panel host permission request flow", () => {
     await flushAllTimers();
 
     expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).toContain("Called event 1");
+    expect(container.textContent).not.toContain("event 1");
 
     mockRunHistoryState.history = [{
       ...createCurrentRun(),
@@ -494,11 +494,11 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).toContain("Called event 1");
+    expect(container.textContent).not.toContain("event 1");
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
-  it("renders the final assistant answer together with concise process steps", async () => {
+  it("renders the final assistant answer while hiding orchestration process logs", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -531,8 +531,8 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("You");
     expect(container.textContent).toContain("Assistant");
     expect(container.textContent).toContain("最终结论");
-    expect(container.textContent).toContain("Called 读取页面上下文");
-    expect(container.textContent).toContain("Called 查询历史 SR");
+    expect(container.textContent).not.toContain("读取页面上下文");
+    expect(container.textContent).not.toContain("查询历史 SR");
     expect(container.textContent).not.toContain("查看过程");
   });
 
@@ -609,7 +609,7 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
-  it("shows concise process copy while keeping tool-call payloads hidden", async () => {
+  it("shows generic streaming copy while keeping tool-call payloads hidden", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -628,13 +628,13 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).toContain("Called 正在整理上下文并准备分析");
+    expect(container.textContent).not.toContain("正在整理上下文并准备分析");
     expect(container.textContent).not.toContain("prepare_context");
     expect(container.textContent).not.toContain("secret");
     expect(container.querySelector("pre")).toBeNull();
   });
 
-  it("shows process steps inline while streaming", async () => {
+  it("shows user-meaningful thinking inline while streaming", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
     });
@@ -652,18 +652,19 @@ describe("side panel host permission request flow", () => {
 
     const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
     const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void> };
-    const thinkingEvent = createRunEvent(1, { type: "thinking", message: "逐步展示文本" });
+    const thinkingEvent = createRunEvent(1, { type: "thinking", message: "我先整理页面关键信息，再给出最终建议。" });
 
     await act(async () => {
       await handlers.onEvent?.(thinkingEvent);
     });
     await flushUi();
+    await flushAllTimers();
 
-    expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).toContain("Called 逐步展示文本");
+    expect(container.textContent).not.toContain("Called");
+    expect(container.textContent).toContain("我先整理页面关键信息，再给出最终建议。");
   });
 
-  it("shows aggregated thinking events as concise called steps", async () => {
+  it("hides aggregated orchestration thinking events", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -680,12 +681,12 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).toContain("Called 读取页面上下文");
-    expect(container.textContent).toContain("Called 整理可用字段");
+    expect(container.textContent).not.toContain("读取页面上下文");
+    expect(container.textContent).not.toContain("整理可用字段");
     expect(container.textContent).not.toContain("查看过程");
   });
 
-  it("shows final answer and concise process steps in history detail", async () => {
+  it("shows final answer in history detail without orchestration steps", async () => {
     mockRunHistoryState.selectedHistoryDetail = {
       run: {
         ...createCurrentRun(),
@@ -712,9 +713,39 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("历史结果");
     expect(container.textContent).toContain("You");
-    expect(container.textContent).toContain("Called 历史思考 1");
-    expect(container.textContent).toContain("Called 历史思考 2");
+    expect(container.textContent).not.toContain("历史思考 1");
+    expect(container.textContent).not.toContain("历史思考 2");
     expect(container.textContent).not.toContain("查看过程");
+  });
+
+  it("shows history detail meaningful thinking but hides session noise", async () => {
+    mockRunHistoryState.selectedHistoryDetail = {
+      run: {
+        ...createCurrentRun(),
+        status: "done",
+        finalOutput: "历史结论",
+        updatedAt: "2026-04-02T00:00:04.000Z"
+      },
+      events: [
+        createRunEvent(1, { type: "thinking", message: "已连接主分析代理..." }),
+        createRunEvent(2, { type: "thinking", message: "我先对比历史差异，再汇总结论。" }),
+        createRunEvent(3, { type: "result", message: "历史结论" })
+      ],
+      answers: []
+    };
+
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("我先对比历史差异，再汇总结论。");
+    expect(container.textContent).toContain("历史结论");
+    expect(container.textContent).not.toContain("已连接主分析代理");
   });
 
   it("shows the final answer after question events complete", async () => {
@@ -824,7 +855,7 @@ describe("side panel host permission request flow", () => {
     expect(container.querySelector(".question-card")).toBeNull();
   });
 
-  it("renders generic streaming copy and concise tool steps without raw details", async () => {
+  it("renders generic streaming copy without raw tool details", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -844,7 +875,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).toContain("Called 正在检索相关信息");
+    expect(container.textContent).not.toContain("正在检索相关信息");
     expect(container.textContent).not.toContain("token=123");
     expect(container.textContent).not.toContain("grep");
   });
