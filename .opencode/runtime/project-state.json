@@ -1,46 +1,43 @@
 {
   "version": 2,
-  "activeGoal": "适配测试环境变更：OPENCODE 后台服务已迁移到 Docker 容器，当前代理运行在 WSL 中，应通过 http://localhost:8123 访问 OPENCODE SERVER；更新相关代码或配置以匹配该连接方式。",
+  "activeGoal": "修复采集后无反馈问题：当前点击采集时 OPENCODE 服务收到请求并创建了 session，但 /session/{id}/prompt_async 返回 UnknownError，导致前端看起来像未创建 SESSION 且没有反馈内容；",
   "designSummary": "",
   "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-072",
-      "title": "适配测试环境变更：OPENCODE 后台服务已迁移到 Docker 容器，当前代理运行在 WSL 中，应通过 http://localhost:8123 访问 OPENCODE SERVER；更新相关代码或配置以匹配该连接方式。",
-      "status": "done",
+      "id": "TASK-073",
+      "title": "修复采集后无反馈问题：当前点击采集时 OPENCODE 服务收到请求并创建了 session，但 /session/{id}/prompt_async 返回 UnknownError，导致前端看起来像未创建 SESSION 且没有反馈内容；",
+      "status": "in_progress",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
-      "summary": "Completed fast-track WSL-to-Docker OPENCODE endpoint adaptation. Updated Python adapter default OPENCODE base URL, probe script fallback, environment examples, and docs to http://localhost:8123 while preserving OPENCODE_BASE_URL overrides. Added regression assertions for the new default and verified related python_adapter tests passed.",
-      "details": "Completed fast-track WSL-to-Docker OPENCODE endpoint adaptation. Updated Python adapter default OPENCODE base URL, probe script fallback, environment examples, and docs to http://localhost:8123 while preserving OPENCODE_BASE_URL overrides. Added regression assertions for the new default and verified related python_adapter tests passed.",
-      "createdAt": "2026-04-07T14:55:56.561Z",
-      "updatedAt": "2026-04-07T15:04:21.325Z",
-      "commitId": "750372b736aa83295bad4c637b9d5637de0bff48"
+      "summary": "Fast-track implementation started for localized prompt_async adapter contract fix and related error handling/tests.",
+      "details": "Fast-track implementation started for localized prompt_async adapter contract fix and related error handling/tests.",
+      "createdAt": "2026-04-07T15:28:38.371Z",
+      "updatedAt": "2026-04-07T15:32:02.226Z"
     }
   ],
   "issues": [],
   "validations": {
     "qa": {
-      "status": "passed",
-      "summary": "QA passed for fast-track TASK-072 on commit 750372b736aa83295bad4c637b9d5637de0bff48. Verified commit files align with WSL-to-Docker localhost:8123 adaptation scope: docs, .env example, adapter config default, probe fallback, and regression tests. Re-ran targeted pytest suite for config/app/adapter plus lightweight probe-script tests; all passed (20 tests total). Noted current working tree is dirty in unrelated files outside python_adapter/docs scope, but HEAD matches reviewed commit and no reviewed-scope files differ from the commit. Architecture traceability remains unmapped for TASK-072 and should be improved later, but this does not block this fast-track validation.",
-      "details": "QA passed for fast-track TASK-072 on commit 750372b736aa83295bad4c637b9d5637de0bff48. Verified commit files align with WSL-to-Docker localhost:8123 adaptation scope: docs, .env example, adapter config default, probe fallback, and regression tests. Re-ran targeted pytest suite for config/app/adapter plus lightweight probe-script tests; all passed (20 tests total). Noted current working tree is dirty in unrelated files outside python_adapter/docs scope, but HEAD matches reviewed commit and no reviewed-scope files differ from the commit. Architecture traceability remains unmapped for TASK-072 and should be improved later, but this does not block this fast-track validation.",
-      "commitId": "750372b736aa83295bad4c637b9d5637de0bff48",
-      "updatedAt": "2026-04-07T15:07:57.718Z"
+      "status": "not_run",
+      "summary": "QA not run for the current goal.",
+      "updatedAt": "2026-04-07T15:28:38.371Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-07T14:55:56.561Z"
+      "updatedAt": "2026-04-07T15:28:38.371Z"
     }
   },
   "release": {
     "status": "not_started",
     "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-07T14:55:56.561Z"
+    "updatedAt": "2026-04-07T15:28:38.371Z"
   },
   "counters": {
-    "task": 72,
+    "task": 73,
     "issue": 7
   },
-  "updatedAt": "2026-04-07T15:07:57.719Z"
+  "updatedAt": "2026-04-07T15:32:02.229Z"
 }
