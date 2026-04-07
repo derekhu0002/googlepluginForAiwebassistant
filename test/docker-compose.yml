@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  opencode:
+    image: ghcr.io/anomalyco/opencode
+    ports:
+      - "8123:4096"
+    entrypoint: ["/usr/local/bin/opencode"]
+    command: ["web", "--port", "4096", "--hostname", "0.0.0.0"]
+    stdin_open: true
+    tty: true
