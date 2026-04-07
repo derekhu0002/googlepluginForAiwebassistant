@@ -311,6 +311,8 @@ describe("side panel host permission request flow", () => {
 
     expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "START_RUN", payload: { prompt: initialAssistantState.runPrompt } });
     expect(mockCreateRunEventStream).toHaveBeenCalledWith("run-1", expect.objectContaining({ onEvent: expect.any(Function), onError: expect.any(Function) }));
+    expect(container.textContent).toContain("You");
+    expect(container.textContent).toContain(initialAssistantState.runPrompt);
   });
 
   it("shows reconnecting status without surfacing a terminal error and returns to streaming after reopen", async () => {
@@ -495,6 +497,53 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
+  it("renders conversation-first assistant turn with collapsible process details", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          updatedAt: "2026-04-02T00:00:03.000Z",
+          finalOutput: "最终结论"
+        },
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        runEvents: [
+          createRunEvent(1, { type: "thinking", message: "读取页面上下文" }),
+          createRunEvent(2, { type: "tool_call", message: "查询历史 SR" }),
+          createRunEvent(3, { type: "result", message: "最终结论" })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("对话");
+    expect(container.textContent).toContain("You");
+    expect(container.textContent).toContain("Assistant");
+    expect(container.textContent).toContain("最终结论");
+    expect(container.textContent).toContain("过程摘要");
+
+    const processButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("查看过程（2 条）"));
+    expect(processButton).toBeTruthy();
+
+    await act(async () => {
+      processButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("读取页面上下文");
+    expect(container.textContent).toContain("查询历史 SR");
+  });
+
   it("does not regress done UI state after result when later history rerenders occur", async () => {
     const { runtimeSendMessage, emitRuntimeMessage } = setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
@@ -617,7 +666,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).not.toContain("逐步展示文本");
+    expect(container.textContent).not.toContain("助手逐步展示文本");
     await flushTimers();
     expect(container.textContent).toContain("逐");
     await flushAllTimers();
@@ -640,8 +689,8 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("已合并 2 条连续事件");
-    const detailsButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("查看细节（2 条）"));
+    expect(container.textContent).toContain("正在处理中，过程可展开查看");
+    const detailsButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("查看过程"));
     expect(detailsButton).toBeTruthy();
 
     await act(async () => {
@@ -651,6 +700,7 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("读取页面上下文");
     expect(container.textContent).toContain("整理可用字段");
+    expect(container.textContent).toContain("已合并 2 条连续事件");
   });
 
   it("reuses the same reasoning timeline in history detail", async () => {
@@ -679,7 +729,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("历史结果");
-    expect(container.textContent).toContain("已合并 2 条连续事件");
+    expect(container.textContent).toContain("You");
   });
 
   it("shows answered question cards as completed once later events arrive", async () => {

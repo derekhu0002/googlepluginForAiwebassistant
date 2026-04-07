@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "ELM-003 最小可实施架构：在不重构 extension → python adapter → real opencode serve 主链路前提下，新增三层职责分离。前端显示层负责用户态事件卡片与 thinking/result 打字机渲染，生产态默认隐藏原始 JSON；adapter 事件映射层负责将底层事件规范化为 user_message/debug_payload 双轨结构并对 tool_call 输出简化阶段提示，同时完整保留原始事件到日志；opencode 入口约束层负责以 .opencode/agents/TARA_analyst.md 为唯一 primary agent 入口，启动前校验 opencode.json default_agent、agent 文件存在与可解析性，失败即返回显式配置错误，禁止静默降级。软件单元包括：SU-EXT-SIDEPANEL、SU-ADAPTER-EVENT-MAPPER、SU-OPENCODE-ENTRY-GUARD。"
+      "value": "ELM-005 follows a brownfield-first refinement of ELM-004. Extend the existing Chrome extension sidepanel implementation instead of creating a new chat stack or changing backend protocols. The implementation boundary remains extension/src/sidepanel/App.tsx, reasoningTimeline.ts, reasoningTimelineView.tsx, styles.css, and useRunHistory.ts. Introduce a Conversation Shell responsibility at the App.tsx layer so the UI is reorganized around a conversation-first flow: user message, assistant processing state, progressively forming assistant reply, summarized/collapsible process layer, and clear completion state. Reuse the existing reasoning timeline, event presentation, stream UX, and history reuse seams to map raw NormalizedRunEvent data into stable user-facing stage summaries with low noise and low jitter."
     }
   ],
   "metadata": {
@@ -19,41 +19,36 @@
     "ai4pb": {
       "managedBy": "opencode",
       "counters": {
-        "ELM": 3
+        "ELM": 5
       },
-      "designSummary": "ELM-003 最小可实施架构：在不重构 extension → python adapter → real opencode serve 主链路前提下，新增三层职责分离。前端显示层负责用户态事件卡片与 thinking/result 打字机渲染，生产态默认隐藏原始 JSON；adapter 事件映射层负责将底层事件规范化为 user_message/debug_payload 双轨结构并对 tool_call 输出简化阶段提示，同时完整保留原始事件到日志；opencode 入口约束层负责以 .opencode/agents/TARA_analyst.md 为唯一 primary agent 入口，启动前校验 opencode.json default_agent、agent 文件存在与可解析性，失败即返回显式配置错误，禁止静默降级。软件单元包括：SU-EXT-SIDEPANEL、SU-ADAPTER-EVENT-MAPPER、SU-OPENCODE-ENTRY-GUARD。",
+      "designSummary": "ELM-005 follows a brownfield-first refinement of ELM-004. Extend the existing Chrome extension sidepanel implementation instead of creating a new chat stack or changing backend protocols. The implementation boundary remains extension/src/sidepanel/App.tsx, reasoningTimeline.ts, reasoningTimelineView.tsx, styles.css, and useRunHistory.ts. Introduce a Conversation Shell responsibility at the App.tsx layer so the UI is reorganized around a conversation-first flow: user message, assistant processing state, progressively forming assistant reply, summarized/collapsible process layer, and clear completion state. Reuse the existing reasoning timeline, event presentation, stream UX, and history reuse seams to map raw NormalizedRunEvent data into stable user-facing stage summaries with low noise and low jitter.",
       "designDecisions": [
-        "ELM-003 Decision 1: 采用‘展示视图与原始调试信息分层’而非修改底层事件协议语义。生产 UI 仅消费用户态 message/title/phase_hint；原始 data/raw payload 保留在 adapter 日志与开发模式能力中。",
-        "ELM-003 Decision 2: thinking/result 的打字机效果落在 extension sidepanel 渲染层实现，不要求 adapter 做文本重写；adapter 仅提供稳定的可读文本字段。",
-        "ELM-003 Decision 3: tool_call 采用 adapter 固定词典映射生成简化阶段提示，未知工具回退到通用阶段文案，但仍记录完整原始事件到 debug/log。",
-        "ELM-003 Decision 4: TARA_analyst 主入口约束同时落在配置校验与请求分发前校验。必须校验 .opencode/opencode.json default_agent=TARA_analyst、.opencode/agents/TARA_analyst.md 存在且可读取；任一失败均返回显式错误并终止真实链路，不允许 fallback 到其他 agent。",
-        "ELM-003 Task Mapping: TASK-042 -> SU-EXT-SIDEPANEL/ELM-APP-003A；TASK-043 -> SU-OPENCODE-ENTRY-GUARD/ELM-APP-003C；TASK-044 -> SU-ADAPTER-EVENT-MAPPER + SU-OPENCODE-ENTRY-GUARD/ELM-APP-003B,ELM-APP-003C。",
-        "ELM-003 Review Result: human-reviewed and approved. Approved minimal architecture baseline covers strategy/business/application/technology layers and preserves existing extension → python adapter → real opencode serve main flow while adding sidepanel presentation, adapter event mapping, and primary agent guard responsibilities."
+        "Decision: Select extension/src/sidepanel/App.tsx as the primary ownership seam for ELM-005 because the requirement expands from ELM-004's reasoning timeline refinement into whole-sidepanel conversation orchestration. The top-level sidepanel shell already owns prompt submission, live run state, question handling, and completion banners, so the Copilot-like conversation flow must be composed there rather than introduced as a parallel UI path.",
+        "Decision: Reuse extension/src/sidepanel/reasoningTimeline.ts as the event-to-conversation mapping seam for ELM-005. It already converts NormalizedRunEvent items into aggregated readable units, so it is the correct brownfield boundary for evolving raw event aggregation into stable stage summaries and assistant-turn conversation models.",
+        "Decision: Reuse extension/src/sidepanel/reasoningTimelineView.tsx and extension/src/sidepanel/styles.css as the rendering seam for ELM-005 because they already own buffered typewriter behavior, details-on-demand, auto-follow, unread indicators, and history rendering reuse. ELM-005 should evolve these modules from event-card presentation into conversation-style message rendering instead of introducing a separate renderer stack.",
+        "Decision: Reuse extension/src/sidepanel/useRunHistory.ts for history compatibility. ELM-005 does not change history management scope, but the approved design requires live and history views to reuse the same conversation-style presentation so that the interaction model stays consistent across active and past runs.",
+        "Decision: Reject extension/src/shared/protocol.ts, extension/src/shared/api.ts, extension/src/background/index.ts, backend/src/**, and python_adapter/** as primary ownership modules for ELM-005. Existing NormalizedRunEvent and SSE contracts already provide enough information for front-end mapping, and the formal requirement explicitly excludes backend capability or protocol redesign. Therefore the change remains an extension-side presentation and orchestration refinement."
       ],
       "runtime": {
-        "activeGoal": "基于 ELM-003，为当前 Chrome extension + Python adapter + real opencode serve 链路实现：1) 右侧推理事件流面向用户可读化展示，默认隐藏原始 JSON；2) thinking/",
+        "activeGoal": "ELM-005: 将当前插件界面的“对话过程展示”升级为类似 VS Code Copilot 的会话式过程体验，以更接近对话消息流的方式呈现用户输入、系统响应、生成中状态与过程推进，让用户能够直观理解正在处理什么、处理到了哪里、最终产出了什",
         "validations": {
           "qa": {
-            "status": "passed",
-            "summary": "QA passed for ELM-003 on commit 97d2981197f86393e6695ae2addf89ecf35aae1a. Verified production UI hides raw JSON by default, thinking/result use progressive typewriter rendering, tool_call display is simplified for users, raw event/logData is preserved in adapter and SSE/logging paths, TARA primary-agent guard is enforced via .opencode/opencode.json and .opencode/agents/TARA_analyst.md, and extension plus python adapter test suites passed (extension: 52 tests; python adapter: 15 tests).",
-            "details": "QA passed for ELM-003 on commit 97d2981197f86393e6695ae2addf89ecf35aae1a. Verified production UI hides raw JSON by default, thinking/result use progressive typewriter rendering, tool_call display is simplified for users, raw event/logData is preserved in adapter and SSE/logging paths, TARA primary-agent guard is enforced via .opencode/opencode.json and .opencode/agents/TARA_analyst.md, and extension plus python adapter test suites passed (extension: 52 tests; python adapter: 15 tests).",
-            "commitId": "97d2981197f86393e6695ae2addf89ecf35aae1a",
-            "updatedAt": "2026-04-02T11:28:44.446Z"
+            "status": "not_run",
+            "summary": "QA not run for the current goal.",
+            "updatedAt": "2026-04-07T06:32:25.088Z"
           },
           "audit": {
-            "status": "passed",
-            "summary": "Audit passed for ELM-003 implementation commit 97d2981197f86393e6695ae2addf89ecf35aae1a. Verified user-facing event stream hides raw JSON by default and presents readable text, tool_call events no longer expose raw payload in the main UI, TARA_analyst is enforced as the primary agent with explicit startup errors on misconfiguration, raw events are still preserved in logData/invocation logging and development-mode debug UI, and the extension -> python adapter -> real opencode serve main flow remains covered by passing targeted tests.",
-            "details": "Audit passed for ELM-003 implementation commit 97d2981197f86393e6695ae2addf89ecf35aae1a. Verified user-facing event stream hides raw JSON by default and presents readable text, tool_call events no longer expose raw payload in the main UI, TARA_analyst is enforced as the primary agent with explicit startup errors on misconfiguration, raw events are still preserved in logData/invocation logging and development-mode debug UI, and the extension -> python adapter -> real opencode serve main flow remains covered by passing targeted tests.",
-            "commitId": "97d2981197f86393e6695ae2addf89ecf35aae1a",
-            "updatedAt": "2026-04-02T11:29:20.996Z"
+            "status": "not_run",
+            "summary": "Audit not run for the current goal.",
+            "updatedAt": "2026-04-07T06:32:25.088Z"
           }
         },
         "release": {
           "status": "not_started",
           "summary": "Release not prepared for the current goal.",
-          "updatedAt": "2026-04-02T10:43:14.207Z"
+          "updatedAt": "2026-04-07T06:32:25.088Z"
         },
-        "updatedAt": "2026-04-02T11:28:44.446Z"
+        "updatedAt": "2026-04-07T07:00:44.612Z"
       }
     }
   },
@@ -345,7 +340,7 @@
         ],
         "documentation": [
           {
-            "value": "通过最小改造提升最终用户对推理过程的可读性，同时保留调试链路。"
+            "value": "Describe the element as a course of action: an approach, directive, or plan for configuring capabilities and resources. In this architecture, Readable Inference Stream Strategy defines, constrains, or supports traceable solution intent within the managed model. 通过最小改造提升最终用户对推理过程的可读性，同时保留调试链路。."
           }
         ],
         "extensions": {
@@ -387,7 +382,7 @@
         ],
         "documentation": [
           {
-            "value": "向最终用户提供可理解的分析过程展示与结果呈现。"
+            "value": "Describe the element as a business service: externally visible business behavior delivered to customers or other business roles. In this architecture, User-readable Analysis Experience defines, constrains, or supports traceable solution intent within the managed model. 向最终用户提供可理解的分析过程展示与结果呈现。."
           }
         ],
         "extensions": {
@@ -408,7 +403,7 @@
         ],
         "documentation": [
           {
-            "value": "以受控 primary agent 启动并执行分析请求，异常时显式反馈。"
+            "value": "Describe the element as a business process: a sequence of business behavior that produces a defined set of business outcomes. In this architecture, Primary Agent Governed Analysis Run defines, constrains, or supports traceable solution intent within the managed model. 以受控 primary agent 启动并执行分析请求，异常时显式反馈。."
           }
         ],
         "extensions": {
@@ -495,7 +490,7 @@
         ],
         "documentation": [
           {
-            "value": "Sidepanel 运行时承载用户态事件流展示。"
+            "value": "Describe the element as a node: a computational or physical resource that hosts, executes, or supports technology and application behavior. In this architecture, Chrome Extension Runtime defines, constrains, or supports traceable solution intent within the managed model. Sidepanel 运行时承载用户态事件流展示。."
           }
         ],
         "extensions": {
@@ -516,7 +511,7 @@
         ],
         "documentation": [
           {
-            "value": "事件流代理、日志落盘与入口校验逻辑的技术承载。"
+            "value": "Describe the element as system software: a software environment that provides platform or hosting services for applications or technology processes. In this architecture, Python Adapter FastAPI Runtime defines, constrains, or supports traceable solution intent within the managed model. 事件流代理、日志落盘与入口校验逻辑的技术承载。."
           }
         ],
         "extensions": {
@@ -537,7 +532,7 @@
         ],
         "documentation": [
           {
-            "value": "真实 opencode serve 会话与事件来源。"
+            "value": "Describe the element as a technology service: externally visible technology behavior provided by nodes, devices, or system software to support higher layers. In this architecture, Real Opencode Serve defines, constrains, or supports traceable solution intent within the managed model. 真实 opencode serve 会话与事件来源。."
           }
         ],
         "extensions": {
@@ -549,38 +544,150 @@
         }
       },
       {
-        "identifier": "PROJECT-CURRENT",
-        "type": "WorkPackage",
+        "identifier": "ELM-004",
+        "type": "Requirement",
         "name": [
           {
-            "value": "基于 ELM-003，为当前 Chrome extension + Python adapter + real opencode serve 链路实现：1) 右侧推理事件流面向用户可读化展示，默认隐藏原始 JSON；2) thinking/"
+            "value": "推理过程界面体验优化"
           }
         ],
         "documentation": [
           {
-            "value": "ELM-003 最小可实施架构：在不重构 extension → python adapter → real opencode serve 主链路前提下，新增三层职责分离。前端显示层负责用户态事件卡片与 thinking/result 打字机渲染，生产态默认隐藏原始 JSON；adapter 事件映射层负责将底层事件规范化为 user_message/debug_payload 双轨结构并对 tool_call 输出简化阶段提示，同时完整保留原始事件到日志；opencode 入口约束层负责以 .opencode/agents/TARA_analyst.md 为唯一 primary agent 入口，启动前校验 opencode.json default_agent、agent 文件存在与可解析性，失败即返回显式配置错误，禁止静默降级。软件单元包括：SU-EXT-SIDEPANEL、SU-ADAPTER-EVENT-MAPPER、SU-OPENCODE-ENTRY-GUARD。"
+            "value": "# Formal Requirement Draft\n\n## Goal\n优化 Chrome Extension 中“推理过程”界面的整体交互体验，在保留已有打字机效果与事件流能力的前提下，降低阅读负担、减少界面抖动与噪音信息、提升用户对推理进度与当前状态的可理解性。\n\n## Scope\n1. 面向 Chrome Extension 右侧“推理过程”事件流区域的 UI/交互优化。\n2. 优化 thinking / result / tool_call / status 等事件在视觉层级、排版、滚动、展开收起、加载反馈中的表现。\n3. 在 production 默认隐藏 raw JSON 的既有策略基础上，进一步优化“默认可读、按需查看细节”的信息呈现方式。\n4. 优化打字机效果的触发条件、节奏、缓冲与结束态，减少因逐字输出导致的跳动、打断和阅读疲劳。\n5. 优化长推理过程下的连续阅读体验，包括自动滚动策略、历史内容稳定性、当前活跃步骤高亮、完成态收束。\n\n## User Stories / Usage Scenarios\n1. 作为查看推理过程的用户，我希望界面默认展示清晰、稳定、可读的过程摘要，而不是不断抖动的碎片化文本，以便快速理解系统正在做什么。\n2. 作为等待模型响应的用户，我希望能明确知道当前是在思考、调用工具、等待结果还是已完成，以便降低不确定感。\n3. 作为高级用户，我希望在需要时可以展开查看更多技术细节，而不是默认被 raw JSON 或过多底层事件干扰。\n4. 作为长链路任务用户，我希望新内容出现时不会频繁打断我阅读前文，并且界面能在“自动跟随最新内容”和“我手动查看历史”之间合理切换。\n\n## Acceptance Criteria\n1. “推理过程”界面必须将事件按用户可理解的层级展示，默认优先展示自然语言可读内容；原始技术细节不得作为主视图默认噪音信息出现。\n2. thinking 类内容的打字机效果必须从“逐 token 持续抖动”优化为“可读性优先”的渐进展示：\n   - 内容更新不得引起明显整屏跳动或频繁重排；\n   - 已渲染的历史文本应保持稳定，不得反复回流；\n   - 当内容更新频率过高时，前端应进行节流、分段刷新或缓冲合并，以保证阅读连续性。\n3. tool_call 事件必须以用户可理解的文案展示当前动作、目标或结果摘要；若存在技术参数或原始载荷，必须折叠在次级视图中按需查看。\n4. result/完成态必须具备明确的收束表现，包括停止打字机动画、稳定显示最终内容，并使用户一眼可区分“推理进行中”与“推理已完成”。\n5. 界面必须提供清晰的状态反馈，至少覆盖：思考中、调用工具中、等待结果中、已完成、失败/异常（若链路返回异常事件）。\n6. 自动滚动行为必须可控：\n   - 当用户停留在底部附近时，新事件到来应自动跟随；\n   - 当用户主动向上滚动查看历史时，界面不得强制抢回到底部；\n   - 存在未读的新进展时，应提供明确但不过度打扰的提示。\n7. 长内容场景下，界面必须避免因逐字渲染导致性能明显下降；在常见推理流长度下，交互应保持流畅，无明显卡顿或输入阻塞。\n8. 生产默认视图中，不得直接暴露 raw JSON；如保留调试入口，必须以折叠/展开方式进入，且不影响主流程阅读。\n9. 本次优化不得破坏现有 chrome extension → python adapter → real opencode serve 链路的数据消费与事件兼容性；若后端事件结构不变，前端应可独立完成该优化。\n10. 若同一轮推理包含多个连续小事件，界面应尽量合并为更稳定的阅读单元或步骤块，而不是机械逐条堆叠造成信息噪音。\n\n## Constraints\n1. 优化重点在 Chrome Extension 前端推理过程界面，不要求重构 Python adapter 或 opencode serve 协议。\n2. 需兼容现有事件类型与当前已上线策略：production 默认隐藏 raw JSON、thinking/result 使用 typewriter progression、tool_call 使用更可读文案。\n3. 默认体验面向普通用户，技术细节仅作为次级可选信息呈现。\n4. 应以最小必要改动优先，避免为视觉优化引入大规模协议修改。\n\n## Open Questions / Assumptions\n1. 假设当前主要问题集中在前端呈现层，而非后端事件缺失；因此本需求优先按前端交互优化进行设计。\n2. 假设“体验不好”的核心表现包括：阅读跳动、状态不清、事件过碎、滚动打断、完成态不明确。\n3. 若设计阶段发现现有事件字段不足以支持“状态摘要/步骤合并”，允许提出小幅度协议补充，但不作为本需求默认前置条件。\n\n## Non-Goals\n1. 不重新定义底层推理算法、模型行为或 opencode serve 的核心推理逻辑。\n2. 不以本需求为范围重做整个 Chrome Extension UI，仅限“推理过程”相关区域。\n3. 不要求在本次需求中开放完整调试控制台或复杂 observability 平台能力。\n4. 不承诺通过本次优化改变最终答案质量，仅优化过程可视化体验。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-005",
+        "type": "Requirement",
+        "name": [
+          {
+            "value": "ELM-004-R1 插件界面会话过程体验 Copilot 化展示优化"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "# Formal Requirement Draft\n\n## Goal\n将当前插件界面的“对话过程展示”升级为**类似 VS Code Copilot 的会话式过程体验**：以更接近对话消息流的方式，呈现用户输入、系统响应、生成中状态与过程推进，让用户在插件界面中直观感知“正在处理什么、处理到了哪里、最终产出了什么”。\n\n本需求**不替代**现有 ELM-004，而是将其进一步细化为一个更具体、可设计、可验收的交互目标：把“推理过程可理解性优化”落到“类似 VS Code Copilot 的对话过程效果”这一明确体验方向上。\n\n---\n\n## Scope\n### In Scope\n1. **插件整体对话界面**中的会话过程展示方式优化，而不仅限于右侧推理事件流区域。\n2. 将系统输出组织为更接近 Copilot 的**消息流 / 会话流**表现：\n   - 用户消息\n   - 助手回复\n   - 处理中/生成中状态\n   - 中间过程的渐进式展开\n3. 优化“过程展示”与“最终答案展示”的关系，避免用户只看到零散事件而难以理解主线。\n4. 保留当前项目中已具备且 ELM-004 明确保留的能力：\n   - 打字机/流式输出能力\n   - 事件流基础能力\n5. 对视觉与交互进行约束，使其更贴近“Copilot 风格的过程感”，但不要求像素级复刻 VS Code Copilot。\n\n### Out of Scope\n1. 不要求复制 VS Code Copilot 的全部功能、布局或品牌视觉。\n2. 不新增模型能力、推理能力或后端协议能力。\n3. 不要求重做插件信息架构、账号体系、权限流程或设置页。\n4. 不以“显示完整内部 chain-of-thought 原文”为目标；过程展示应是**面向用户理解的产品化表达**。\n5. 不要求本轮定义多轮会话记忆、历史会话管理、会话搜索等独立功能。\n\n---\n\n## User Stories / Usage Scenarios\n### 用户故事 1：发起请求后感知系统已接收并开始处理\n作为插件用户，  \n当我发送一个请求后，  \n我希望界面立刻以对话流中的“助手处理中”状态反馈我，  \n从而确认系统已开始工作，而不是停留在静止或噪音式事件刷屏状态。\n\n### 用户故事 2：在生成过程中能跟上过程主线\n作为插件用户，  \n当系统正在生成内容时，  \n我希望看到类似 Copilot 的渐进式输出体验：内容按消息流逐步展开，并伴随简洁状态提示，  \n从而理解当前处于“思考/生成/整理/完成”等哪一阶段。\n\n### 用户故事 3：区分“过程信息”和“最终可消费结果”\n作为插件用户，  \n我希望过程信息是辅助理解的，不会淹没最终回答，  \n从而我既能感知生成过程，又能快速定位最终结果。\n\n### 用户故事 4：减少阅读负担与界面抖动\n作为插件用户，  \n当系统持续输出时，  \n我希望界面更新稳定、层次清晰、噪音少，  \n从而不会因频繁跳动、事件碎片化或信息堆叠而影响阅读。\n\n---\n\n## Proposed Classification\n- **status**: draft\n- **classification**: `refinement`\n- **relation_to_existing_goal**:  \n  该诉求应视为 **ELM-004 的细化需求（refinement）**，而非替代需求。  \n  原因：\n  1. 核心目标一致：都在优化插件中的“推理/对话过程”可理解性与交互体验。\n  2. 新诉求提供了更明确的目标参照物：`类似 VS Code Copilot 的对话过程效果`，属于对体验形态的进一步指定。\n  3. 新诉求虽将关注点从“右侧推理事件流”扩展到“整个插件对话界面”，但本质上仍是对原目标的产品化落地，而不是推翻原目标。\n\n---\n\n## Formal Requirement\n### Requirement Title\n插件界面会话过程体验 Copilot 化展示优化\n\n### Requirement Statement\n系统应将插件界面的过程展示方式，从“偏事件流堆叠”优化为“偏会话流表达”，使用户在整个插件对话界面中获得类似 VS Code Copilot 的对话过程体验。该体验需体现以下原则：\n\n1. **会话主线清晰**  \n   用户输入、助手处理中、渐进式生成、最终答复之间应形成清晰的时间与语义顺序。\n\n2. **过程渐进可感知**  \n   当系统正在工作时，界面应持续提供“正在生成/正在处理”的动态反馈，并允许内容按流式方式逐步展开。\n\n3. **状态提示简洁明确**  \n   应通过有限且稳定的状态语义提示当前阶段，例如“处理中 / 正在生成 / 已完成”，避免大量碎片化技术事件直接暴露给用户。\n\n4. **最终结果优先可读**  \n   过程展示不应压过最终答复；用户应能在完成后快速识别并阅读最终输出。\n\n5. **整体体验低噪音、低抖动**  \n   在保持流式效果的同时，减少无意义刷新、频繁跳动、重复状态和视觉噪音。\n\n6. **兼容既有能力**  \n   必须保留当前已有的打字机效果与事件流能力，但应将其纳入更统一的对话式表达框架，而非以原始事件列表为主要体验形态。\n\n---\n\n## Key Interaction Requirements\n1. **发送后即时反馈**\n   - 用户提交消息后，界面在可感知时间内进入“助手处理中”状态。\n   - 不应出现长时间无反馈的空白等待。\n\n2. **消息流式展开**\n   - 助手回复在生成中可逐步呈现，形成连续阅读体验。\n   - 渐进式输出应优先表现为“一个正在形成的回复”，而不是大量独立碎片块无序新增。\n\n3. **阶段状态可识别**\n   - 生成过程中应存在统一的阶段状态提示。\n   - 状态数量应受控，避免技术细节级别的事件名直接成为主要界面语言。\n\n4. **过程信息分层显示**\n   - 需要展示的过程信息，应作为主回复的辅助层，而不是压倒主回复的主层。\n   - 若存在事件细节，应以可折叠、弱化或摘要化的方式呈现。\n\n5. **完成态明确**\n   - 当一次回复完成后，界面应明确从“生成中”切换为“完成”状态。\n   - 用户可清楚区分“尚在生成”与“已经结束”。\n\n6. **界面稳定性**\n   - 连续输出期间，滚动、布局跳动、区块频繁重排应被控制在不影响阅读的程度。\n   - 用户正在阅读上文时，不应被新的过程更新强制打断。\n\n---\n\n## Acceptance Criteria\n1. **会话流表达**\n   - GIVEN 用户在插件界面发送请求  \n     WHEN 系统开始处理  \n     THEN 界面应以会话式消息流展示该轮交互，而不是仅以原始事件列表作为主要承载方式。\n\n2. **即时处理中反馈**\n   - GIVEN 用户已发送消息  \n     WHEN 后端尚未产出完整结果  \n     THEN 界面应出现明确的处理中/生成中反馈，用户无需猜测系统是否已开始执行。\n\n3. **流式生成可感知**\n   - GIVEN 助手回复处于生成中  \n     WHEN 内容持续返回  \n     THEN 用户应看到同一轮回复逐步展开，而非被多条零散噪音事件打断主阅读路径。\n\n4. **状态提示简化**\n   - GIVEN 系统内部存在多类过程事件  \n     WHEN 这些事件需要对用户表达  \n     THEN 界面应将其映射为少量、稳定、可理解的阶段状态或摘要提示，而不是直接暴露大量底层事件名称。\n\n5. **最终结果优先**\n   - GIVEN 一轮回复已完成  \n     WHEN 用户查看该轮内容  \n     THEN 最终可消费答案应清晰可见，过程信息不得盖过最终结果主体。\n\n6. **低噪音**\n   - GIVEN 生成过程中存在高频事件更新  \n     WHEN 用户观察界面  \n     THEN 不应出现明显影响理解的闪烁、频繁跳动、重复提示或信息堆叠噪音。\n\n7. **保留既有能力**\n   - GIVEN 当前已有打字机效果与事件流机制  \n     WHEN 本需求落地  \n     THEN 这些能力应被保留并纳入新的会话式展示方案，而非被无理由移除。\n\n8. **范围限定**\n   - GIVEN 本需求交付  \n     WHEN 进行验收  \n     THEN 验收重点应聚焦插件整体对话界面的“过程展示体验”，而非模型能力、历史会话管理或设置页改造。\n\n---\n\n## Constraints\n1. 必须保留“插件界面”“类似 VS Code Copilot 的对话过程效果”这两个核心诉求，不得改写为其他体验方向。\n2. 允许“参考 Copilot 风格”，但不得要求产品设计对 VS Code Copilot 做品牌或像素级复制。\n3. 必须兼容当前已完成的 ELM-004 相关实现基础与 QA/Audit 结果，优先以增量 refinement 方式推进。\n4. 过程展示必须面向用户理解，而不是简单暴露原始系统推理细节。\n5. 本 requirement 仅定义产品需求，不预设具体技术实现方案。\n\n---\n\n## Non-Goals\n1. 不要求新增历史会话列表、会话归档、跨会话搜索。\n2. 不要求定义新的模型推理链或完整思维链展示。\n3. 不要求对插件全部页面做统一视觉重构。\n4. 不要求引入与 Copilot 完全一致的术语、配色或组件结构。\n\n---\n\n## Open Questions / Assumptions\n### Assumptions\n1. “类似 VS Code Copilot 的对话过程效果”本轮优先解释为：\n   - **流式逐步展开**\n   - **会话式消息流表达**\n   - **简洁阶段状态提示**\n2. 范围以**整个插件对话界面**为准，但会优先复用 ELM-004 已完成的“推理过程区”优化成果。\n3. 该需求是 **ELM-004 的 refinement**，不是 replacement。\n\n### Proposed Requirement Element ID\n- **element_id**: `ELM-004-R1`\n\n### Why not reuse ELM-004 directly\n- ELM-004 是上位目标，描述的是“推理过程界面体验优化”；\n- 本次需求已经给出了更具体的目标体验参照（Copilot-like conversation process effect）与更明确的界面范围（整个插件对话界面）；\n- 因此更适合作为 **ELM-004 之下的细化 requirement** 继续挂接，而不是直接覆盖原 requirement 文本。\n\n---\n\n## Draft Structured Output Preview\n```yaml\nstatus: draft\nclassification: refinement\nrelation_to_existing_goal:\n  parent_element_id: ELM-004\n  relation: refinement_of\n  summary: 本需求是 ELM-004 的细化需求，明确将“推理过程可理解性优化”落到“类似 VS Code Copilot 的对话过程效果”，并把范围扩展到整个插件对话界面，但不替代 ELM-004。\nformal_requirement: >\n  插件界面应以类似 VS Code Copilot 的方式展示对话过程，通过会话式消息流、流式逐步展开、简洁阶段状态提示，\n  提升用户对处理进度、当前状态与最终结果的理解；保留现有打字机效果与事件流能力，并降低阅读负担、界面抖动与噪音信息。\nelement_id: ELM-004-R1\n```"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-APP-EXT-CONVERSATION-SHELL",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Sidepanel Conversation Shell"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationComponent is a modular, deployable, and replaceable part of a software system that encapsulates its behavior and data and exposes them through interfaces. In this architecture, Extension Sidepanel Conversation Shell owns the top-level sidepanel conversation flow, arranging user prompt submission, assistant processing state, question checkpoints, progressive reply presentation, and completion-state composition for ELM-005."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "requirementId": "ELM-005"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Run Conversation Mapper"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationComponent is a modular, deployable, and replaceable part of a software system that encapsulates its behavior and data and exposes them through interfaces. In this architecture, Extension Run Conversation Mapper transforms normalized run events into stable user-facing conversation stages, aggregated process summaries, and assistant-turn view models for ELM-005."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "requirementId": "ELM-005"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Conversation Renderer"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationComponent is a modular, deployable, and replaceable part of a software system that encapsulates its behavior and data and exposes them through interfaces. In this architecture, Extension Conversation Renderer presents live and historical assistant interactions as conversation-style message flows with readable final answers, summarized process layers, and collapsible detail disclosure for ELM-005."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "requirementId": "ELM-005"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Conversation Live and History UX"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationComponent is a modular, deployable, and replaceable part of a software system that encapsulates its behavior and data and exposes them through interfaces. In this architecture, Extension Conversation Live and History UX preserves buffered streaming, unread progress prompts, controlled auto-follow behavior, and consistent rendering semantics between active runs and history detail for ELM-005."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "requirementId": "ELM-005"
+          }
+        }
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "ELM-005: 将当前插件界面的“对话过程展示”升级为类似 VS Code Copilot 的会话式过程体验，以更接近对话消息流的方式呈现用户输入、系统响应、生成中状态与过程推进，让用户能够直观理解正在处理什么、处理到了哪里、最终产出了什"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "ELM-005 follows a brownfield-first refinement of ELM-004. Extend the existing Chrome extension sidepanel implementation instead of creating a new chat stack or changing backend protocols. The implementation boundary remains extension/src/sidepanel/App.tsx, reasoningTimeline.ts, reasoningTimelineView.tsx, styles.css, and useRunHistory.ts. Introduce a Conversation Shell responsibility at the App.tsx layer so the UI is reorganized around a conversation-first flow: user message, assistant processing state, progressively forming assistant reply, summarized/collapsible process layer, and clear completion state. Reuse the existing reasoning timeline, event presentation, stream UX, and history reuse seams to map raw NormalizedRunEvent data into stable user-facing stage summaries with low noise and low jitter."
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "基于 ELM-003，为当前 Chrome extension + Python adapter + real opencode serve 链路实现：1) 右侧推理事件流面向用户可读化展示，默认隐藏原始 JSON；2) thinking/",
+            "rawRequirement": "ELM-005: 将当前插件界面的“对话过程展示”升级为类似 VS Code Copilot 的会话式过程体验，以更接近对话消息流的方式呈现用户输入、系统响应、生成中状态与过程推进，让用户能够直观理解正在处理什么、处理到了哪里、最终产出了什",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-042",
+        "identifier": "TASK-050",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "基于 ELM-003，为当前 Chrome extension + Python adapter + real opencode serve 链路实现：1) 右侧推理事件流面向用户可读化展示，默认隐藏原始 JSON；2) thinking/"
+            "value": "ELM-005: 将当前插件界面的“对话过程展示”升级为类似 VS Code Copilot 的会话式过程体验，以更接近对话消息流的方式呈现用户输入、系统响应、生成中状态与过程推进，让用户能够直观理解正在处理什么、处理到了哪里、最终产出了什"
           }
         ],
         "documentation": [
           {
-            "value": "Implemented side panel event UX updates for ELM-003: production now hides raw JSON by default, thinking/result cards render with typewriter progression, tool_call cards show user-readable stage text, and existing auto-scroll/stream behavior remains covered by tests."
+            "value": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks."
           }
         ],
         "extensions": {
@@ -588,72 +695,130 @@
             "managedBy": "opencode-runtime",
             "kind": "Task",
             "taskKind": "planning",
-            "status": "Done",
+            "status": "ToDo",
             "assignee": "SystemArchitect",
-            "summary": "Implemented side panel event UX updates for ELM-003: production now hides raw JSON by default, thinking/result cards render with typewriter progression, tool_call cards show user-readable stage text, and existing auto-scroll/stream behavior remains covered by tests.",
-            "commitId": "97d2981197f86393e6695ae2addf89ecf35aae1a",
+            "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
+            "commitId": "",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-02T11:23:59.572Z"
+            "updatedAt": "2026-04-07T06:32:25.088Z"
           }
         }
       },
       {
-        "identifier": "TASK-043",
+        "identifier": "TASK-051",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "opencode/agents/TARA_analyst"
+            "value": "Refactor sidepanel App into conversation-first run shell for ELM-005"
           }
         ],
         "documentation": [
           {
-            "value": "Implemented TARA primary-agent guard enforcement for real runs by validating .opencode/opencode.json default_agent and readable .opencode/agents/TARA_analyst.md before session startup, with explicit failure responses and regression coverage for success and failure paths."
+            "value": "Started implementing conversation-first sidepanel shell for ELM-005."
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Task",
-            "taskKind": "planning",
-            "status": "Done",
-            "assignee": "SystemArchitect",
-            "summary": "Implemented TARA primary-agent guard enforcement for real runs by validating .opencode/opencode.json default_agent and readable .opencode/agents/TARA_analyst.md before session startup, with explicit failure responses and regression coverage for success and failure paths.",
-            "commitId": "97d2981197f86393e6695ae2addf89ecf35aae1a",
-            "softwareUnitId": "",
-            "softwareUnitTitle": "",
-            "architectureElementId": "",
-            "updatedAt": "2026-04-02T11:23:59.908Z"
+            "taskKind": "implementation",
+            "status": "InProgress",
+            "assignee": "Implementation",
+            "summary": "Started implementing conversation-first sidepanel shell for ELM-005.",
+            "commitId": "",
+            "softwareUnitId": "SU-EXT-CONVERSATION-SHELL",
+            "softwareUnitTitle": "Extension Sidepanel Conversation Shell",
+            "architectureElementId": "ELM-APP-EXT-CONVERSATION-SHELL",
+            "updatedAt": "2026-04-07T07:00:44.544Z"
           }
         }
       },
       {
-        "identifier": "TASK-044",
+        "identifier": "TASK-052",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "md` 作为 primary agent 入口，若缺失或加载失败则显式报错，不允许静默降级；5) 保留开发/日志链路中的原始事件与调试信息。"
+            "value": "Evolve reasoning timeline mapping into conversation-stage models for ELM-005"
           }
         ],
         "documentation": [
           {
-            "value": "Implemented adapter event mapping updates that simplify tool_call copy for user display while preserving raw event details in logData/invocation logs, without breaking thinking/question/result flow; added targeted adapter and API parsing tests."
+            "value": "Started evolving reasoning timeline mapping into conversation-stage models for ELM-005."
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Task",
-            "taskKind": "planning",
-            "status": "Done",
-            "assignee": "SystemArchitect",
-            "summary": "Implemented adapter event mapping updates that simplify tool_call copy for user display while preserving raw event details in logData/invocation logs, without breaking thinking/question/result flow; added targeted adapter and API parsing tests.",
-            "commitId": "97d2981197f86393e6695ae2addf89ecf35aae1a",
-            "softwareUnitId": "",
-            "softwareUnitTitle": "",
-            "architectureElementId": "",
-            "updatedAt": "2026-04-02T11:24:00.796Z"
+            "taskKind": "implementation",
+            "status": "InProgress",
+            "assignee": "Implementation",
+            "summary": "Started evolving reasoning timeline mapping into conversation-stage models for ELM-005.",
+            "commitId": "",
+            "softwareUnitId": "SU-EXT-RUN-CONVERSATION-MAPPER",
+            "softwareUnitTitle": "Extension Run Conversation Mapper",
+            "architectureElementId": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+            "updatedAt": "2026-04-07T07:00:44.580Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-053",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Implement conversation-style message rendering and hierarchy for ELM-005"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Started implementing conversation-style rendering hierarchy for ELM-005."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "InProgress",
+            "assignee": "Implementation",
+            "summary": "Started implementing conversation-style rendering hierarchy for ELM-005.",
+            "commitId": "",
+            "softwareUnitId": "SU-EXT-CONVERSATION-RENDERER",
+            "softwareUnitTitle": "Extension Conversation Renderer",
+            "architectureElementId": "ELM-APP-EXT-CONVERSATION-RENDERER",
+            "updatedAt": "2026-04-07T07:00:44.611Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-054",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Harden live/history conversation UX reuse and streaming stability for ELM-005"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Started hardening live/history conversation UX and streaming stability for ELM-005."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "InProgress",
+            "assignee": "Implementation",
+            "summary": "Started hardening live/history conversation UX and streaming stability for ELM-005.",
+            "commitId": "",
+            "softwareUnitId": "SU-EXT-CONVERSATION-LIVE-HISTORY-UX",
+            "softwareUnitTitle": "Extension Conversation Live and History UX",
+            "architectureElementId": "ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX",
+            "updatedAt": "2026-04-07T07:00:44.643Z"
           }
         }
       }
@@ -1102,15 +1267,79 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-042",
+        "identifier": "REL-ELM005-CONVERSATION-SHELL-REALIZES",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Conversation shell realizes ELM-005"
+          }
+        ],
+        "source": "ELM-APP-EXT-CONVERSATION-SHELL",
+        "target": "ELM-005",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Extension Sidepanel Conversation Shell fulfills the requirement to reorganize the sidepanel around a conversation-first interaction flow for ELM-005."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ELM005-MAPPER-REALIZES",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Conversation mapper realizes ELM-005"
+          }
+        ],
+        "source": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "target": "ELM-005",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Extension Run Conversation Mapper fulfills the requirement to convert raw events into stable user-facing stage summaries and assistant-turn models for ELM-005."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ELM005-RENDERER-REALIZES",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Conversation renderer realizes ELM-005"
+          }
+        ],
+        "source": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "target": "ELM-005",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Extension Conversation Renderer fulfills the requirement to present conversation-style message flows with final-answer readability and low-noise process disclosure for ELM-005."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ELM005-LIVE-HISTORY-UX-REALIZES",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Live/history UX realizes ELM-005"
+          }
+        ],
+        "source": "ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX",
+        "target": "ELM-005",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Extension Conversation Live and History UX fulfills the requirement to preserve streaming continuity, stable reading behavior, and shared live/history semantics for ELM-005."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-050",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-042"
+            "value": "Project aggregates TASK-050"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-042",
+        "target": "TASK-050",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -1124,15 +1353,15 @@
         }
       },
       {
-        "identifier": "REL-PROJECT-TASK-043",
+        "identifier": "REL-PROJECT-TASK-051",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-043"
+            "value": "Project aggregates TASK-051"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-043",
+        "target": "TASK-051",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -1146,15 +1375,37 @@
         }
       },
       {
-        "identifier": "REL-PROJECT-TASK-044",
+        "identifier": "REL-TASK-051-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-051 traces to ELM-APP-EXT-CONVERSATION-SHELL"
+          }
+        ],
+        "source": "TASK-051",
+        "target": "ELM-APP-EXT-CONVERSATION-SHELL",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-052",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-044"
+            "value": "Project aggregates TASK-052"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-044",
+        "target": "TASK-052",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -1164,6 +1415,116 @@
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-052-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-052 traces to ELM-APP-EXT-RUN-CONVERSATION-MAPPER"
+          }
+        ],
+        "source": "TASK-052",
+        "target": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-053",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-053"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-053",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-053-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-053 traces to ELM-APP-EXT-CONVERSATION-RENDERER"
+          }
+        ],
+        "source": "TASK-053",
+        "target": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-054",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-054"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-054",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-054-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-054 traces to ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX"
+          }
+        ],
+        "source": "TASK-054",
+        "target": "ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
           }
         }
       }

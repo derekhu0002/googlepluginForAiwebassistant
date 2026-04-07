@@ -12,6 +12,7 @@ const AGGREGATED_EVENT_TYPES = new Set<NormalizedEventType>(["thinking", "tool_c
 const SMALL_EVENT_MESSAGE_LIMIT = 140;
 
 export type TimelineCardStatus = "active" | "complete" | "waiting" | "attention";
+export type ConversationTurnKind = "assistant" | "question" | "error";
 
 export interface TimelineEventEntry {
   id: string;
@@ -34,6 +35,20 @@ export interface TimelineCardModel {
   updatedAt: string;
   entries: TimelineEventEntry[];
   isAggregated: boolean;
+  question?: QuestionPayload;
+}
+
+export interface ConversationTurnModel {
+  id: string;
+  runId: string;
+  kind: ConversationTurnKind;
+  primaryType: NormalizedEventType;
+  title: string;
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+  processItems: TimelineCardModel[];
+  processSummary: string;
   question?: QuestionPayload;
 }
 
@@ -95,7 +110,52 @@ function summarizeEntries(entries: TimelineEventEntry[]) {
   return uniqueMessages.join("\n");
 }
 
-/** @ArchitectureID: ELM-APP-EXT-REASONING-TIMELINE */
+function joinUniqueParagraphs(parts: string[]) {
+  const uniqueParts: string[] = [];
+
+  for (const part of parts.map((item) => item.trim()).filter(Boolean)) {
+    if (uniqueParts[uniqueParts.length - 1] !== part) {
+      uniqueParts.push(part);
+    }
+  }
+
+  return uniqueParts.join("\n\n");
+}
+
+function summarizeProcessItems(items: TimelineCardModel[]) {
+  if (!items.length) {
+    return "";
+  }
+
+  const highlights = items
+    .map((item) => item.summary.split("\n").find((line) => line.trim()) ?? item.title)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const uniqueHighlights = Array.from(new Set(highlights));
+
+  if (uniqueHighlights.length <= 2) {
+    return uniqueHighlights.join(" · ");
+  }
+
+  return `${uniqueHighlights.slice(0, 2).join(" · ")} 等 ${uniqueHighlights.length} 项过程`;
+}
+
+function createAssistantTurn(item: TimelineCardModel): ConversationTurnModel {
+  return {
+    id: item.id,
+    runId: item.runId,
+    kind: "assistant",
+    primaryType: item.type,
+    title: "Assistant",
+    summary: item.summary,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    processItems: item.type === "result" ? [] : [item],
+    processSummary: item.type === "result" ? "" : summarizeProcessItems([item])
+  };
+}
+
+/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildReasoningTimelineItems(events: NormalizedRunEvent[]): TimelineCardModel[] {
   const items: TimelineCardModel[] = [];
 
@@ -132,13 +192,89 @@ export function buildReasoningTimelineItems(events: NormalizedRunEvent[]): Timel
   return items;
 }
 
+/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+export function buildConversationTurns(events: NormalizedRunEvent[]): ConversationTurnModel[] {
+  const items = buildReasoningTimelineItems(events);
+  const turns: ConversationTurnModel[] = [];
+  let currentAssistantTurn: ConversationTurnModel | null = null;
+
+  for (const item of items) {
+    if (item.type === "thinking" || item.type === "tool_call") {
+      if (!currentAssistantTurn) {
+        currentAssistantTurn = createAssistantTurn(item);
+        turns.push(currentAssistantTurn);
+      } else {
+        currentAssistantTurn.processItems.push(item);
+        currentAssistantTurn.updatedAt = item.updatedAt;
+      }
+
+      currentAssistantTurn.processSummary = summarizeProcessItems(currentAssistantTurn.processItems);
+
+      if (item.type === "thinking") {
+        currentAssistantTurn.summary = joinUniqueParagraphs([currentAssistantTurn.summary, item.summary]);
+      }
+
+      continue;
+    }
+
+    if (item.type === "result") {
+      if (!currentAssistantTurn) {
+        currentAssistantTurn = createAssistantTurn(item);
+        turns.push(currentAssistantTurn);
+      }
+
+      currentAssistantTurn.primaryType = "result";
+      currentAssistantTurn.updatedAt = item.updatedAt;
+      currentAssistantTurn.summary = item.summary || currentAssistantTurn.summary || currentAssistantTurn.processSummary;
+      continue;
+    }
+
+    if (item.type === "question") {
+      turns.push({
+        id: item.id,
+        runId: item.runId,
+        kind: "question",
+        primaryType: "question",
+        title: item.title,
+        summary: item.summary,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        processItems: [],
+        processSummary: "",
+        question: item.question
+      });
+      currentAssistantTurn = null;
+      continue;
+    }
+
+    turns.push({
+      id: item.id,
+      runId: item.runId,
+      kind: "error",
+      primaryType: "error",
+      title: item.title,
+      summary: item.summary,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      processItems: currentAssistantTurn?.processItems ?? [],
+      processSummary: currentAssistantTurn?.processSummary ?? ""
+    });
+    currentAssistantTurn = null;
+  }
+
+  return turns.map((turn) => ({
+    ...turn,
+    summary: turn.summary || turn.processSummary || (turn.kind === "assistant" ? "正在处理中…" : "")
+  }));
+}
+
 export function getTimelineCardStatus(options: {
   type: NormalizedEventType;
   isLast: boolean;
   live: boolean;
   streamStatus?: "idle" | "connecting" | "streaming" | "reconnecting" | "waiting_for_answer" | "done" | "error";
   runStatus?: "streaming" | "waiting_for_answer" | "done" | "error";
-}): TimelineCardStatus {
+}) {
   const { type, isLast, live, streamStatus, runStatus } = options;
   const isWaitingForAnswer = streamStatus === "waiting_for_answer" || runStatus === "waiting_for_answer";
 
@@ -151,7 +287,7 @@ export function getTimelineCardStatus(options: {
   }
 
   if (type === "result" || runStatus === "done" || streamStatus === "done") {
-    return type === "result" && isLast ? "complete" : "complete";
+    return "complete";
   }
 
   if (live && isLast && (streamStatus === "connecting" || streamStatus === "streaming" || streamStatus === "reconnecting")) {
@@ -164,12 +300,12 @@ export function getTimelineCardStatus(options: {
 export function getTimelineStatusCopy(runStatus?: "streaming" | "waiting_for_answer" | "done" | "error") {
   switch (runStatus) {
     case "done":
-      return "本次推理已完成，已收起为稳定结果视图。";
+      return "助手已完成本轮回答。";
     case "error":
-      return "本次推理已中断，请查看错误卡片了解详情。";
+      return "本轮对话已中断，请查看失败提示。";
     case "waiting_for_answer":
-      return "推理正在等待你的确认后继续。";
+      return "助手正在等待你的补充信息。";
     default:
-      return "推理过程将持续追加到时间线中。";
+      return "助手会持续补充回答，并在需要时展示过程。";
   }
 }

@@ -169,6 +169,7 @@ function QuestionCard({ question, onSubmit }: { question: QuestionPayload; onSub
   );
 }
 
+/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL */
 export function App() {
   const [state, setState] = useState<AssistantState>(initialAssistantState);
   const [rules, setRules] = useState<PageRule[]>([]);
@@ -473,6 +474,9 @@ export function App() {
   const selectedRule = draftRule;
   const errorTitle = state.error?.code ? `${state.error.code}` : null;
   const errorDescription = state.error ? toDisplayMessage(state.error) : state.errorMessage || streamError;
+  const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent);
+  const livePrompt = state.currentRun?.prompt ?? prompt;
+  const historyPrompt = selectedHistoryDetail?.run.prompt ?? "";
 
   return (
     <main className="app-shell">
@@ -484,91 +488,134 @@ export function App() {
         <span className="mode-chip">{isEmbedded || state.uiMode === "embedded" ? "Embedded" : "Side Panel"}</span>
       </header>
 
-      <section className="status-card">
-        <strong>当前页面上下文</strong>
-        <small>{activeContext?.url ?? "尚未读取当前标签页"}</small>
-        <small>{activeContext?.message ?? ""}</small>
-        <div className="context-actions">
-          <span className={`pill ${activeContext?.matchedRule ? "pill-success" : "pill-muted"}`}>
-            {activeContext?.matchedRule ? `命中规则：${activeContext.matchedRule.name}` : "未命中规则"}
-          </span>
-          <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
-            {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
-          </span>
-        </div>
-        {!activeContext?.permissionGranted && activeContext?.canRequestPermission ? (
-          <button className="secondary" disabled={requestingPermission} onClick={() => requestPermission()}>
-            {requestingPermission ? "授权中..." : "授权当前域名"}
-          </button>
-        ) : null}
-        {contextError ? <p className="error-text">{contextError}</p> : null}
-        <small>用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
-      </section>
-
       <section className="panel-block">
         <div className="section-header compact">
-          <h2>发起推理</h2>
-          <button disabled={isBusy} onClick={() => startStreamingRun()}>{isBusy ? "处理中..." : "采集并开始 SSE Run"}</button>
+          <h2>对话</h2>
+          <small>conversation-first / 渐进回复</small>
         </div>
-        <label>
-          <span>Prompt</span>
-          <textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} rows={4} />
-        </label>
-      </section>
-
-      <section className="status-card">
-        <strong>状态：</strong>
-        <span>{state.status}</span>
-        {state.stream.runId ? <small>流连接：{state.stream.status}</small> : null}
-        {state.lastUpdatedAt ? <small>更新时间：{new Date(state.lastUpdatedAt).toLocaleString()}</small> : null}
-        {state.currentRun ? <small>Run ID：{state.currentRun.runId}</small> : null}
-        {errorTitle ? <small>错误域：{errorTitle}</small> : null}
-        {errorDescription ? <p className="error-text">{errorDescription}</p> : null}
-      </section>
-
-      <section className="panel-block">
-        <h2>采集结果摘要</h2>
-        {state.capturedFields ? (
-          <dl className="field-list compact-list">
-            <div className="field-item">
-              <dt>software_version</dt>
-              <dd>{state.capturedFields.software_version || <span className="empty-value">(empty)</span>}</dd>
-            </div>
-            <div className="field-item">
-              <dt>selected_sr</dt>
-              <dd>{state.capturedFields.selected_sr || <span className="empty-value">(empty)</span>}</dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="empty-state">尚未采集任何字段。</p>
-        )}
-      </section>
-
-      <section className="panel-block">
-        <div className="section-header compact">
-          <h2>推理事件流</h2>
-          <small>聚合时间线 / 渐进展示</small>
+        <div className="conversation-composer">
+          <label>
+            <span>Prompt</span>
+            <textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} rows={4} />
+          </label>
+          <div className="conversation-composer-actions">
+            <button disabled={isBusy} onClick={() => startStreamingRun()}>{isBusy ? "处理中..." : "采集并开始 SSE Run"}</button>
+            <small className="detail-muted">保留事件流能力，但默认按对话主线展示。</small>
+          </div>
         </div>
-        {state.currentRun?.status === "done" && state.currentRun.finalOutput ? (
-          <div className="run-outcome-banner success-banner">
-            <strong>已完成</strong>
-            <p>{state.currentRun.finalOutput}</p>
+
+        <div className="conversation-mainline">
+          {hasLiveConversation ? (
+            <>
+              {livePrompt ? (
+                <article className="conversation-turn turn-user">
+                  <div className="conversation-avatar" aria-hidden="true">你</div>
+                  <div className="conversation-bubble user-bubble">
+                    <div className="conversation-turn-header">
+                      <div className="conversation-turn-heading">
+                        <strong>You</strong>
+                      </div>
+                      {state.currentRun ? <small>{new Date(state.currentRun.startedAt).toLocaleTimeString()}</small> : null}
+                    </div>
+                    <p className="conversation-message">{livePrompt}</p>
+                  </div>
+                </article>
+              ) : null}
+
+              {state.currentRun && !state.runEvents.length ? (
+                <article className="conversation-turn turn-assistant is-active">
+                  <div className="conversation-avatar" aria-hidden="true">AI</div>
+                  <div className="conversation-bubble">
+                    <div className="conversation-turn-header">
+                      <div className="conversation-turn-heading">
+                        <strong>Assistant</strong>
+                        <span className="status-chip status-active">进行中</span>
+                      </div>
+                    </div>
+                    <p className="conversation-process-summary">正在连接并准备读取页面上下文。</p>
+                    <p className="conversation-message conversation-message-muted">助手正在组织回答…</p>
+                  </div>
+                </article>
+              ) : null}
+
+              <ReasoningTimeline
+                events={state.runEvents}
+                live
+                streamStatus={state.stream.status}
+                runStatus={state.currentRun?.status}
+                emptyText="助手尚未返回过程事件。"
+              />
+
+              {questionEvent?.question ? <QuestionCard question={questionEvent.question} onSubmit={handleQuestionSubmit} /> : null}
+
+              {state.currentRun?.status === "done" && state.currentRun.finalOutput ? (
+                <div className="run-outcome-banner success-banner">
+                  <strong>本轮回答已完成</strong>
+                  <p>{state.currentRun.finalOutput}</p>
+                </div>
+              ) : null}
+              {state.currentRun?.status === "error" && state.currentRun.errorMessage ? (
+                <div className="run-outcome-banner error-banner">
+                  <strong>本轮回答失败</strong>
+                  <p>{state.currentRun.errorMessage}</p>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="empty-state">提交 prompt 后，这里会以会话主线展示用户消息、助手回复与可折叠过程。</p>
+          )}
+        </div>
+      </section>
+
+      <section className="context-grid">
+        <section className="status-card">
+          <strong>当前页面上下文</strong>
+          <small>{activeContext?.url ?? "尚未读取当前标签页"}</small>
+          <small>{activeContext?.message ?? ""}</small>
+          <div className="context-actions">
+            <span className={`pill ${activeContext?.matchedRule ? "pill-success" : "pill-muted"}`}>
+              {activeContext?.matchedRule ? `命中规则：${activeContext.matchedRule.name}` : "未命中规则"}
+            </span>
+            <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
+              {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
+            </span>
           </div>
-        ) : null}
-        {state.currentRun?.status === "error" && state.currentRun.errorMessage ? (
-          <div className="run-outcome-banner error-banner">
-            <strong>运行失败</strong>
-            <p>{state.currentRun.errorMessage}</p>
-          </div>
-        ) : null}
-        <ReasoningTimeline
-          events={state.runEvents}
-          live
-          streamStatus={state.stream.status}
-          runStatus={state.currentRun?.status}
-          emptyText="暂无事件。"
-        />
-        {questionEvent?.question ? <QuestionCard question={questionEvent.question} onSubmit={handleQuestionSubmit} /> : null}
+          {!activeContext?.permissionGranted && activeContext?.canRequestPermission ? (
+            <button className="secondary" disabled={requestingPermission} onClick={() => requestPermission()}>
+              {requestingPermission ? "授权中..." : "授权当前域名"}
+            </button>
+          ) : null}
+          {contextError ? <p className="error-text">{contextError}</p> : null}
+          <small>用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
+        </section>
+
+        <section className="status-card">
+          <strong>状态：</strong>
+          <span>{state.status}</span>
+          {state.stream.runId ? <small>流连接：{state.stream.status}</small> : null}
+          {state.lastUpdatedAt ? <small>更新时间：{new Date(state.lastUpdatedAt).toLocaleString()}</small> : null}
+          {state.currentRun ? <small>Run ID：{state.currentRun.runId}</small> : null}
+          {errorTitle ? <small>错误域：{errorTitle}</small> : null}
+          {errorDescription ? <p className="error-text">{errorDescription}</p> : null}
+        </section>
+
+        <section className="panel-block">
+          <h2>采集结果摘要</h2>
+          {state.capturedFields ? (
+            <dl className="field-list compact-list">
+              <div className="field-item">
+                <dt>software_version</dt>
+                <dd>{state.capturedFields.software_version || <span className="empty-value">(empty)</span>}</dd>
+              </div>
+              <div className="field-item">
+                <dt>selected_sr</dt>
+                <dd>{state.capturedFields.selected_sr || <span className="empty-value">(empty)</span>}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="empty-state">尚未采集任何字段。</p>
+          )}
+        </section>
       </section>
 
       <section className="panel-block">
@@ -588,7 +635,20 @@ export function App() {
           <div className="history-detail">
             {selectedHistoryDetail ? (
               <>
-                <strong>{selectedHistoryDetail.run.prompt}</strong>
+                {historyPrompt ? (
+                  <article className="conversation-turn turn-user history-turn-user">
+                    <div className="conversation-avatar" aria-hidden="true">你</div>
+                    <div className="conversation-bubble user-bubble">
+                      <div className="conversation-turn-header">
+                        <div className="conversation-turn-heading">
+                          <strong>You</strong>
+                        </div>
+                        <small>{new Date(selectedHistoryDetail.run.startedAt).toLocaleTimeString()}</small>
+                      </div>
+                      <p className="conversation-message">{historyPrompt}</p>
+                    </div>
+                  </article>
+                ) : null}
                 <small>{selectedHistoryDetail.run.finalOutput || "尚未完成"}</small>
                 <div className="field-list compact-list">
                   <div className="field-item"><dt>software_version</dt><dd>{selectedHistoryDetail.run.softwareVersion}</dd></div>

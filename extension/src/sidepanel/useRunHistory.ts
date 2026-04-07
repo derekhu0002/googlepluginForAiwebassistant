@@ -4,12 +4,22 @@ import type { AnswerRecord, NormalizedRunEvent, RunHistoryDetail, RunRecord } fr
 
 const historyStore = createIndexedDbHistoryStore();
 
+/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
 export function useRunHistory() {
   const [history, setHistory] = useState<RunRecord[]>([]);
   const [selectedHistoryDetail, setSelectedHistoryDetail] = useState<RunHistoryDetail | null>(null);
 
   async function refresh() {
-    setHistory(await historyStore.listRuns());
+    const [runs, currentDetail] = await Promise.all([
+      historyStore.listRuns(),
+      selectedHistoryDetail ? historyStore.getRunDetail(selectedHistoryDetail.run.runId) : Promise.resolve(null)
+    ]);
+
+    setHistory(runs);
+
+    if (selectedHistoryDetail) {
+      setSelectedHistoryDetail(currentDetail);
+    }
   }
 
   async function saveRun(run: RunRecord) {
