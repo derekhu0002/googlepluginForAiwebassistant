@@ -6,7 +6,7 @@ services:
     ports:
       - "8123:4096"
     entrypoint: ["/usr/local/bin/opencode"]
-    command: ["web", "--port", "4096", "--hostname", "0.0.0.0"]
+    command: ["web", "--port", "4096", "--hostname", "0.0.0.0", "--print-logs", "--log-level", "DEBUG"]
     working_dir: /root/project
     volumes:
       - ..:/root/project

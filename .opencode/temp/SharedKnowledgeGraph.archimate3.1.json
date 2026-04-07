@@ -24,25 +24,27 @@
       "designSummary": "",
       "designDecisions": [],
       "runtime": {
-        "activeGoal": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati",
+        "activeGoal": "适配测试环境变更：OPENCODE 后台服务已迁移到 Docker 容器，当前代理运行在 WSL 中，应通过 http://localhost:8123 访问 OPENCODE SERVER；更新相关代码或配置以匹配该连接方式。",
         "validations": {
           "qa": {
-            "status": "not_run",
-            "summary": "QA not run for the current goal.",
-            "updatedAt": "2026-04-07T12:17:54.974Z"
+            "status": "passed",
+            "summary": "QA passed for fast-track TASK-072 on commit 750372b736aa83295bad4c637b9d5637de0bff48. Verified commit files align with WSL-to-Docker localhost:8123 adaptation scope: docs, .env example, adapter config default, probe fallback, and regression tests. Re-ran targeted pytest suite for config/app/adapter plus lightweight probe-script tests; all passed (20 tests total). Noted current working tree is dirty in unrelated files outside python_adapter/docs scope, but HEAD matches reviewed commit and no reviewed-scope files differ from the commit. Architecture traceability remains unmapped for TASK-072 and should be improved later, but this does not block this fast-track validation.",
+            "details": "QA passed for fast-track TASK-072 on commit 750372b736aa83295bad4c637b9d5637de0bff48. Verified commit files align with WSL-to-Docker localhost:8123 adaptation scope: docs, .env example, adapter config default, probe fallback, and regression tests. Re-ran targeted pytest suite for config/app/adapter plus lightweight probe-script tests; all passed (20 tests total). Noted current working tree is dirty in unrelated files outside python_adapter/docs scope, but HEAD matches reviewed commit and no reviewed-scope files differ from the commit. Architecture traceability remains unmapped for TASK-072 and should be improved later, but this does not block this fast-track validation.",
+            "commitId": "750372b736aa83295bad4c637b9d5637de0bff48",
+            "updatedAt": "2026-04-07T15:07:57.718Z"
           },
           "audit": {
             "status": "not_run",
             "summary": "Audit not run for the current goal.",
-            "updatedAt": "2026-04-07T12:17:54.974Z"
+            "updatedAt": "2026-04-07T14:55:56.561Z"
           }
         },
         "release": {
           "status": "not_started",
           "summary": "Release not prepared for the current goal.",
-          "updatedAt": "2026-04-07T12:17:54.974Z"
+          "updatedAt": "2026-04-07T14:55:56.561Z"
         },
-        "updatedAt": "2026-04-07T12:20:23.975Z"
+        "updatedAt": "2026-04-07T15:04:21.332Z"
       }
     }
   },
@@ -682,34 +684,34 @@
         "type": "WorkPackage",
         "name": [
           {
-            "value": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati"
+            "value": "适配测试环境变更：OPENCODE 后台服务已迁移到 Docker 容器，当前代理运行在 WSL 中，应通过 http://localhost:8123 访问 OPENCODE SERVER；更新相关代码或配置以匹配该连接方式。"
           }
         ],
         "documentation": [
           {
-            "value": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati"
+            "value": "适配测试环境变更：OPENCODE 后台服务已迁移到 Docker 容器，当前代理运行在 WSL 中，应通过 http://localhost:8123 访问 OPENCODE SERVER；更新相关代码或配置以匹配该连接方式。"
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati",
+            "rawRequirement": "适配测试环境变更：OPENCODE 后台服务已迁移到 Docker 容器，当前代理运行在 WSL 中，应通过 http://localhost:8123 访问 OPENCODE SERVER；更新相关代码或配置以匹配该连接方式。",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-071",
+        "identifier": "TASK-072",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "Fix the browser plugin chat UI so it only shows the AI final feedback instead of reasoning, does not mark the conversati"
+            "value": "适配测试环境变更：OPENCODE 后台服务已迁移到 Docker 容器，当前代理运行在 WSL 中，应通过 http://localhost:8123 访问 OPENCODE SERVER；更新相关代码或配置以匹配该连接方式。"
           }
         ],
         "documentation": [
           {
-            "value": "Completed localized sidepanel fast-track fix: removed reasoning-process UI from conversation rendering, guarded same-run terminal merges so completion only appears with real terminal evidence, restored light sidepanel styling, and updated targeted UI tests."
+            "value": "Completed fast-track WSL-to-Docker OPENCODE endpoint adaptation. Updated Python adapter default OPENCODE base URL, probe script fallback, environment examples, and docs to http://localhost:8123 while preserving OPENCODE_BASE_URL overrides. Added regression assertions for the new default and verified related python_adapter tests passed."
           }
         ],
         "extensions": {
@@ -720,12 +722,12 @@
             "status": "Done",
             "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Completed localized sidepanel fast-track fix: removed reasoning-process UI from conversation rendering, guarded same-run terminal merges so completion only appears with real terminal evidence, restored light sidepanel styling, and updated targeted UI tests.",
-            "commitId": "cb40ec6745ddfaca9b93379f88fd693c75f948e1",
+            "summary": "Completed fast-track WSL-to-Docker OPENCODE endpoint adaptation. Updated Python adapter default OPENCODE base URL, probe script fallback, environment examples, and docs to http://localhost:8123 while preserving OPENCODE_BASE_URL overrides. Added regression assertions for the new default and verified related python_adapter tests passed.",
+            "commitId": "750372b736aa83295bad4c637b9d5637de0bff48",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-07T12:42:25.997Z"
+            "updatedAt": "2026-04-07T15:04:21.325Z"
           }
         }
       }
@@ -1302,15 +1304,15 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-071",
+        "identifier": "REL-PROJECT-TASK-072",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-071"
+            "value": "Project aggregates TASK-072"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-071",
+        "target": "TASK-072",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
