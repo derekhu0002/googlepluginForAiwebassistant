@@ -438,6 +438,8 @@ export function App() {
       return;
     }
 
+    const submittedAt = new Date().toISOString();
+
     const answerResponse = await submitQuestionAnswer(state.currentRun.runId, {
       questionId: questionEvent.question.questionId,
       answer: payload.answer,
@@ -455,11 +457,16 @@ export function App() {
       questionId: questionEvent.question.questionId,
       answer: payload.answer,
       choiceId: payload.choiceId,
-      submittedAt: new Date().toISOString()
+      submittedAt
     };
     await saveAnswer(answerRecord);
     setState((current) => ({
       ...current,
+      currentRun: current.currentRun ? {
+        ...current.currentRun,
+        status: "streaming",
+        updatedAt: submittedAt
+      } : current.currentRun,
       answers: [...current.answers, answerRecord],
       status: "streaming",
       stream: {

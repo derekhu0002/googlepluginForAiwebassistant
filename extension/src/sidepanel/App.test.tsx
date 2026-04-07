@@ -774,6 +774,71 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).not.toContain("待确认");
   });
 
+  it("clears the waiting question state immediately after answer submission", async () => {
+    mockSubmitQuestionAnswer.mockResolvedValue({ ok: true });
+
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "waiting_for_answer",
+        stream: {
+          runId: "run-1",
+          status: "waiting_for_answer",
+          pendingQuestionId: "q-1"
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "waiting_for_answer",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [
+          createRunEvent(1, {
+            type: "question",
+            message: "请选择处理方式",
+            question: {
+              questionId: "q-1",
+              title: "需要确认",
+              message: "请选择处理方式",
+              options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+              allowFreeText: false
+            }
+          })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("待确认");
+
+    const submitButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("提交回答"));
+    await act(async () => {
+      submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(mockSubmitQuestionAnswer).toHaveBeenCalledWith("run-1", {
+      questionId: "q-1",
+      answer: "继续执行",
+      choiceId: "resume"
+    });
+    expect(mockSaveAnswer).toHaveBeenCalledWith(expect.objectContaining({
+      runId: "run-1",
+      questionId: "q-1",
+      answer: "继续执行",
+      choiceId: "resume"
+    }));
+    expect(container.textContent).not.toContain("待确认");
+    expect(container.textContent).toContain("已记录");
+    expect(container.textContent).toContain("状态：");
+    expect(container.textContent).toContain("streaming");
+    expect(container.textContent).toContain("流连接：streaming");
+    expect(container.querySelector(".question-card")).toBeNull();
+  });
+
   it("renders simplified tool call copy instead of raw payload details", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
