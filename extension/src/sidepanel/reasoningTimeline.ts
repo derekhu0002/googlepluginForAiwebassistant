@@ -643,6 +643,6 @@ export function getTimelineStatusCopy(runStatus?: "streaming" | "waiting_for_ans
     case "waiting_for_answer":
       return "助手正在等待你的补充信息。";
     default:
-      return "助手会持续补充回答，并优先展示可读的思考与结论。";
+      return "助手正在继续生成回答，完成后会显示最终结果。";
   }
 }

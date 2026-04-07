@@ -11,7 +11,7 @@
 
 body {
   margin: 0;
-  background: #0f172a;
+  background: #f8fafc;
 }
 
 button,
@@ -29,7 +29,7 @@ textarea {
   padding: 16px;
   background:
     radial-gradient(circle at top, rgba(37, 99, 235, 0.12), transparent 28%),
-    linear-gradient(180deg, #0f172a 0%, #111827 100%);
+    linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
 }
 
 .app-header,
@@ -82,14 +82,14 @@ textarea {
 .chat-app-header p,
 .chat-primary-header h2,
 .chat-primary-header small {
-  color: #e2e8f0;
+  color: #0f172a;
 }
 
 .chat-app-header,
 .chat-primary-panel,
 .secondary-panel {
-  background: rgba(15, 23, 42, 0.78);
-  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(148, 163, 184, 0.22);
 }
 
 .chat-primary-panel {
@@ -126,7 +126,7 @@ label span,
 .chat-primary-panel label span,
 .chat-primary-panel .detail-muted,
 .chat-primary-panel .empty-state {
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .mode-chip,
@@ -233,9 +233,9 @@ label,
 
 .rule-list-item {
   text-align: left;
-  background: rgba(15, 23, 42, 0.48);
-  color: #e2e8f0;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.24);
 }
 
 .rule-list-item.active {
@@ -256,8 +256,8 @@ textarea {
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 12px;
   padding: 8px 10px;
-  background: rgba(15, 23, 42, 0.72);
-  color: #e2e8f0;
+  background: #ffffff;
+  color: #0f172a;
 }
 
 input::placeholder,
@@ -421,9 +421,9 @@ textarea {
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 18px;
   padding: 15px;
-  background: rgba(15, 23, 42, 0.46);
+  background: #ffffff;
   min-width: 0;
-  color: #e2e8f0;
+  color: #0f172a;
 }
 
 .user-bubble {
@@ -448,7 +448,7 @@ textarea {
 .conversation-turn-heading strong,
 .reasoning-item-header small,
 .reasoning-item-header strong {
-  color: #cbd5e1;
+  color: #475569;
 }
 
 .conversation-turn-heading {
@@ -492,9 +492,9 @@ textarea {
 }
 
 .inline-option-button {
-  background: rgba(30, 41, 59, 0.92);
-  color: #e2e8f0;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid rgba(148, 163, 184, 0.24);
 }
 
 .inline-option-button.selected {
@@ -709,7 +709,7 @@ textarea {
   align-items: center;
   gap: 12px;
   cursor: pointer;
-  color: #e2e8f0;
+  color: #0f172a;
   font-weight: 700;
 }
 
@@ -718,13 +718,13 @@ textarea {
 }
 
 .secondary-panel summary small {
-  color: #94a3b8;
+  color: #64748b;
   font-weight: 500;
 }
 
 .demoted-card {
-  background: rgba(15, 23, 42, 0.34);
-  border-color: rgba(148, 163, 184, 0.12);
+  background: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.18);
 }
 
 .demoted-card strong,
@@ -734,7 +734,7 @@ textarea {
 .demoted-card dt,
 .demoted-card p,
 .demoted-card small {
-  color: #cbd5e1;
+  color: #334155;
 }
 
 .utility-panel,
@@ -755,7 +755,7 @@ textarea {
   bottom: 0;
   padding: 14px 18px 18px;
   border-top: 1px solid rgba(148, 163, 184, 0.16);
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.08) 0%, rgba(15, 23, 42, 0.92) 24%);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.88) 0%, rgba(255, 255, 255, 0.98) 24%);
 }
 
 .docked-composer textarea {

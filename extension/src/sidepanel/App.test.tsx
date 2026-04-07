@@ -536,7 +536,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("最终结论");
     expect(container.textContent).not.toContain("读取页面上下文");
     expect(container.textContent).not.toContain("查询历史 SR");
-    expect(container.textContent).toContain("展开推理过程");
+    expect(container.textContent).not.toContain("展开推理过程");
   });
 
   it("shows persisted final output even when run events only contain hidden process items", async () => {
@@ -568,8 +568,47 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("来自持久化状态的回复");
-    expect(container.textContent).toContain("展开推理过程");
+    expect(container.textContent).not.toContain("展开推理过程");
     expect(container.textContent).not.toContain("读取页面上下文");
+  });
+
+  it("does not accept same-run done status without terminal evidence", () => {
+    const current = createAssistantState({
+      runEvents: [createRunEvent(1)],
+      status: "streaming",
+      currentRun: {
+        ...createCurrentRun(),
+        status: "streaming",
+        updatedAt: "2026-04-02T00:00:01.000Z",
+        finalOutput: ""
+      },
+      stream: {
+        runId: "run-1",
+        status: "streaming",
+        pendingQuestionId: null
+      }
+    });
+    const payload = createAssistantState({
+      runEvents: [],
+      status: "done",
+      currentRun: {
+        ...createCurrentRun(),
+        status: "done",
+        updatedAt: "2026-04-02T00:00:02.000Z",
+        finalOutput: ""
+      },
+      stream: {
+        runId: "run-1",
+        status: "streaming",
+        pendingQuestionId: null
+      }
+    });
+
+    const merged = mergeStateUpdate(current, payload, [], null);
+
+    expect(merged.status).toBe("streaming");
+    expect(merged.currentRun?.status).toBe("streaming");
+    expect(merged.stream.status).toBe("streaming");
   });
 
   it("does not regress done UI state after result when later history rerenders occur", async () => {
@@ -697,7 +736,6 @@ describe("side panel host permission request flow", () => {
     await flushAllTimers();
 
     expect(container.textContent).not.toContain("Called");
-    expect(container.textContent).toContain("展开推理过程");
     expect(container.textContent).not.toContain("我先整理页面关键信息，再给出最终建议。");
   });
 
@@ -720,7 +758,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("正在生成回答");
     expect(container.textContent).not.toContain("读取页面上下文");
     expect(container.textContent).not.toContain("整理可用字段");
-    expect(container.textContent).not.toContain("查看过程");
+    expect(container.textContent).not.toContain("展开推理过程");
   });
 
   it("shows final answer in history detail without orchestration steps", async () => {
@@ -752,33 +790,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("You");
     expect(container.textContent).not.toContain("历史思考 1");
     expect(container.textContent).not.toContain("历史思考 2");
-    expect(container.textContent).toContain("展开推理过程");
-  });
-
-  it("keeps reasoning collapsed by default but lets users expand live reasoning", async () => {
-    setupChromeStub({
-      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
-      getStateResponse: createAssistantState({
-        runEvents: [createRunEvent(1, { type: "thinking", message: "我先整理页面关键信息，再给出最终建议。" })]
-      })
-    });
-
-    await act(async () => {
-      root.render(<App />);
-    });
-    await flushUi();
-
-    expect(container.textContent).toContain("展开推理过程");
-    expect(container.textContent).not.toContain("我先整理页面关键信息，再给出最终建议。");
-
-    const toggleButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("展开推理过程"));
-    await act(async () => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flushUi();
-
-    expect(container.textContent).toContain("收起推理过程");
-    expect(container.textContent).toContain("我先整理页面关键信息，再给出最终建议。");
+    expect(container.textContent).not.toContain("展开推理过程");
   });
 
   it("shows history detail meaningful thinking but hides session noise", async () => {
@@ -808,14 +820,7 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("历史结论");
     expect(container.textContent).not.toContain("已连接主分析代理");
-
-    const toggleButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("展开推理过程"));
-    await act(async () => {
-      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flushUi();
-
-    expect(container.textContent).toContain("我先对比历史差异，再汇总结论。");
+    expect(container.textContent).not.toContain("我先对比历史差异，再汇总结论。");
   });
 
   it("shows the final answer after question events complete", async () => {

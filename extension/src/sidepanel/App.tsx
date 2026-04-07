@@ -36,6 +36,34 @@ const STREAM_STATUS_RANK: Record<AssistantState["stream"]["status"], number> = {
   error: 4
 };
 
+function isTerminalAssistantStatus(status: AssistantState["status"]) {
+  return status === "done" || status === "error";
+}
+
+function isTerminalRunStatus(status: RunRecord["status"] | null | undefined) {
+  return status === "done" || status === "error";
+}
+
+function isTerminalStreamStatus(status: AssistantState["stream"]["status"]) {
+  return status === "done" || status === "error";
+}
+
+function hasTerminalRunEvidence(state: Pick<AssistantState, "status" | "stream" | "currentRun" | "runEvents" | "error" | "errorMessage">) {
+  if (state.runEvents.some((event) => event.type === "result" || event.type === "error")) {
+    return true;
+  }
+
+  if (state.currentRun?.status === "done" && Boolean(state.currentRun.finalOutput?.trim())) {
+    return true;
+  }
+
+  if (state.currentRun?.status === "error" && Boolean(state.currentRun.errorMessage?.trim() || state.errorMessage || state.error)) {
+    return true;
+  }
+
+  return false;
+}
+
 function getStateRunId(state: Pick<AssistantState, "stream" | "currentRun">) {
   return state.stream.runId ?? state.currentRun?.runId ?? null;
 }
@@ -61,6 +89,10 @@ export function mergeStateUpdate(current: AssistantState, payload: AssistantStat
   const currentRunId = getStateRunId(current);
   const payloadRunId = getStateRunId(payload);
   const isSameActiveRun = Boolean(currentRunId && payloadRunId && currentRunId === payloadRunId);
+  const payloadClaimsTerminalState = isTerminalAssistantStatus(payload.status)
+    || isTerminalRunStatus(payload.currentRun?.status)
+    || isTerminalStreamStatus(payload.stream.status);
+  const blockPrematureTerminalMerge = isSameActiveRun && payloadClaimsTerminalState && !hasTerminalRunEvidence(payload);
 
   if (!isSameActiveRun) {
     return mergedState;
@@ -72,17 +104,23 @@ export function mergeStateUpdate(current: AssistantState, payload: AssistantStat
     && payload.currentRun
     && current.currentRun.runId === payload.currentRun.runId
     && (
+      (blockPrematureTerminalMerge && isTerminalRunStatus(payload.currentRun.status))
+      ||
       keepLocalRunEvents
       || toTimestamp(current.currentRun.updatedAt) > toTimestamp(payload.currentRun.updatedAt)
       || RUN_STATUS_RANK[current.currentRun.status] > RUN_STATUS_RANK[payload.currentRun.status]
     )
   );
   const keepLocalStream = (
+    (blockPrematureTerminalMerge && isTerminalStreamStatus(payload.stream.status))
+    ||
     keepLocalRunEvents
     || STREAM_STATUS_RANK[current.stream.status] > STREAM_STATUS_RANK[payload.stream.status]
     || (current.stream.pendingQuestionId === null && payload.stream.pendingQuestionId !== null)
   );
   const keepLocalStatus = (
+    (blockPrematureTerminalMerge && isTerminalAssistantStatus(payload.status))
+    ||
     keepLocalStream
     || keepLocalCurrentRun
     || ASSISTANT_STATUS_RANK[current.status] > ASSISTANT_STATUS_RANK[payload.status]
@@ -472,7 +510,7 @@ export function App() {
         <div className="section-header compact chat-primary-header">
           <div>
             <h2>对话</h2>
-            <small>用户提问、过程摘要、问题选项与最终回答统一展示</small>
+            <small>用户提问、问题确认与最终回答统一展示</small>
           </div>
           {(state.stream.runId || state.currentRun?.runId) ? <small className="detail-muted">Run：{state.currentRun?.runId ?? state.stream.runId}</small> : null}
         </div>
@@ -491,7 +529,6 @@ export function App() {
               errorMessage={state.currentRun?.errorMessage ?? state.errorMessage ?? streamError}
               updatedAt={state.currentRun?.updatedAt ?? state.currentRun?.startedAt}
               pendingQuestionId={state.stream.pendingQuestionId}
-              defaultReasoningCollapsed
               emptyText="正在生成回答…"
               onQuestionSubmit={handleQuestionSubmit}
               questionSubmitDisabled={!questionEvent?.question}
@@ -600,7 +637,6 @@ export function App() {
                   finalOutput={selectedHistoryDetail.run.finalOutput}
                   errorMessage={selectedHistoryDetail.run.errorMessage}
                   updatedAt={selectedHistoryDetail.run.updatedAt ?? selectedHistoryDetail.run.startedAt}
-                  defaultReasoningCollapsed
                   emptyText="尚未完成"
                 />
               ) : <p className="empty-state">选择一条历史记录查看详情。</p>}

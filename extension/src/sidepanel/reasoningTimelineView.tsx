@@ -6,8 +6,7 @@ import {
   buildChatStreamItems,
   getTimelineCardStatus,
   getTimelineStatusCopy,
-  type ChatStreamItemModel,
-  type TimelineCardModel
+  type ChatStreamItemModel
 } from "./reasoningTimeline";
 
 const TYPEWRITER_INTERVAL_MS = 24;
@@ -101,58 +100,6 @@ function renderAnswerLabel(answer?: AnswerRecord) {
   return <span className="inline-answer-pill">已选择</span>;
 }
 
-function ReasoningDetails({
-  item,
-  defaultCollapsed
-}: {
-  item: ChatStreamItemModel;
-  defaultCollapsed: boolean;
-}) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-
-  useEffect(() => {
-    setCollapsed(defaultCollapsed);
-  }, [defaultCollapsed]);
-
-  if (!item.processItems.length) {
-    return null;
-  }
-
-  return (
-    <div className="reasoning-block">
-      <button
-        className="ghost-button reasoning-toggle"
-        type="button"
-        aria-expanded={!collapsed}
-        onClick={() => setCollapsed((current) => !current)}
-      >
-        {collapsed ? "展开推理过程" : "收起推理过程"}
-      </button>
-      {collapsed ? <small className="detail-muted">{item.processSummary}</small> : (
-        <div className="reasoning-item-list">
-          {item.processItems.map((reasoningItem) => (
-            <ReasoningItemRow key={`${reasoningItem.id}:${reasoningItem.updatedAt}`} item={reasoningItem} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReasoningItemRow({ item }: { item: TimelineCardModel }) {
-  const summary = item.summary || item.entries.map((entry) => entry.message).filter(Boolean).join("\n");
-
-  return (
-    <article className="reasoning-item-row">
-      <div className="reasoning-item-header">
-        <strong>{item.title}</strong>
-        <small>{formatTimestamp(item.updatedAt)}</small>
-      </div>
-      {summary ? <p className="conversation-message conversation-message-muted">{summary}</p> : null}
-    </article>
-  );
-}
-
 function InlineQuestionComposer({
   question,
   disabled,
@@ -221,7 +168,6 @@ function ChatStreamTurn({
   status,
   animate,
   live,
-  defaultReasoningCollapsed,
   onQuestionSubmit,
   questionSubmitDisabled
 }: {
@@ -229,7 +175,6 @@ function ChatStreamTurn({
   status: ReturnType<typeof getTimelineCardStatus>;
   animate: boolean;
   live: boolean;
-  defaultReasoningCollapsed: boolean;
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
 }) {
@@ -261,8 +206,6 @@ function ChatStreamTurn({
         {item.kind === "assistant_question" && item.question && item.pendingQuestion && onQuestionSubmit ? (
           <InlineQuestionComposer question={item.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
         ) : null}
-
-        <ReasoningDetails item={item} defaultCollapsed={defaultReasoningCollapsed} />
       </div>
     </article>
   );
@@ -281,7 +224,6 @@ export interface ChatStreamViewProps {
   updatedAt?: string | null;
   pendingQuestionId?: string | null;
   emptyText?: string;
-  defaultReasoningCollapsed?: boolean;
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
 }
@@ -301,7 +243,6 @@ export function ReasoningTimeline({
   updatedAt,
   pendingQuestionId,
   emptyText = "暂无事件。",
-  defaultReasoningCollapsed = true,
   onQuestionSubmit,
   questionSubmitDisabled = false
 }: ChatStreamViewProps) {
@@ -385,7 +326,6 @@ export function ReasoningTimeline({
               && index === items.length - 1
               && (item.kind === "assistant_progress" || item.kind === "assistant_result")}
             live={live}
-            defaultReasoningCollapsed={defaultReasoningCollapsed}
             onQuestionSubmit={item.kind === "assistant_question" ? onQuestionSubmit : undefined}
             questionSubmitDisabled={questionSubmitDisabled}
           />
