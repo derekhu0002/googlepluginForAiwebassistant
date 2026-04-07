@@ -1,16 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { NormalizedEventType, NormalizedRunEvent, RunRecord } from "../shared/protocol";
+import type { ChangeEvent } from "react";
+import type { AnswerRecord, QuestionPayload, RunRecord } from "../shared/protocol";
 import type { StreamConnectionState } from "../shared/types";
 import {
-  buildConversationTurns,
-  buildReasoningSection,
+  buildChatStreamItems,
   getTimelineCardStatus,
   getTimelineStatusCopy,
-  type ConversationTurnModel,
+  type ChatStreamItemModel,
   type TimelineCardModel
 } from "./reasoningTimeline";
 
-const TYPEWRITER_EVENT_TYPES = new Set<NormalizedEventType>(["thinking"]);
 const TYPEWRITER_INTERVAL_MS = 24;
 
 function isNearBottom(element: HTMLDivElement | null) {
@@ -94,122 +93,240 @@ function getStatusLabel(status: ReturnType<typeof getTimelineCardStatus>) {
   }
 }
 
-function ConversationTurn({
-  turn,
+function renderAnswerLabel(answer?: AnswerRecord) {
+  if (!answer?.choiceId) {
+    return null;
+  }
+
+  return <span className="inline-answer-pill">已选择</span>;
+}
+
+function ReasoningDetails({
+  item,
+  defaultCollapsed
+}: {
+  item: ChatStreamItemModel;
+  defaultCollapsed: boolean;
+}) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+
+  useEffect(() => {
+    setCollapsed(defaultCollapsed);
+  }, [defaultCollapsed]);
+
+  if (!item.processItems.length) {
+    return null;
+  }
+
+  return (
+    <div className="reasoning-block">
+      <button
+        className="ghost-button reasoning-toggle"
+        type="button"
+        aria-expanded={!collapsed}
+        onClick={() => setCollapsed((current) => !current)}
+      >
+        {collapsed ? "展开推理过程" : "收起推理过程"}
+      </button>
+      {collapsed ? <small className="detail-muted">{item.processSummary}</small> : (
+        <div className="reasoning-item-list">
+          {item.processItems.map((reasoningItem) => (
+            <ReasoningItemRow key={`${reasoningItem.id}:${reasoningItem.updatedAt}`} item={reasoningItem} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReasoningItemRow({ item }: { item: TimelineCardModel }) {
+  const summary = item.summary || item.entries.map((entry) => entry.message).filter(Boolean).join("\n");
+
+  return (
+    <article className="reasoning-item-row">
+      <div className="reasoning-item-header">
+        <strong>{item.title}</strong>
+        <small>{formatTimestamp(item.updatedAt)}</small>
+      </div>
+      {summary ? <p className="conversation-message conversation-message-muted">{summary}</p> : null}
+    </article>
+  );
+}
+
+function InlineQuestionComposer({
+  question,
+  disabled,
+  onSubmit
+}: {
+  question: QuestionPayload;
+  disabled?: boolean;
+  onSubmit: (answer: { answer: string; choiceId?: string }) => void;
+}) {
+  const [choiceId, setChoiceId] = useState<string>(question.options[0]?.id ?? "");
+  const [freeText, setFreeText] = useState("");
+
+  useEffect(() => {
+    setChoiceId(question.options[0]?.id ?? "");
+    setFreeText("");
+  }, [question.questionId, question.options]);
+
+  const selectedOption = question.options.find((item) => item.id === choiceId);
+
+  function handleSubmit() {
+    const answer = freeText.trim() || selectedOption?.value || "";
+    if (!answer) {
+      return;
+    }
+    onSubmit({ answer, choiceId: selectedOption ? choiceId || undefined : undefined });
+  }
+
+  return (
+    <div className="inline-question-card question-card">
+      {question.options.length ? (
+        <div className="inline-question-options" role="group" aria-label={question.title}>
+          {question.options.map((option) => (
+            <button
+              key={option.id}
+              className={`inline-option-button ${choiceId === option.id ? "selected" : ""}`}
+              type="button"
+              disabled={disabled}
+              onClick={() => setChoiceId(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {question.allowFreeText ? (
+        <label>
+          <span className="sr-only">补充回答</span>
+          <textarea
+            value={freeText}
+            placeholder={question.placeholder ?? "继续补充你的信息"}
+            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setFreeText(event.target.value)}
+            disabled={disabled}
+          />
+        </label>
+      ) : null}
+      <div className="inline-question-actions">
+        <button type="button" disabled={disabled || (!selectedOption && !freeText.trim())} onClick={handleSubmit}>提交回答</button>
+        <small className="detail-muted">也可以直接在底部输入框继续追问。</small>
+      </div>
+    </div>
+  );
+}
+
+function ChatStreamTurn({
+  item,
   status,
   animate,
-  live
+  live,
+  defaultReasoningCollapsed,
+  onQuestionSubmit,
+  questionSubmitDisabled
 }: {
-  turn: ConversationTurnModel;
+  item: ChatStreamItemModel;
   status: ReturnType<typeof getTimelineCardStatus>;
   animate: boolean;
   live: boolean;
+  defaultReasoningCollapsed: boolean;
+  onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
+  questionSubmitDisabled?: boolean;
 }) {
-  const displayedSummary = useBufferedTypewriter(turn.summary, animate && TYPEWRITER_EVENT_TYPES.has(turn.primaryType));
-  const roleLabel = turn.kind === "question" ? "Assistant needs input" : turn.kind === "error" ? "Assistant failed" : "Assistant";
-  const isProcessing = live && status === "active" && turn.kind === "assistant";
-  const hasFinalReply = turn.kind === "assistant" && turn.primaryType === "result";
-  const messageText = turn.kind === "assistant"
-    ? (hasFinalReply ? displayedSummary : (displayedSummary || (live ? "正在生成回答…" : "尚未形成最终回答。")))
-    : displayedSummary;
+  const displayedSummary = useBufferedTypewriter(item.summary, animate);
+  const isUser = item.kind === "user_prompt" || item.kind === "user_answer";
+  const roleLabel = isUser ? "You" : item.kind === "assistant_error" ? "Assistant failed" : "Assistant";
+  const avatarLabel = item.kind === "assistant_question" ? "?" : item.kind === "assistant_error" ? "!" : isUser ? "你" : "AI";
+  const messageText = displayedSummary || (item.kind === "assistant_progress" && live ? "正在生成回答…" : "");
   const messageClassName = [
     "conversation-message",
-    turn.kind === "assistant" && !hasFinalReply ? "conversation-message-muted" : ""
+    item.kind === "assistant_progress" ? "conversation-message-muted" : ""
   ].filter(Boolean).join(" ");
 
   return (
-    <article className={`conversation-turn turn-${turn.kind} is-${status}`}>
-      <div className="conversation-avatar" aria-hidden="true">
-        {turn.kind === "question" ? "?" : turn.kind === "error" ? "!" : "AI"}
-      </div>
-      <div className="conversation-bubble">
+    <article className={`conversation-turn ${isUser ? "turn-user" : item.kind === "assistant_error" ? "turn-error" : item.kind === "assistant_question" ? "turn-question" : "turn-assistant"} is-${status}`}>
+      <div className="conversation-avatar" aria-hidden="true">{avatarLabel}</div>
+      <div className={`conversation-bubble ${isUser ? "user-bubble" : ""}`}>
         <div className="conversation-turn-header">
           <div className="conversation-turn-heading">
             <strong>{roleLabel}</strong>
-            <span className={`status-chip status-${status}`}>{getStatusLabel(status)}</span>
+            {!isUser ? <span className={`status-chip status-${status}`}>{getStatusLabel(status)}</span> : null}
+            {item.kind === "user_answer" ? renderAnswerLabel(item.answer) : null}
           </div>
-          <small>{formatTimestamp(turn.updatedAt)}</small>
+          <small>{formatTimestamp(item.updatedAt)}</small>
         </div>
 
         {messageText ? <p className={messageClassName}>{messageText}</p> : null}
 
-        {isProcessing && !messageText ? (
-          <p className="conversation-message conversation-message-muted">助手正在组织回答…</p>
+        {item.kind === "assistant_question" && item.question && item.pendingQuestion && onQuestionSubmit ? (
+          <InlineQuestionComposer question={item.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
         ) : null}
+
+        <ReasoningDetails item={item} defaultCollapsed={defaultReasoningCollapsed} />
       </div>
     </article>
   );
 }
 
-function ReasoningItemCard({
-  item,
-  status
-}: {
-  item: TimelineCardModel;
-  status: ReturnType<typeof getTimelineCardStatus>;
-}) {
-  const summary = item.summary || item.entries.map((entry) => entry.message).filter(Boolean).join("\n");
-
-  return (
-    <article className={`conversation-turn turn-assistant is-${status}`}>
-      <div className="conversation-avatar" aria-hidden="true">…</div>
-      <div className="conversation-bubble">
-        <div className="conversation-turn-header">
-          <div className="conversation-turn-heading">
-            <strong>{item.title}</strong>
-            <span className={`status-chip status-${status}`}>{getStatusLabel(status)}</span>
-          </div>
-          <small>{formatTimestamp(item.updatedAt)}</small>
-        </div>
-        {summary ? <p className="conversation-message conversation-message-muted">{summary}</p> : null}
-      </div>
-    </article>
-  );
-}
-
-export interface ReasoningTimelineProps {
-  events: NormalizedRunEvent[];
+export interface ChatStreamViewProps {
+  runId?: string | null;
+  prompt?: string | null;
+  events: import("../shared/protocol").NormalizedRunEvent[];
+  answers?: AnswerRecord[];
   live?: boolean;
   streamStatus?: StreamConnectionState["status"];
   runStatus?: RunRecord["status"];
+  finalOutput?: string | null;
+  errorMessage?: string | null;
+  updatedAt?: string | null;
+  pendingQuestionId?: string | null;
   emptyText?: string;
-  collapsible?: boolean;
-  defaultCollapsed?: boolean;
+  defaultReasoningCollapsed?: boolean;
+  onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
+  questionSubmitDisabled?: boolean;
 }
 
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
 export function ReasoningTimeline({
+  runId,
+  prompt,
   events,
+  answers = [],
   live = false,
   streamStatus,
   runStatus,
+  finalOutput,
+  errorMessage,
+  updatedAt,
+  pendingQuestionId,
   emptyText = "暂无事件。",
-  collapsible = false,
-  defaultCollapsed = false
-}: ReasoningTimelineProps) {
+  defaultReasoningCollapsed = true,
+  onQuestionSubmit,
+  questionSubmitDisabled = false
+}: ChatStreamViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [autoFollow, setAutoFollow] = useState(live);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const previousSignatureRef = useRef<string>("");
-  const turns = useMemo(() => buildConversationTurns(events), [events]);
-  const reasoningSection = useMemo(() => buildReasoningSection(events), [events]);
-  const visibleConversationTurns = useMemo(
-    () => turns.filter((turn) => turn.kind === "question"),
-    [turns]
-  );
-
-  useEffect(() => {
-    setCollapsed(defaultCollapsed);
-  }, [defaultCollapsed]);
+  const items = useMemo(() => buildChatStreamItems({
+    runId,
+    prompt,
+    events,
+    answers,
+    finalOutput,
+    errorMessage,
+    status: runStatus,
+    updatedAt,
+    pendingQuestionId
+  }), [answers, errorMessage, events, finalOutput, pendingQuestionId, prompt, runId, runStatus, updatedAt]);
 
   useEffect(() => {
     setAutoFollow(live);
   }, [live]);
 
   useEffect(() => {
-    const signature = turns.map((turn) => `${turn.id}:${turn.summary.length}:${turn.processItems.length}:${turn.updatedAt}`).join("|");
+    const signature = items.map((item) => `${item.id}:${item.summary.length}:${item.processItems.length}:${item.updatedAt}`).join("|");
     if (!live || !signature || signature === previousSignatureRef.current) {
       previousSignatureRef.current = signature;
       return;
@@ -229,7 +346,7 @@ export function ReasoningTimeline({
     }
 
     setUnreadCount((current) => current + 1);
-  }, [autoFollow, live, turns]);
+  }, [autoFollow, items, live]);
 
   function scrollToLatest() {
     if (containerRef.current) {
@@ -240,87 +357,43 @@ export function ReasoningTimeline({
   }
 
   return (
-    <div className="timeline-shell conversation-timeline-shell">
-      {collapsible ? (
-        <div className="timeline-toolbar reasoning-collapse-toolbar">
-          <button
-            className="secondary"
-            type="button"
-            aria-expanded={!collapsed}
-            onClick={() => setCollapsed((current) => !current)}
-          >
-            {collapsed ? "展开推理过程" : "收起推理过程"}
-          </button>
-          <small className="detail-muted">{reasoningSection.summary}</small>
-        </div>
-      ) : null}
-
-      {collapsible && visibleConversationTurns.length ? (
-        <div className="event-feed reasoning-timeline conversation-thread">
-          {visibleConversationTurns.map((turn, index) => (
-            <ConversationTurn
-              key={`${turn.id}:${turn.updatedAt}`}
-              turn={turn}
-              status={getTimelineCardStatus({
-                type: turn.primaryType,
-                isLast: index === visibleConversationTurns.length - 1 && collapsed,
-                live,
-                streamStatus,
-                runStatus
-              })}
-              animate={false}
-              live={live}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      {!collapsed ? (
-        <div
-          className="event-feed reasoning-timeline conversation-thread"
-          ref={containerRef}
-          onScroll={() => {
-            const nearBottom = isNearBottom(containerRef.current);
-            setAutoFollow(nearBottom);
-            if (nearBottom) {
-              setUnreadCount(0);
-            }
-          }}
-        >
-          {collapsible
-            ? (reasoningSection.items.length ? reasoningSection.items.map((item, index) => (
-                <ReasoningItemCard
-                  key={`${item.id}:${item.updatedAt}`}
-                  item={item}
-                  status={getTimelineCardStatus({
-                    type: item.type,
-                    isLast: index === reasoningSection.items.length - 1,
-                    live,
-                    streamStatus,
-                    runStatus
-                  })}
-                />
-              )) : <p className="empty-state">{emptyText}</p>)
-            : (turns.length ? turns.map((turn, index) => (
-                <ConversationTurn
-                  key={`${turn.id}:${turn.updatedAt}`}
-                  turn={turn}
-                  status={getTimelineCardStatus({
-                    type: turn.primaryType,
-                    isLast: index === turns.length - 1,
-                    live,
-                    streamStatus,
-                    runStatus
-                  })}
-                  animate={live && index === turns.length - 1}
-                  live={live}
-                />
-              )) : <p className="empty-state">{emptyText}</p>)}
-        </div>
-      ) : null}
+    <div className="timeline-shell conversation-timeline-shell chat-stream-shell">
+      <div
+        className="event-feed conversation-thread chat-stream-feed"
+        ref={containerRef}
+        onScroll={() => {
+          const nearBottom = isNearBottom(containerRef.current);
+          setAutoFollow(nearBottom);
+          if (nearBottom) {
+            setUnreadCount(0);
+          }
+        }}
+      >
+        {items.length ? items.map((item, index) => (
+          <ChatStreamTurn
+            key={`${item.id}:${item.updatedAt}`}
+            item={item}
+            status={getTimelineCardStatus({
+              type: item.primaryType === "user_prompt" || item.primaryType === "user_answer" ? "result" : item.primaryType,
+              isLast: index === items.length - 1,
+              live,
+              streamStatus,
+              runStatus
+            })}
+            animate={live
+              && (streamStatus === "connecting" || streamStatus === "streaming" || streamStatus === "reconnecting")
+              && index === items.length - 1
+              && (item.kind === "assistant_progress" || item.kind === "assistant_result")}
+            live={live}
+            defaultReasoningCollapsed={defaultReasoningCollapsed}
+            onQuestionSubmit={item.kind === "assistant_question" ? onQuestionSubmit : undefined}
+            questionSubmitDisabled={questionSubmitDisabled}
+          />
+        )) : <p className="empty-state chat-empty-state">{emptyText}</p>}
+      </div>
 
       {live ? (
-        <div className="timeline-toolbar">
+        <div className="timeline-toolbar chat-stream-toolbar">
           <small className="detail-muted">{getTimelineStatusCopy(runStatus)}</small>
           {!autoFollow || unreadCount ? (
             <button className="secondary unread-indicator" type="button" onClick={scrollToLatest}>

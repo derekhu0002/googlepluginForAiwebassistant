@@ -1,4 +1,4 @@
-import type { NormalizedEventType, NormalizedRunEvent, QuestionPayload } from "../shared/protocol";
+import type { AnswerRecord, NormalizedEventType, NormalizedRunEvent, QuestionPayload, RunRecord } from "../shared/protocol";
 
 const DEFAULT_EVENT_TITLES: Record<NormalizedEventType, string> = {
   thinking: "分析中",
@@ -80,6 +80,30 @@ export interface ConversationTurnModel {
 export interface ReasoningSectionModel {
   items: TimelineCardModel[];
   summary: string;
+}
+
+export type ChatStreamItemKind =
+  | "user_prompt"
+  | "user_answer"
+  | "assistant_progress"
+  | "assistant_question"
+  | "assistant_result"
+  | "assistant_error";
+
+export interface ChatStreamItemModel {
+  id: string;
+  runId: string;
+  kind: ChatStreamItemKind;
+  title: string;
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+  primaryType: NormalizedEventType | "user_prompt" | "user_answer";
+  processItems: TimelineCardModel[];
+  processSummary: string;
+  question?: QuestionPayload;
+  answer?: AnswerRecord;
+  pendingQuestion?: boolean;
 }
 
 export function getEventTitle(event: Pick<NormalizedRunEvent, "type" | "title" | "question">) {
@@ -223,6 +247,215 @@ function createReasoningSummary(items: TimelineCardModel[]) {
   }
 
   return `已记录 ${parts.length} 条推理过程`;
+}
+
+function createProgressSummary(items: TimelineCardModel[]) {
+  const visibleThinkingCount = items.filter((item) => item.type === "thinking" && getVisibleThinkingSummary(item)).length;
+  if (visibleThinkingCount > 0) {
+    return visibleThinkingCount === 1 ? "已记录 1 条推理过程" : `已记录 ${visibleThinkingCount} 条推理过程`;
+  }
+
+  return "正在生成回答…";
+}
+
+function createQuestionSummary(item: TimelineCardModel) {
+  return item.question?.message?.trim() || item.summary || item.title || DEFAULT_EVENT_TITLES.question;
+}
+
+function sortAnswers(answers: AnswerRecord[]) {
+  return [...answers].sort((left, right) => new Date(left.submittedAt).getTime() - new Date(right.submittedAt).getTime());
+}
+
+export interface BuildChatStreamItemsOptions {
+  runId?: string | null;
+  prompt?: string | null;
+  events: NormalizedRunEvent[];
+  answers?: AnswerRecord[];
+  finalOutput?: string | null;
+  errorMessage?: string | null;
+  status?: RunRecord["status"];
+  updatedAt?: string | null;
+  pendingQuestionId?: string | null;
+}
+
+/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+export function buildChatStreamItems(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
+  const streamItems: ChatStreamItemModel[] = [];
+  const reasoningItems = buildReasoningTimelineItems(options.events);
+  const answersByQuestionId = new Map<string, AnswerRecord[]>();
+  const prompt = options.prompt?.trim() || "";
+  const finalOutput = options.finalOutput?.trim() || "";
+  const errorMessage = options.errorMessage?.trim() || "";
+  const fallbackTimestamp = options.updatedAt ?? reasoningItems[reasoningItems.length - 1]?.updatedAt ?? "1970-01-01T00:00:00.000Z";
+  let hasResultItem = false;
+  let hasErrorItem = false;
+  let pendingProcessItems: TimelineCardModel[] = [];
+
+  for (const answer of sortAnswers(options.answers ?? [])) {
+    const bucket = answersByQuestionId.get(answer.questionId) ?? [];
+    bucket.push(answer);
+    answersByQuestionId.set(answer.questionId, bucket);
+  }
+
+  if (prompt) {
+    streamItems.push({
+      id: `user-prompt-${options.runId ?? "standalone"}`,
+      runId: options.runId ?? "standalone-run",
+      kind: "user_prompt",
+      title: "You",
+      summary: prompt,
+      createdAt: reasoningItems[0]?.createdAt ?? fallbackTimestamp,
+      updatedAt: reasoningItems[0]?.createdAt ?? fallbackTimestamp,
+      primaryType: "user_prompt",
+      processItems: [],
+      processSummary: ""
+    });
+  }
+
+  for (const item of reasoningItems) {
+    if (item.type === "thinking" || item.type === "tool_call") {
+      pendingProcessItems.push(item);
+      continue;
+    }
+
+    if (item.type === "question") {
+      streamItems.push({
+        id: item.id,
+        runId: item.runId,
+        kind: "assistant_question",
+        title: item.title || "Assistant",
+        summary: createQuestionSummary(item),
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        primaryType: "question",
+        processItems: pendingProcessItems,
+        processSummary: createReasoningSummary(pendingProcessItems),
+        question: item.question,
+        pendingQuestion: item.question?.questionId === options.pendingQuestionId
+      });
+      pendingProcessItems = [];
+
+      for (const answer of answersByQuestionId.get(item.question?.questionId ?? "") ?? []) {
+        streamItems.push({
+          id: answer.id,
+          runId: item.runId,
+          kind: "user_answer",
+          title: "You",
+          summary: answer.answer,
+          createdAt: answer.submittedAt,
+          updatedAt: answer.submittedAt,
+          primaryType: "user_answer",
+          processItems: [],
+          processSummary: "",
+          answer
+        });
+      }
+      continue;
+    }
+
+    if (item.type === "result") {
+      hasResultItem = true;
+      streamItems.push({
+        id: item.id,
+        runId: item.runId,
+        kind: "assistant_result",
+        title: "Assistant",
+        summary: item.summary || finalOutput,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        primaryType: "result",
+        processItems: pendingProcessItems,
+        processSummary: createReasoningSummary(pendingProcessItems)
+      });
+      pendingProcessItems = [];
+      continue;
+    }
+
+    hasErrorItem = true;
+    streamItems.push({
+      id: item.id,
+      runId: item.runId,
+      kind: "assistant_error",
+      title: "Assistant",
+      summary: item.summary || errorMessage,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      primaryType: "error",
+      processItems: pendingProcessItems,
+      processSummary: createReasoningSummary(pendingProcessItems)
+    });
+    pendingProcessItems = [];
+  }
+
+  if (pendingProcessItems.length) {
+    streamItems.push({
+      id: `assistant-progress-${options.runId ?? "standalone"}-${pendingProcessItems[pendingProcessItems.length - 1]?.id ?? "tail"}`,
+      runId: options.runId ?? pendingProcessItems[0]?.runId ?? "standalone-run",
+      kind: "assistant_progress",
+      title: "Assistant",
+      summary: createProgressSummary(pendingProcessItems),
+      createdAt: pendingProcessItems[0]?.createdAt ?? options.updatedAt ?? new Date().toISOString(),
+      updatedAt: pendingProcessItems[pendingProcessItems.length - 1]?.updatedAt ?? options.updatedAt ?? new Date().toISOString(),
+      primaryType: pendingProcessItems[pendingProcessItems.length - 1]?.type ?? "thinking",
+      processItems: pendingProcessItems,
+      processSummary: createReasoningSummary(pendingProcessItems)
+    });
+    pendingProcessItems = [];
+  }
+
+  if (!hasResultItem && finalOutput) {
+    streamItems.push({
+      id: `synthetic-result-${options.runId ?? "standalone"}`,
+      runId: options.runId ?? "standalone-run",
+      kind: "assistant_result",
+      title: "Assistant",
+      summary: finalOutput,
+      createdAt: fallbackTimestamp,
+      updatedAt: fallbackTimestamp,
+      primaryType: "result",
+      processItems: [],
+      processSummary: ""
+    });
+  }
+
+  if (!hasErrorItem && options.status === "error" && errorMessage) {
+    streamItems.push({
+      id: `synthetic-error-${options.runId ?? "standalone"}`,
+      runId: options.runId ?? "standalone-run",
+      kind: "assistant_error",
+      title: "Assistant",
+      summary: errorMessage,
+      createdAt: fallbackTimestamp,
+      updatedAt: fallbackTimestamp,
+      primaryType: "error",
+      processItems: [],
+      processSummary: ""
+    });
+  }
+
+  const lastItem = streamItems[streamItems.length - 1] ?? null;
+  if (!hasResultItem && !hasErrorItem && (options.status === "streaming" || options.status === "waiting_for_answer")) {
+    const alreadyHasPendingQuestion = lastItem?.kind === "assistant_question" && lastItem.pendingQuestion;
+    if (!alreadyHasPendingQuestion) {
+      const statusSummary = options.status === "waiting_for_answer"
+        ? "助手正在等待你的补充信息。"
+        : "正在生成回答…";
+      streamItems.push({
+        id: `synthetic-progress-${options.runId ?? "standalone"}`,
+        runId: options.runId ?? lastItem?.runId ?? "standalone-run",
+        kind: "assistant_progress",
+        title: "Assistant",
+        summary: statusSummary,
+        createdAt: lastItem?.updatedAt ?? fallbackTimestamp,
+        updatedAt: lastItem?.updatedAt ?? fallbackTimestamp,
+        primaryType: "thinking",
+        processItems: [],
+        processSummary: ""
+      });
+    }
+  }
+
+  return streamItems;
 }
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */

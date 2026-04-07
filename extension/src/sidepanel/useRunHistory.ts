@@ -39,6 +39,10 @@ export function useRunHistory() {
     setSelectedHistoryDetail(await historyStore.getRunDetail(runId));
   }
 
+  async function clearSelectedRun() {
+    setSelectedHistoryDetail(null);
+  }
+
   useEffect(() => {
     refresh().catch(() => undefined);
   }, []);
@@ -50,6 +54,7 @@ export function useRunHistory() {
     saveEvent,
     saveAnswer,
     selectRun,
+    clearSelectedRun,
     refresh,
     setSelectedHistoryDetail
   }), [history, selectedHistoryDetail]);

@@ -4,7 +4,7 @@ import { createRunEventStream, submitQuestionAnswer } from "../shared/api";
 import { toDisplayMessage } from "../shared/errors";
 import { createDefaultFieldTemplates, createDefaultRule, createId } from "../shared/rules";
 import { initialAssistantState } from "../shared/state";
-import type { NormalizedRunEvent, QuestionPayload, RunRecord } from "../shared/protocol";
+import type { NormalizedRunEvent, RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
 import { ReasoningTimeline } from "./reasoningTimelineView";
@@ -49,139 +49,6 @@ function toTimestamp(value: string | null | undefined) {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-function getLatestEventMessage(events: NormalizedRunEvent[], type: Extract<NormalizedRunEvent["type"], "result" | "error">) {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event?.type !== type) {
-      continue;
-    }
-
-    const message = event.message.trim();
-    if (message) {
-      return message;
-    }
-  }
-
-  return "";
-}
-
-function getLatestEvent(events: NormalizedRunEvent[], type: Extract<NormalizedRunEvent["type"], "result" | "error">) {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event?.type !== type) {
-      continue;
-    }
-
-    const message = event.message.trim();
-    if (message) {
-      return event;
-    }
-  }
-
-  return null;
-}
-
-function resolveAssistantReply(options: {
-  events: NormalizedRunEvent[];
-  finalOutput?: string | null;
-  errorMessage?: string | null;
-  status?: RunRecord["status"] | AssistantState["status"];
-  updatedAt?: string | null;
-}) {
-  const latestResult = getLatestEvent(options.events, "result");
-  const latestError = getLatestEvent(options.events, "error");
-  const finalOutput = options.finalOutput?.trim() || latestResult?.message.trim() || "";
-
-  if (finalOutput) {
-    return {
-      kind: "assistant" as const,
-      message: finalOutput,
-      updatedAt: options.updatedAt ?? latestResult?.createdAt ?? null,
-      muted: false
-    };
-  }
-
-  const errorMessage = options.errorMessage?.trim() || latestError?.message.trim() || "";
-  if (options.status === "error" && errorMessage) {
-    return {
-      kind: "error" as const,
-      message: errorMessage,
-      updatedAt: options.updatedAt ?? latestError?.createdAt ?? null,
-      muted: false
-    };
-  }
-
-  if (options.status === "waiting_for_answer") {
-    return {
-      kind: "assistant" as const,
-      message: "助手正在等待你的补充信息。",
-      updatedAt: options.updatedAt ?? null,
-      muted: true
-    };
-  }
-
-  if (options.status === "streaming") {
-    return {
-      kind: "assistant" as const,
-      message: "正在生成回答…",
-      updatedAt: options.updatedAt ?? null,
-      muted: true
-    };
-  }
-
-  return null;
-}
-
-function buildConversationEvents(options: {
-  runId?: string | null;
-  events: NormalizedRunEvent[];
-  finalOutput?: string | null;
-  errorMessage?: string | null;
-  status?: RunRecord["status"] | AssistantState["status"];
-  updatedAt?: string | null;
-  pendingQuestionId?: string | null;
-}) {
-  const events = [...options.events];
-  const finalOutput = options.finalOutput?.trim() || getLatestEventMessage(events, "result");
-  const errorMessage = options.errorMessage?.trim() || getLatestEventMessage(events, "error");
-  const lastResult = [...events].reverse().find((event) => event.type === "result" && event.message.trim());
-  const lastError = [...events].reverse().find((event) => event.type === "error" && event.message.trim());
-  const lastEvent = events[events.length - 1];
-
-  if (finalOutput && (!lastResult || lastResult.message.trim() !== finalOutput)) {
-    events.push({
-      id: `synthetic-result-${options.runId ?? "standalone"}`,
-      runId: options.runId ?? lastResult?.runId ?? lastError?.runId ?? "standalone-run",
-      type: "result",
-      createdAt: options.updatedAt ?? lastResult?.createdAt ?? new Date().toISOString(),
-      sequence: (events[events.length - 1]?.sequence ?? 0) + 1,
-      message: finalOutput,
-      title: "分析结果"
-    });
-  } else if (options.status === "error" && errorMessage && (!lastError || lastError.message.trim() !== errorMessage)) {
-    events.push({
-      id: `synthetic-error-${options.runId ?? "standalone"}`,
-      runId: options.runId ?? lastError?.runId ?? lastResult?.runId ?? "standalone-run",
-      type: "error",
-      createdAt: options.updatedAt ?? lastError?.createdAt ?? new Date().toISOString(),
-      sequence: (events[events.length - 1]?.sequence ?? 0) + 1,
-      message: errorMessage,
-      title: "运行失败"
-    });
-  } else if (options.status === "streaming" && lastEvent?.type === "question" && options.pendingQuestionId === null) {
-    events.push({
-      id: `synthetic-thinking-${options.runId ?? "standalone"}`,
-      runId: options.runId ?? lastEvent.runId ?? "standalone-run",
-      type: "thinking",
-      createdAt: options.updatedAt ?? lastEvent.createdAt ?? new Date().toISOString(),
-      sequence: (events[events.length - 1]?.sequence ?? 0) + 1,
-      message: "",
-      title: "处理中"
-    });
-  }
-
-  return events;
-}
 
 export function mergeStateUpdate(current: AssistantState, payload: AssistantState, history: AssistantState["history"], selectedHistoryDetail: AssistantState["selectedHistoryDetail"]): AssistantState {
   const mergedState: AssistantState = {
@@ -275,69 +142,6 @@ async function sendMessage<T>(message: RuntimeMessage): Promise<T> {
   return chrome.runtime.sendMessage(message) as Promise<T>;
 }
 
-function QuestionCard({ question, onSubmit }: { question: QuestionPayload; onSubmit: (answer: { answer: string; choiceId?: string }) => void }) {
-  const [choiceId, setChoiceId] = useState<string>(question.options[0]?.id ?? "");
-  const [freeText, setFreeText] = useState("");
-
-  return (
-    <article className="question-card">
-      <h3>{question.title}</h3>
-      <p>{question.message}</p>
-      {question.options.length ? (
-        <div className="question-options">
-          {question.options.map((option) => (
-            <label key={option.id} className="radio-row">
-              <input type="radio" checked={choiceId === option.id} onChange={() => setChoiceId(option.id)} />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </div>
-      ) : null}
-      {question.allowFreeText ? (
-        <textarea value={freeText} placeholder={question.placeholder ?? "请输入答案"} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setFreeText(event.target.value)} />
-      ) : null}
-      <button onClick={() => onSubmit({ answer: freeText || question.options.find((item) => item.id === choiceId)?.value || "", choiceId: choiceId || undefined })}>
-        提交回答
-      </button>
-    </article>
-  );
-}
-
-function AssistantReplyTurn({
-  reply,
-  fallbackTimestamp
-}: {
-  reply: NonNullable<ReturnType<typeof resolveAssistantReply>>;
-  fallbackTimestamp?: string | null;
-}) {
-  const timestamp = reply.updatedAt ?? fallbackTimestamp ?? null;
-  const roleLabel = reply.kind === "error" ? "Assistant failed" : "Assistant";
-  const avatarLabel = reply.kind === "error" ? "!" : "AI";
-  const className = [
-    "conversation-turn",
-    reply.kind === "error" ? "turn-error" : "turn-assistant"
-  ].join(" ");
-  const messageClassName = [
-    "conversation-message",
-    reply.muted ? "conversation-message-muted" : ""
-  ].filter(Boolean).join(" ");
-
-  return (
-    <article className={className}>
-      <div className="conversation-avatar" aria-hidden="true">{avatarLabel}</div>
-      <div className="conversation-bubble">
-        <div className="conversation-turn-header">
-          <div className="conversation-turn-heading">
-            <strong>{roleLabel}</strong>
-          </div>
-          {timestamp ? <small>{new Date(timestamp).toLocaleTimeString()}</small> : null}
-        </div>
-        <p className={messageClassName}>{reply.message}</p>
-      </div>
-    </article>
-  );
-}
-
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL */
 export function App() {
   const [state, setState] = useState<AssistantState>(initialAssistantState);
@@ -351,7 +155,7 @@ export function App() {
   const [prompt, setPrompt] = useState(initialAssistantState.runPrompt);
   const [streamError, setStreamError] = useState<string>("");
   const eventSourceRef = useRef<EventSource | null>(null);
-  const { history, selectedHistoryDetail, saveRun, saveEvent, saveAnswer, selectRun, refresh } = useRunHistory();
+  const { history, selectedHistoryDetail, saveRun, saveEvent, saveAnswer, selectRun, refresh, clearSelectedRun } = useRunHistory();
   const historyRef = useRef(history);
   const selectedHistoryDetailRef = useRef(selectedHistoryDetail);
 
@@ -523,6 +327,7 @@ export function App() {
   async function startStreamingRun() {
     setStreamError("");
     eventSourceRef.current?.close();
+    clearSelectedRun().catch(() => undefined);
 
     const response = await sendMessage<{ ok: boolean; data?: { runId: string; currentRun: RunRecord } ; error?: { message: string } }>({
       type: "START_RUN",
@@ -652,213 +457,156 @@ export function App() {
   const errorDescription = state.error ? toDisplayMessage(state.error) : state.errorMessage || streamError;
   const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent);
   const livePrompt = state.currentRun?.prompt ?? prompt;
-  const historyPrompt = selectedHistoryDetail?.run.prompt ?? "";
-  const liveConversationEvents = buildConversationEvents({
-    runId: state.currentRun?.runId ?? state.stream.runId,
-    events: state.runEvents,
-    finalOutput: state.currentRun?.finalOutput,
-    errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError,
-    status: state.currentRun?.status ?? state.status,
-    updatedAt: state.currentRun?.updatedAt,
-    pendingQuestionId: state.stream.pendingQuestionId
-  });
-  const liveAssistantReply = resolveAssistantReply({
-    events: liveConversationEvents,
-    finalOutput: state.currentRun?.finalOutput,
-    errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError,
-    status: state.currentRun?.status ?? state.status,
-    updatedAt: state.currentRun?.updatedAt
-  });
-  const historyConversationEvents = selectedHistoryDetail ? buildConversationEvents({
-    runId: selectedHistoryDetail.run.runId,
-    events: selectedHistoryDetail.events,
-    finalOutput: selectedHistoryDetail.run.finalOutput,
-    errorMessage: selectedHistoryDetail.run.errorMessage,
-    status: selectedHistoryDetail.run.status,
-    updatedAt: selectedHistoryDetail.run.updatedAt
-  }) : null;
-  const historyAssistantReply = selectedHistoryDetail ? resolveAssistantReply({
-    events: historyConversationEvents ?? [],
-    finalOutput: selectedHistoryDetail.run.finalOutput,
-    errorMessage: selectedHistoryDetail.run.errorMessage,
-    status: selectedHistoryDetail.run.status,
-    updatedAt: selectedHistoryDetail.run.updatedAt
-  }) : null;
 
   return (
-    <main className="app-shell">
-      <header className="app-header">
+    <main className="app-shell chat-app-shell">
+      <header className="app-header chat-app-header">
         <div>
           <h1>AI Web Assistant</h1>
-          <p>Chrome Side Panel + Python Adapter SSE</p>
+          <p>conversation-first / 单一连续对话流</p>
         </div>
         <span className="mode-chip">{isEmbedded || state.uiMode === "embedded" ? "Embedded" : "Side Panel"}</span>
       </header>
 
-      <section className="panel-block">
-        <div className="section-header compact">
-          <h2>对话</h2>
-          <small>conversation-first / 渐进回复</small>
-        </div>
-        <div className="conversation-composer">
-          <label>
-            <span>Prompt</span>
-            <textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} rows={4} />
-          </label>
-          <div className="conversation-composer-actions">
-            <button disabled={isBusy} onClick={() => startStreamingRun()}>{isBusy ? "处理中..." : "采集并开始 SSE Run"}</button>
-            <small className="detail-muted">保留事件流能力，但默认按对话主线展示。</small>
+      <section className="panel-block chat-primary-panel">
+        <div className="section-header compact chat-primary-header">
+          <div>
+            <h2>对话</h2>
+            <small>用户提问、过程摘要、问题选项与最终回答统一展示</small>
           </div>
+          {(state.stream.runId || state.currentRun?.runId) ? <small className="detail-muted">Run：{state.currentRun?.runId ?? state.stream.runId}</small> : null}
         </div>
 
-        <div className="conversation-mainline">
+        <div className="conversation-mainline chat-primary-mainline">
           {hasLiveConversation ? (
-            <>
-              {livePrompt ? (
-                <article className="conversation-turn turn-user">
-                  <div className="conversation-avatar" aria-hidden="true">你</div>
-                  <div className="conversation-bubble user-bubble">
-                    <div className="conversation-turn-header">
-                      <div className="conversation-turn-heading">
-                        <strong>You</strong>
-                      </div>
-                      {state.currentRun ? <small>{new Date(state.currentRun.startedAt).toLocaleTimeString()}</small> : null}
-                    </div>
-                    <p className="conversation-message">{livePrompt}</p>
-                  </div>
-                </article>
-              ) : null}
-
-              {liveAssistantReply ? (
-                <AssistantReplyTurn
-                  reply={liveAssistantReply}
-                  fallbackTimestamp={state.currentRun?.updatedAt ?? state.currentRun?.startedAt}
-                />
-              ) : null}
-
-              {(state.currentRun || state.runEvents.length) ? (
-                <ReasoningTimeline
-                  events={liveConversationEvents}
-                  live
-                  streamStatus={state.stream.status}
-                  runStatus={state.currentRun?.status}
-                  collapsible
-                  defaultCollapsed
-                  emptyText="正在生成回答…"
-                />
-              ) : null}
-
-              {questionEvent?.question ? <QuestionCard question={questionEvent.question} onSubmit={handleQuestionSubmit} /> : null}
-            </>
+            <ReasoningTimeline
+              runId={state.currentRun?.runId ?? state.stream.runId}
+              prompt={livePrompt}
+              events={state.runEvents}
+              answers={state.answers}
+              live
+              streamStatus={state.stream.status}
+              runStatus={state.currentRun?.status}
+              finalOutput={state.currentRun?.finalOutput}
+              errorMessage={state.currentRun?.errorMessage ?? state.errorMessage ?? streamError}
+              updatedAt={state.currentRun?.updatedAt ?? state.currentRun?.startedAt}
+              pendingQuestionId={state.stream.pendingQuestionId}
+              defaultReasoningCollapsed
+              emptyText="正在生成回答…"
+              onQuestionSubmit={handleQuestionSubmit}
+              questionSubmitDisabled={!questionEvent?.question}
+            />
           ) : (
             <p className="empty-state">提交 prompt 后，这里会展示用户消息与助手回复。</p>
           )}
         </div>
-      </section>
 
-      <section className="context-grid">
-        <section className="status-card">
-          <strong>当前页面上下文</strong>
-          <small>{activeContext?.url ?? "尚未读取当前标签页"}</small>
-          <small>{activeContext?.message ?? ""}</small>
-          <div className="context-actions">
-            <span className={`pill ${activeContext?.matchedRule ? "pill-success" : "pill-muted"}`}>
-              {activeContext?.matchedRule ? `命中规则：${activeContext.matchedRule.name}` : "未命中规则"}
-            </span>
-            <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
-              {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
-            </span>
+        <div className="conversation-composer docked-composer">
+          <label>
+            <span>{questionEvent?.question ? "继续回答或追问" : "发送消息"}</span>
+            <textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} rows={4} placeholder="输入你的问题，或继续追问…" />
+          </label>
+          <div className="conversation-composer-actions">
+            <button disabled={isBusy || !prompt.trim()} onClick={() => startStreamingRun()}>{isBusy ? "处理中..." : "采集并开始 SSE Run"}</button>
+            <small className="detail-muted">内联选项回答与自由输入提问可并行保留。</small>
           </div>
-          {!activeContext?.permissionGranted && activeContext?.canRequestPermission ? (
-            <button className="secondary" disabled={requestingPermission} onClick={() => requestPermission()}>
-              {requestingPermission ? "授权中..." : "授权当前域名"}
-            </button>
-          ) : null}
-          {contextError ? <p className="error-text">{contextError}</p> : null}
-          <small>用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
-        </section>
-
-        <section className="status-card">
-          <strong>状态：</strong>
-          <span>{state.status}</span>
-          {state.stream.runId ? <small>流连接：{state.stream.status}</small> : null}
-          {state.lastUpdatedAt ? <small>更新时间：{new Date(state.lastUpdatedAt).toLocaleString()}</small> : null}
-          {state.currentRun ? <small>Run ID：{state.currentRun.runId}</small> : null}
-          {errorTitle ? <small>错误域：{errorTitle}</small> : null}
-          {errorDescription ? <p className="error-text">{errorDescription}</p> : null}
-        </section>
-
-        <section className="panel-block">
-          <h2>采集结果摘要</h2>
-          {state.capturedFields ? (
-            <dl className="field-list compact-list">
-              <div className="field-item">
-                <dt>software_version</dt>
-                <dd>{state.capturedFields.software_version || <span className="empty-value">(empty)</span>}</dd>
-              </div>
-              <div className="field-item">
-                <dt>selected_sr</dt>
-                <dd>{state.capturedFields.selected_sr || <span className="empty-value">(empty)</span>}</dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="empty-state">尚未采集任何字段。</p>
-          )}
-        </section>
+        </div>
       </section>
 
-      <section className="panel-block">
-        <div className="section-header compact">
-          <h2>历史记录</h2>
-          <button className="secondary" onClick={() => refresh()}>刷新</button>
-        </div>
-        <div className="history-layout">
-          <aside className="history-list">
-            {history.map((item) => (
-              <button key={item.runId} className={`rule-list-item ${selectedHistoryDetail?.run.runId === item.runId ? "active" : ""}`} onClick={() => selectRun(item.runId)}>
-                <strong>{item.selectedSr || "(no SR)"}</strong>
-                <small>{item.softwareVersion || "(no version)"} · {item.username}</small>
-              </button>
-            ))}
-          </aside>
-          <div className="history-detail">
-            {selectedHistoryDetail ? (
-              <>
-                {historyPrompt ? (
-                  <article className="conversation-turn turn-user history-turn-user">
-                    <div className="conversation-avatar" aria-hidden="true">你</div>
-                    <div className="conversation-bubble user-bubble">
-                      <div className="conversation-turn-header">
-                        <div className="conversation-turn-heading">
-                          <strong>You</strong>
-                        </div>
-                        <small>{new Date(selectedHistoryDetail.run.startedAt).toLocaleTimeString()}</small>
-                      </div>
-                      <p className="conversation-message">{historyPrompt}</p>
-                    </div>
-                  </article>
-                ) : null}
-                {historyAssistantReply ? (
-                  <AssistantReplyTurn
-                    reply={historyAssistantReply}
-                    fallbackTimestamp={selectedHistoryDetail.run.updatedAt ?? selectedHistoryDetail.run.startedAt}
-                  />
-                ) : null}
+      <section className="secondary-surface-stack">
+        <details className="secondary-panel utility-panel">
+          <summary>
+            <span>上下文与运行状态</span>
+            <small>默认折叠</small>
+          </summary>
+          <div className="context-grid demoted-grid">
+            <section className="status-card demoted-card">
+              <strong>当前页面上下文</strong>
+              <small>{activeContext?.url ?? "尚未读取当前标签页"}</small>
+              <small>{activeContext?.message ?? ""}</small>
+              <div className="context-actions">
+                <span className={`pill ${activeContext?.matchedRule ? "pill-success" : "pill-muted"}`}>
+                  {activeContext?.matchedRule ? `命中规则：${activeContext.matchedRule.name}` : "未命中规则"}
+                </span>
+                <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
+                  {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
+                </span>
+              </div>
+              {!activeContext?.permissionGranted && activeContext?.canRequestPermission ? (
+                <button className="secondary" disabled={requestingPermission} onClick={() => requestPermission()}>
+                  {requestingPermission ? "授权中..." : "授权当前域名"}
+                </button>
+              ) : null}
+              {contextError ? <p className="error-text">{contextError}</p> : null}
+              <small>用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
+            </section>
+
+            <section className="status-card demoted-card">
+              <strong>状态：</strong>
+              <span>{state.status}</span>
+              {state.stream.runId ? <small>流连接：{state.stream.status}</small> : null}
+              {state.lastUpdatedAt ? <small>更新时间：{new Date(state.lastUpdatedAt).toLocaleString()}</small> : null}
+              {state.currentRun ? <small>Run ID：{state.currentRun.runId}</small> : null}
+              {errorTitle ? <small>错误域：{errorTitle}</small> : null}
+              {errorDescription ? <p className="error-text">{errorDescription}</p> : null}
+            </section>
+
+            <section className="panel-block demoted-card legacy-summary-card">
+              <h2>采集结果摘要</h2>
+              {state.capturedFields ? (
+                <dl className="field-list compact-list">
+                  <div className="field-item">
+                    <dt>software_version</dt>
+                    <dd>{state.capturedFields.software_version || <span className="empty-value">(empty)</span>}</dd>
+                  </div>
+                  <div className="field-item">
+                    <dt>selected_sr</dt>
+                    <dd>{state.capturedFields.selected_sr || <span className="empty-value">(empty)</span>}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="empty-state">尚未采集任何字段。</p>
+              )}
+            </section>
+          </div>
+        </details>
+
+        <details className="secondary-panel history-secondary-panel">
+          <summary>
+            <span>历史记录</span>
+            <small>{history.length} 条</small>
+          </summary>
+          <div className="section-header compact history-secondary-header">
+            <small className="detail-muted">历史详情沿用同一对话流呈现。</small>
+            <button className="secondary" onClick={() => refresh()}>刷新</button>
+          </div>
+          <div className="history-layout demoted-history-layout">
+            <aside className="history-list">
+              {history.length ? history.map((item) => (
+                <button key={item.runId} className={`rule-list-item ${selectedHistoryDetail?.run.runId === item.runId ? "active" : ""}`} onClick={() => selectRun(item.runId)}>
+                  <strong>{item.selectedSr || "(no SR)"}</strong>
+                  <small>{item.softwareVersion || "(no version)"} · {item.username}</small>
+                </button>
+              )) : <p className="empty-state">暂无历史记录。</p>}
+            </aside>
+            <div className="history-detail">
+              {selectedHistoryDetail ? (
                 <ReasoningTimeline
-                  events={historyConversationEvents ?? []}
+                  runId={selectedHistoryDetail.run.runId}
+                  prompt={selectedHistoryDetail.run.prompt}
+                  events={selectedHistoryDetail.events}
+                  answers={selectedHistoryDetail.answers}
                   runStatus={selectedHistoryDetail.run.status}
-                  collapsible
-                  defaultCollapsed
+                  finalOutput={selectedHistoryDetail.run.finalOutput}
+                  errorMessage={selectedHistoryDetail.run.errorMessage}
+                  updatedAt={selectedHistoryDetail.run.updatedAt ?? selectedHistoryDetail.run.startedAt}
+                  defaultReasoningCollapsed
                   emptyText="尚未完成"
                 />
-                <div className="field-list compact-list">
-                  <div className="field-item"><dt>software_version</dt><dd>{selectedHistoryDetail.run.softwareVersion}</dd></div>
-                  <div className="field-item"><dt>selected_sr</dt><dd>{selectedHistoryDetail.run.selectedSr}</dd></div>
-                </div>
-              </>
-            ) : <p className="empty-state">选择一条历史记录查看详情。</p>}
+              ) : <p className="empty-state">选择一条历史记录查看详情。</p>}
+            </div>
           </div>
-        </div>
+        </details>
       </section>
 
       <section className="panel-block">

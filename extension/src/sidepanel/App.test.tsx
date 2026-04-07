@@ -13,6 +13,7 @@ const {
   mockSaveEvent,
   mockSaveAnswer,
   mockSelectRun,
+  mockClearSelectedRun,
   mockRunHistoryState,
   mockStreamClose
 } = vi.hoisted(() => ({
@@ -23,6 +24,7 @@ const {
   mockSaveEvent: vi.fn(async () => undefined),
   mockSaveAnswer: vi.fn(async () => undefined),
   mockSelectRun: vi.fn(async () => undefined),
+  mockClearSelectedRun: vi.fn(async () => undefined),
   mockStreamClose: vi.fn(),
   mockRunHistoryState: {
     history: [] as RunRecord[],
@@ -58,6 +60,7 @@ vi.mock("./useRunHistory", () => ({
     saveEvent: mockSaveEvent,
     saveAnswer: mockSaveAnswer,
     selectRun: mockSelectRun,
+    clearSelectedRun: mockClearSelectedRun,
     refresh: mockRefreshHistory,
     setSelectedHistoryDetail: vi.fn()
   })
