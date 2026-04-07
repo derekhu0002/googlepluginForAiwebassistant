@@ -94,7 +94,6 @@ def make_sse_response(events: list[dict]) -> httpx.Response:
 def test_real_contract_uses_session_prompt_async_and_question_reply() -> None:
     session_payload = {
         "id": "ses-1",
-        "agent": "TARA_analyst",
         "slug": "slug",
         "projectID": "proj",
         "directory": "/repo",
@@ -106,11 +105,12 @@ def test_real_contract_uses_session_prompt_async_and_question_reply() -> None:
         {"directory": "/repo", "payload": {"type": "session.status", "properties": {"sessionID": "ses-1", "status": {"type": "busy"}}}},
         {"directory": "/repo", "payload": {"type": "question.asked", "properties": {"id": "req-1", "sessionID": "ses-1", "questions": [{"header": "请选择优先级", "question": "当前请求优先级是什么？", "options": [{"label": "高", "description": "高优"}], "custom": True}]}}},
         {"directory": "/repo", "payload": {"type": "question.replied", "properties": {"sessionID": "ses-1", "requestID": "req-1", "answers": [["高"]]}}},
-        {"directory": "/repo", "payload": {"type": "message.part.delta", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "partID": "part-1", "field": "text", "delta": "partial result"}}},
+        {"directory": "/repo", "payload": {"type": "message.part.delta", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "partID": "part-1", "field": "text", "delta": "partial result"}}},
         {"directory": "/repo", "payload": {"type": "session.idle", "properties": {"sessionID": "ses-1"}}},
     ]
     messages_payload = [
         {
+            "agent": "TARA_analyst",
             "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
             "parts": [{"type": "text", "text": "final answer from session"}],
         }
@@ -152,11 +152,12 @@ def test_real_contract_uses_session_prompt_async_and_question_reply() -> None:
         assert clients[0].calls[0][1] == "/session"
         assert clients[0].calls[0][3] == {
             "title": "SR SR-1",
-            "agent": "TARA_analyst",
-            "agentId": "TARA_analyst",
-            "primaryAgent": "TARA_analyst",
         }
         assert clients[1].calls[0][1] == "/session/ses-1/prompt_async"
+        assert clients[1].calls[0][3] == {
+            "agent": "TARA_analyst",
+            "parts": [{"type": "text", "text": "hello from adapter"}],
+        }
         assert clients[2].calls[0][1] == "/global/event"
         assert clients[3].calls[0][1] == "/question/req-1/reply"
         assert clients[4].calls[0][1] == "/session/ses-1/message"
@@ -269,7 +270,7 @@ def test_primary_agent_guard_accepts_valid_configuration(tmp_path: Path) -> None
     adapter._ensure_tara_primary_agent()
 
 
-def test_real_contract_verifies_session_agent_when_create_response_omits_agent() -> None:
+def test_real_contract_allows_session_payload_without_agent_confirmation() -> None:
     session_payload = {
         "id": "ses-1",
         "slug": "slug",
@@ -279,17 +280,10 @@ def test_real_contract_verifies_session_agent_when_create_response_omits_agent()
         "version": "1.3.10",
         "time": {"created": 1, "updated": 1},
     }
-    verified_payload = {
-        **session_payload,
-        "agent": "TARA_analyst",
-    }
 
     clients: list[FakeAsyncClient] = []
     response_sets = [
-        [
-            ("POST", "/session", make_response("POST", "/session", json_body=session_payload)),
-            ("GET", "/session/ses-1", make_response("GET", "/session/ses-1", json_body=verified_payload)),
-        ],
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
         [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
     ]
 
@@ -303,16 +297,15 @@ def test_real_contract_verifies_session_agent_when_create_response_omits_agent()
         run_id = await adapter.start_run(create_request())
 
         assert run_id.startswith("run-")
-        assert clients[0].calls[1][1] == "/session/ses-1"
         assert clients[1].calls[0][1] == "/session/ses-1/prompt_async"
+        assert clients[0].calls == [("POST", "/session", {"directory": "/mnt/d/projects/googlepluginForAiwebassistant"}, {"title": "SR SR-1"})]
 
     anyio.run(scenario)
 
 
-def test_real_contract_fails_when_remote_session_reports_wrong_primary_agent() -> None:
+def test_real_contract_fails_when_message_event_reports_wrong_primary_agent() -> None:
     session_payload = {
         "id": "ses-1",
-        "agent": "other_agent",
         "slug": "slug",
         "projectID": "proj",
         "directory": "/repo",
@@ -321,8 +314,20 @@ def test_real_contract_fails_when_remote_session_reports_wrong_primary_agent() -
         "time": {"created": 1, "updated": 1},
     }
 
+    response_sets = [
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [(
+            "GET",
+            "/global/event",
+            make_sse_response([
+                {"directory": "/repo", "payload": {"type": "message.part.delta", "agent": "other_agent", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "partID": "part-1", "field": "text", "delta": "partial result"}}}
+            ]),
+        )],
+    ]
+
     def factory(_timeout):
-        return FakeAsyncClient([("POST", "/session", make_response("POST", "/session", json_body=session_payload))])
+        return FakeAsyncClient(response_sets.pop(0))
 
     async def scenario() -> None:
         adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
@@ -331,12 +336,12 @@ def test_real_contract_fails_when_remote_session_reports_wrong_primary_agent() -
 
         assert events[-1].type == "error"
         assert "other_agent" in events[-1].message
-        assert "primary agent" in events[-1].message
+        assert "event message.part.delta" in events[-1].message
 
     anyio.run(scenario)
 
 
-def test_real_contract_fails_when_remote_session_cannot_confirm_primary_agent() -> None:
+def test_real_contract_fails_when_assistant_message_reports_wrong_primary_agent() -> None:
     session_payload = {
         "id": "ses-1",
         "slug": "slug",
@@ -346,16 +351,29 @@ def test_real_contract_fails_when_remote_session_cannot_confirm_primary_agent() 
         "version": "1.3.10",
         "time": {"created": 1, "updated": 1},
     }
-    verification_payload = {
-        "id": "ses-1",
-        "slug": "slug",
-    }
+    messages_payload = [
+        {
+            "agent": "other_agent",
+            "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
+            "parts": [{"type": "text", "text": "final answer from session"}],
+        }
+    ]
+
+    response_sets = [
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [(
+            "GET",
+            "/global/event",
+            make_sse_response([
+                {"directory": "/repo", "payload": {"type": "session.idle", "properties": {"sessionID": "ses-1"}}}
+            ]),
+        )],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=messages_payload))],
+    ]
 
     def factory(_timeout):
-        return FakeAsyncClient([
-            ("POST", "/session", make_response("POST", "/session", json_body=session_payload)),
-            ("GET", "/session/ses-1", make_response("GET", "/session/ses-1", json_body=verification_payload)),
-        ])
+        return FakeAsyncClient(response_sets.pop(0))
 
     async def scenario() -> None:
         adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
@@ -363,6 +381,49 @@ def test_real_contract_fails_when_remote_session_cannot_confirm_primary_agent() 
         events = [event async for event in adapter.stream_events(run_id)]
 
         assert events[-1].type == "error"
-        assert "did not confirm primary agent" in events[-1].message
+        assert "message msg-1" in events[-1].message
+        assert "other_agent" in events[-1].message
+
+    anyio.run(scenario)
+
+
+def test_real_contract_does_not_fail_when_runtime_omits_agent_evidence() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+    sse_events = [
+        {"directory": "/repo", "payload": {"type": "message.part.delta", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "partID": "part-1", "field": "text", "delta": "partial result"}}},
+        {"directory": "/repo", "payload": {"type": "session.idle", "properties": {"sessionID": "ses-1"}}},
+    ]
+    messages_payload = [
+        {
+            "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
+            "parts": [{"type": "text", "text": "final answer without agent evidence"}],
+        }
+    ]
+
+    response_sets = [
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [("GET", "/global/event", make_sse_response(sse_events))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=messages_payload))],
+    ]
+
+    def factory(_timeout):
+        return FakeAsyncClient(response_sets.pop(0))
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(create_request())
+        events = [event async for event in adapter.stream_events(run_id)]
+
+        assert events[-1].type == "result"
+        assert events[-1].message == "final answer without agent evidence"
 
     anyio.run(scenario)

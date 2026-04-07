@@ -93,12 +93,9 @@ class OpencodeAdapter:
         title = f"SR {request.capture.get('selected_sr', '').strip() or 'analysis'}"
         return {
             "title": title,
-            "agent": REQUIRED_PRIMARY_AGENT,
-            "agentId": REQUIRED_PRIMARY_AGENT,
-            "primaryAgent": REQUIRED_PRIMARY_AGENT,
         }
 
-    def _extract_primary_agent_name(self, payload: Any) -> str | None:
+    def _extract_message_or_event_agent_name(self, payload: Any) -> str | None:
         if not isinstance(payload, dict):
             return None
 
@@ -106,9 +103,6 @@ class OpencodeAdapter:
             "agent",
             "agentId",
             "agentName",
-            "primaryAgent",
-            "primary_agent",
-            "default_agent",
         )
         for key in direct_keys:
             value = payload.get(key)
@@ -119,48 +113,27 @@ class OpencodeAdapter:
                 if isinstance(nested, str) and nested.strip():
                     return nested.strip()
 
-        nested_keys = ("config", "metadata", "info", "session")
+        nested_keys = ("metadata", "info", "message", "part", "properties")
         for key in nested_keys:
             nested_payload = payload.get(key)
-            nested_agent = self._extract_primary_agent_name(nested_payload)
+            nested_agent = self._extract_message_or_event_agent_name(nested_payload)
             if nested_agent:
                 return nested_agent
 
         return None
 
-    def _session_detail_endpoint(self, session_id: str) -> str:
-        return f"{self.settings.opencode_session_endpoint.rstrip('/')}/{session_id}"
+    def _record_primary_agent_evidence(self, run: dict[str, Any], payload: Any, *, source: str) -> None:
+        agent_name = self._extract_message_or_event_agent_name(payload)
+        if not agent_name:
+            return
 
-    async def _verify_session_primary_agent(self, client: httpx.AsyncClient, session_payload: dict[str, Any]) -> dict[str, Any]:
-        session_id = session_payload.get("id")
-        configured_agent = self._extract_primary_agent_name(session_payload)
-        if configured_agent:
-            if configured_agent != REQUIRED_PRIMARY_AGENT:
-                raise RuntimeError(
-                    f"TARA primary agent enforcement failed: remote session returned primary agent {configured_agent!r}, expected {REQUIRED_PRIMARY_AGENT!r}"
-                )
-            return session_payload
-
-        if not session_id:
-            raise RuntimeError("TARA primary agent enforcement failed: session create response did not include an id")
-
-        response = await client.get(self._session_detail_endpoint(session_id), params=self._query_params())
-        response.raise_for_status()
-        verification_payload = response.json()
-        verified_agent = self._extract_primary_agent_name(verification_payload)
-        if verified_agent != REQUIRED_PRIMARY_AGENT:
-            if verified_agent:
-                raise RuntimeError(
-                    f"TARA primary agent enforcement failed: remote session {session_id} reported primary agent {verified_agent!r}, expected {REQUIRED_PRIMARY_AGENT!r}"
-                )
+        if agent_name != REQUIRED_PRIMARY_AGENT:
             raise RuntimeError(
-                f"TARA primary agent enforcement failed: remote session {session_id} did not confirm primary agent {REQUIRED_PRIMARY_AGENT!r}"
+                f"TARA primary agent enforcement failed: {source} reported agent {agent_name!r}, expected {REQUIRED_PRIMARY_AGENT!r}"
             )
 
-        return {
-            **session_payload,
-            **(verification_payload if isinstance(verification_payload, dict) else {}),
-        }
+        run["confirmed_primary_agent"] = agent_name
+        run["primary_agent_evidence_source"] = source
 
     async def start_run(self, request: RunStartRequest) -> str:
         if not self.settings.use_mock_opencode:
@@ -182,6 +155,8 @@ class OpencodeAdapter:
             "assistant_message_id": None,
             "last_text": "",
             "result_emitted": False,
+            "confirmed_primary_agent": None,
+            "primary_agent_evidence_source": None,
         }
         self._runs[run_id] = run
 
@@ -266,11 +241,20 @@ class OpencodeAdapter:
             run["completed"] = True
             return
 
-        async for event in self._stream_real_events(run):
-            yield event
-            if event.type in {"result", "error"}:
-                run["completed"] = True
-                break
+        try:
+            async for event in self._stream_real_events(run):
+                yield event
+                if event.type in {"result", "error"}:
+                    run["completed"] = True
+                    break
+        except Exception as exc:
+            yield self._next_event(
+                run,
+                "error",
+                str(exc),
+                data={"opencode_mode": "real", "target": self.settings.opencode_base_url},
+            )
+            run["completed"] = True
 
     async def submit_answer(self, run_id: str, answer: QuestionAnswerRequest) -> None:
         run = self._runs[run_id]
@@ -370,7 +354,7 @@ class OpencodeAdapter:
             payload = response.json()
             if not isinstance(payload, dict) or not payload.get("id"):
                 raise ValueError("Invalid session create response")
-            return await self._verify_session_primary_agent(client, payload)
+            return payload
 
     async def _prompt_session(self, session_id: str, request: RunStartRequest) -> None:
         async with self._client_factory(30.0) as client:
@@ -378,6 +362,7 @@ class OpencodeAdapter:
                 self.settings.opencode_prompt_async_endpoint.format(session_id=session_id),
                 params=self._query_params(),
                 json={
+                    "agent": REQUIRED_PRIMARY_AGENT,
                     "parts": [{"type": "text", "text": request.prompt}],
                 },
             )
@@ -415,6 +400,9 @@ class OpencodeAdapter:
         payload = global_event.get("payload") or {}
         event_type = payload.get("type")
         properties = payload.get("properties") or {}
+
+        if isinstance(event_type, str) and event_type.startswith("message"):
+            self._record_primary_agent_evidence(run, payload, source=f"event {event_type}")
 
         if event_type == "session.status":
             status = properties.get("status") or {}
@@ -526,6 +514,17 @@ class OpencodeAdapter:
 
         if not isinstance(payload, list):
             return None
+
+        for index, item in enumerate(payload, start=1):
+            if not isinstance(item, dict):
+                continue
+            info = item.get("info") or {}
+            role = info.get("role") if isinstance(info, dict) else None
+            if role != "assistant":
+                continue
+            message_id = info.get("id") if isinstance(info, dict) else None
+            source = f"message {message_id}" if message_id else f"assistant message #{index}"
+            self._record_primary_agent_evidence(run, item, source=source)
 
         final_item = next(
             (
