@@ -2,7 +2,7 @@
 
 正式后端链路：Chrome Extension → Python FastAPI Adapter → opencode serve。
 
-默认 opencode serve 地址：`http://127.0.0.1:4096`
+默认 opencode serve 地址：`http://localhost:8123`
 
 - 默认主路径：真实 `opencode serve`
 - 默认健康检查：`GET /global/health`

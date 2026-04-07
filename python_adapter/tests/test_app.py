@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock
 
 from python_adapter.app import main
+from python_adapter.app.config import Settings
 from python_adapter.app.models import NormalizedRunEvent
 
 from python_adapter.app.main import app
@@ -114,13 +115,16 @@ def test_start_run_surfaces_session_agent_enforcement_error(monkeypatch) -> None
     }
 
 
-def test_health_exposes_runtime_defaults() -> None:
+def test_health_exposes_runtime_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("OPENCODE_BASE_URL", raising=False)
+    monkeypatch.setattr(main, "settings", Settings())
+
     response = client.get("/health")
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
-    assert payload["opencode_base_url"] == "http://127.0.0.1:4096"
+    assert payload["opencode_base_url"] == "http://localhost:8123"
     assert payload["opencode_health_endpoint"] == "/global/health"
     assert payload["opencode_global_event_endpoint"] == "/global/event"
     assert isinstance(payload["use_mock_opencode"], bool)

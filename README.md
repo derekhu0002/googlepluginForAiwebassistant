@@ -30,7 +30,7 @@ test_site/        本地联调测试站
 - npm 10+
 - Python 3.11+
 - Chrome 114+
-- 可选：本地 `opencode serve`，默认 `http://127.0.0.1:4096`
+- 可选：本地 `opencode serve`，默认 `http://localhost:8123`
 
 ## 安装依赖
 
@@ -60,7 +60,7 @@ uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8000 --rel
 
 ### opencode serve 配置
 
-- 默认 `OPENCODE_BASE_URL=http://127.0.0.1:4096`
+- 默认 `OPENCODE_BASE_URL=http://localhost:8123`
 - 默认直接走真实 `opencode serve`
 - 当前实现提供适配层封装：
   - `OPENCODE_GLOBAL_EVENT_ENDPOINT`

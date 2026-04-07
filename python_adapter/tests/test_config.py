@@ -7,11 +7,13 @@ def test_settings_default_to_real_opencode_and_canonical_log_path(monkeypatch) -
     monkeypatch.delenv("PYTHON_ADAPTER_USE_MOCK_OPENCODE", raising=False)
     monkeypatch.delenv("PYTHON_ADAPTER_ALLOW_MOCK_FALLBACK", raising=False)
     monkeypatch.delenv("PYTHON_ADAPTER_LOG_DIR", raising=False)
+    monkeypatch.delenv("OPENCODE_BASE_URL", raising=False)
 
     settings = Settings()
 
     assert settings.use_mock_opencode is False
     assert settings.allow_mock_fallback is False
+    assert settings.opencode_base_url == "http://localhost:8123"
     assert settings.log_dir == str(Path(__file__).resolve().parents[1] / "logs")
     assert settings.opencode_health_endpoint == "/global/health"
     assert settings.opencode_global_event_endpoint == "/global/event"
@@ -22,6 +24,7 @@ def test_settings_default_to_real_opencode_and_canonical_log_path(monkeypatch) -
 def test_settings_allow_explicit_mock_mode(monkeypatch) -> None:
     monkeypatch.setenv("PYTHON_ADAPTER_USE_MOCK_OPENCODE", "1")
     monkeypatch.setenv("PYTHON_ADAPTER_ALLOW_MOCK_FALLBACK", "1")
+    monkeypatch.delenv("OPENCODE_BASE_URL", raising=False)
 
     settings = Settings()
 

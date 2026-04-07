@@ -25,7 +25,7 @@ class Settings:
     port: int = field(default_factory=lambda: int(os.getenv("PYTHON_ADAPTER_PORT", "8000")))
     allowed_origins: list[str] = field(default_factory=list)
     api_key: str = field(default_factory=lambda: os.getenv("PYTHON_ADAPTER_API_KEY", ""))
-    opencode_base_url: str = field(default_factory=lambda: os.getenv("OPENCODE_BASE_URL", "http://127.0.0.1:4096"))
+    opencode_base_url: str = field(default_factory=lambda: os.getenv("OPENCODE_BASE_URL", "http://localhost:8123"))
     opencode_directory: str = field(default_factory=lambda: os.getenv("OPENCODE_DIRECTORY", str(ADAPTER_ROOT.parent)))
     opencode_workspace: str = field(default_factory=lambda: os.getenv("OPENCODE_WORKSPACE", ""))
     opencode_session_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_SESSION_ENDPOINT", "/session"))
