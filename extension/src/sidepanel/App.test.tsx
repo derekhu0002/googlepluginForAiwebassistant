@@ -682,6 +682,48 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("已合并 2 条连续事件");
   });
 
+  it("shows answered question cards as completed once later events arrive", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          updatedAt: "2026-04-02T00:00:03.000Z",
+          finalOutput: "已完成"
+        },
+        runEvents: [
+          createRunEvent(1, {
+            type: "question",
+            message: "请选择处理方式",
+            question: {
+              questionId: "q-1",
+              title: "需要确认",
+              message: "请选择处理方式",
+              options: [],
+              allowFreeText: true
+            }
+          }),
+          createRunEvent(2, { type: "result", message: "已完成" })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("已记录");
+    expect(container.textContent).not.toContain("待确认");
+  });
+
   it("renders simplified tool call copy instead of raw payload details", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],

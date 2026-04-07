@@ -140,13 +140,14 @@ export function getTimelineCardStatus(options: {
   runStatus?: "streaming" | "waiting_for_answer" | "done" | "error";
 }): TimelineCardStatus {
   const { type, isLast, live, streamStatus, runStatus } = options;
+  const isWaitingForAnswer = streamStatus === "waiting_for_answer" || runStatus === "waiting_for_answer";
 
   if (type === "error" || runStatus === "error") {
     return type === "error" || isLast ? "attention" : "complete";
   }
 
-  if (type === "question" || (isLast && (streamStatus === "waiting_for_answer" || runStatus === "waiting_for_answer"))) {
-    return isLast ? "waiting" : "complete";
+  if (type === "question") {
+    return isLast && isWaitingForAnswer ? "waiting" : "complete";
   }
 
   if (type === "result" || runStatus === "done" || streamStatus === "done") {

@@ -68,4 +68,30 @@ describe("reasoning timeline view-model", () => {
       runStatus: "waiting_for_answer"
     })).toBe("waiting");
   });
+
+  it("marks question cards complete after the run has continued or finished", () => {
+    expect(getTimelineCardStatus({
+      type: "question",
+      isLast: false,
+      live: true,
+      streamStatus: "streaming",
+      runStatus: "streaming"
+    })).toBe("complete");
+
+    expect(getTimelineCardStatus({
+      type: "question",
+      isLast: true,
+      live: false,
+      streamStatus: "done",
+      runStatus: "done"
+    })).toBe("complete");
+
+    expect(getTimelineCardStatus({
+      type: "question",
+      isLast: true,
+      live: true,
+      streamStatus: "streaming",
+      runStatus: "streaming"
+    })).toBe("complete");
+  });
 });
