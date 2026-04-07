@@ -480,7 +480,7 @@ describe("side panel host permission request flow", () => {
     await flushAllTimers();
 
     expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).not.toContain("event 1");
+    expect(container.textContent).toContain("Called event 1");
 
     mockRunHistoryState.history = [{
       ...createCurrentRun(),
@@ -494,11 +494,11 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).not.toContain("event 1");
+    expect(container.textContent).toContain("Called event 1");
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
-  it("renders only the final assistant answer without process details", async () => {
+  it("renders the final assistant answer together with concise process steps", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -531,10 +531,9 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("You");
     expect(container.textContent).toContain("Assistant");
     expect(container.textContent).toContain("最终结论");
-    expect(container.textContent).not.toContain("过程摘要");
+    expect(container.textContent).toContain("Called 读取页面上下文");
+    expect(container.textContent).toContain("Called 查询历史 SR");
     expect(container.textContent).not.toContain("查看过程");
-    expect(container.textContent).not.toContain("读取页面上下文");
-    expect(container.textContent).not.toContain("查询历史 SR");
   });
 
   it("does not regress done UI state after result when later history rerenders occur", async () => {
@@ -610,7 +609,7 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
-  it("keeps tool-call payloads hidden from the default assistant reply area", async () => {
+  it("shows concise process copy while keeping tool-call payloads hidden", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -629,13 +628,13 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).not.toContain("正在整理上下文并准备分析");
+    expect(container.textContent).toContain("Called 正在整理上下文并准备分析");
     expect(container.textContent).not.toContain("prepare_context");
     expect(container.textContent).not.toContain("secret");
     expect(container.querySelector("pre")).toBeNull();
   });
 
-  it("shows a simple user-facing placeholder while streaming", async () => {
+  it("shows process steps inline while streaming", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
     });
@@ -661,10 +660,10 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).not.toContain("逐步展示文本");
+    expect(container.textContent).toContain("Called 逐步展示文本");
   });
 
-  it("does not expose aggregated thinking events in the default UI", async () => {
+  it("shows aggregated thinking events as concise called steps", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -681,12 +680,12 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("正在生成回答");
+    expect(container.textContent).toContain("Called 读取页面上下文");
+    expect(container.textContent).toContain("Called 整理可用字段");
     expect(container.textContent).not.toContain("查看过程");
-    expect(container.textContent).not.toContain("读取页面上下文");
-    expect(container.textContent).not.toContain("整理可用字段");
   });
 
-  it("shows only the final answer in history detail by default", async () => {
+  it("shows final answer and concise process steps in history detail", async () => {
     mockRunHistoryState.selectedHistoryDetail = {
       run: {
         ...createCurrentRun(),
@@ -713,8 +712,8 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("历史结果");
     expect(container.textContent).toContain("You");
-    expect(container.textContent).not.toContain("历史思考 1");
-    expect(container.textContent).not.toContain("历史思考 2");
+    expect(container.textContent).toContain("Called 历史思考 1");
+    expect(container.textContent).toContain("Called 历史思考 2");
     expect(container.textContent).not.toContain("查看过程");
   });
 
@@ -757,7 +756,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("已完成");
-    expect(container.textContent).not.toContain("请选择处理方式");
+    expect(container.textContent).toContain("请选择处理方式");
   });
 
   it("clears the waiting question state immediately after answer submission", async () => {
@@ -825,7 +824,7 @@ describe("side panel host permission request flow", () => {
     expect(container.querySelector(".question-card")).toBeNull();
   });
 
-  it("renders generic streaming copy instead of raw tool call details", async () => {
+  it("renders generic streaming copy and concise tool steps without raw details", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -845,7 +844,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("正在生成回答");
-    expect(container.textContent).not.toContain("正在检索相关信息");
+    expect(container.textContent).toContain("Called 正在检索相关信息");
     expect(container.textContent).not.toContain("token=123");
     expect(container.textContent).not.toContain("grep");
   });

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { extensionConfig } from "../shared/config";
 import type { NormalizedEventType, NormalizedRunEvent, RunRecord } from "../shared/protocol";
 import type { StreamConnectionState } from "../shared/types";
 import {
@@ -7,10 +6,11 @@ import {
   getTimelineCardStatus,
   getTimelineStatusCopy,
   type ConversationTurnModel,
-  type TimelineCardModel
+  type TimelineCardModel,
+  type TimelineEventEntry
 } from "./reasoningTimeline";
 
-const TYPEWRITER_EVENT_TYPES = new Set<NormalizedEventType>(["thinking", "result"]);
+const TYPEWRITER_EVENT_TYPES = new Set<NormalizedEventType>(["thinking"]);
 const TYPEWRITER_INTERVAL_MS = 24;
 
 function isNearBottom(element: HTMLDivElement | null) {
@@ -94,90 +94,42 @@ function getStatusLabel(status: ReturnType<typeof getTimelineCardStatus>) {
   }
 }
 
-function getDetailJson(model: TimelineCardModel) {
-  return model.entries
-    .filter((entry) => entry.data || entry.logData || entry.question)
-    .map((entry) => ({
-      id: entry.id,
-      title: entry.title,
-      createdAt: entry.createdAt,
-      data: entry.data,
-      logData: entry.logData,
-      question: entry.question
-    }));
-}
-
-function TimelineDetails({ model }: { model: TimelineCardModel }) {
-  const detailJson = useMemo(() => getDetailJson(model), [model]);
-  const hasStructuredDebug = detailJson.length > 0;
-  const [expanded, setExpanded] = useState(false);
-
-  if (!model.isAggregated && !hasStructuredDebug) {
-    return null;
+function getProcessStepLabel(entry: TimelineEventEntry) {
+  const rawLabel = (entry.message || entry.title || "").trim();
+  if (!rawLabel) {
+    return "Called assistant step";
   }
 
-  return (
-    <div className="timeline-details">
-      <button className="secondary ghost-button" type="button" onClick={() => setExpanded((current) => !current)}>
-        {expanded ? "收起过程" : `查看过程${model.entries.length > 1 ? `（${model.entries.length} 条）` : ""}`}
-      </button>
-      {expanded ? (
-        <div className="timeline-details-panel">
-          {model.entries.length > 1 ? (
-            <ol className="timeline-entry-list">
-              {model.entries.map((entry) => (
-                <li key={entry.id}>
-                  <strong>{entry.title}</strong>
-                  <small>{formatTimestamp(entry.createdAt)}</small>
-                  <p>{entry.message}</p>
-                </li>
-              ))}
-            </ol>
-          ) : null}
-          {hasStructuredDebug ? (
-            extensionConfig.extensionEnv === "development" ? (
-              <pre>{JSON.stringify(detailJson, null, 2)}</pre>
-            ) : (
-              <p className="detail-muted">原始调试载荷默认隐藏，仅在开发环境中展示。</p>
-            )
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
+  const normalizedLabel = rawLabel
+    .replace(/^called\s+/i, "")
+    .replace(/^已?调用[:：]?/u, "")
+    .replace(/[。.]$/u, "")
+    .trim();
+
+  return normalizedLabel ? `Called ${normalizedLabel}` : "Called assistant step";
+}
+
+function getProcessEntries(items: TimelineCardModel[]) {
+  return items.flatMap((item) => item.entries).filter((entry) => Boolean((entry.message || entry.title || "").trim()));
 }
 
 function ProcessLayer({ items }: { items: TimelineCardModel[] }) {
-  const [expanded, setExpanded] = useState(false);
+  const entries = useMemo(() => getProcessEntries(items), [items]);
 
-  if (!items.length) {
+  if (!entries.length) {
     return null;
   }
 
-  const label = items.length > 1 ? `查看过程（${items.length} 条）` : "查看过程";
-
   return (
     <div className="conversation-process-layer">
-      <button className="secondary ghost-button" type="button" onClick={() => setExpanded((current) => !current)}>
-        {expanded ? "收起过程" : label}
-      </button>
-      {expanded ? (
-        <div className="conversation-process-list">
-          {items.map((item) => (
-            <article key={`${item.id}:${item.updatedAt}`} className={`event-card event-${item.type}`}>
-              <div className="event-card-header">
-                <div className="event-card-heading">
-                  <strong>{item.title}</strong>
-                </div>
-                <small>{formatTimestamp(item.updatedAt)}</small>
-              </div>
-              {item.entries.length > 1 ? <small className="detail-muted">已合并 {item.entries.length} 条连续事件</small> : null}
-              <p className="event-summary">{item.summary}</p>
-              <TimelineDetails model={item} />
-            </article>
-          ))}
-        </div>
-      ) : null}
+      <ol className="conversation-process-list">
+        {entries.map((entry) => (
+          <li key={entry.id} className="conversation-process-item">
+            <span className="conversation-process-copy">{getProcessStepLabel(entry)}</span>
+            <small>{formatTimestamp(entry.createdAt)}</small>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -196,7 +148,14 @@ function ConversationTurn({
   const displayedSummary = useBufferedTypewriter(turn.summary, animate && TYPEWRITER_EVENT_TYPES.has(turn.primaryType));
   const roleLabel = turn.kind === "question" ? "Assistant needs input" : turn.kind === "error" ? "Assistant failed" : "Assistant";
   const isProcessing = live && status === "active" && turn.kind === "assistant";
-  const processSummaryText = isProcessing ? "正在处理中，过程可展开查看。" : turn.processSummary ? `过程摘要：${turn.processSummary}` : "";
+  const hasFinalReply = turn.kind === "assistant" && turn.primaryType === "result";
+  const messageText = turn.kind === "assistant"
+    ? (hasFinalReply ? displayedSummary : (live ? "正在生成回答…" : displayedSummary || "尚未形成最终回答。"))
+    : displayedSummary;
+  const messageClassName = [
+    "conversation-message",
+    turn.kind === "assistant" && !hasFinalReply ? "conversation-message-muted" : ""
+  ].filter(Boolean).join(" ");
 
   return (
     <article className={`conversation-turn turn-${turn.kind} is-${status}`}>
@@ -212,17 +171,13 @@ function ConversationTurn({
           <small>{formatTimestamp(turn.updatedAt)}</small>
         </div>
 
-        {turn.kind === "assistant" && processSummaryText ? (
-          <p className="conversation-process-summary">{processSummaryText}</p>
-        ) : null}
+        {turn.processItems.length ? <ProcessLayer items={turn.processItems} /> : null}
 
-        {displayedSummary ? <p className="conversation-message">{displayedSummary}</p> : null}
+        {messageText ? <p className={messageClassName}>{messageText}</p> : null}
 
-        {isProcessing && !displayedSummary ? (
+        {isProcessing && !messageText ? (
           <p className="conversation-message conversation-message-muted">助手正在组织回答…</p>
         ) : null}
-
-        {turn.processItems.length ? <ProcessLayer items={turn.processItems} /> : null}
       </div>
     </article>
   );

@@ -7,6 +7,7 @@ import { initialAssistantState } from "../shared/state";
 import type { NormalizedRunEvent, QuestionPayload, RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
+import { ReasoningTimeline } from "./reasoningTimelineView";
 import { useRunHistory } from "./useRunHistory";
 
 const ASSISTANT_STATUS_RANK: Record<AssistantState["status"], number> = {
@@ -64,26 +65,55 @@ function getLatestEventMessage(events: NormalizedRunEvent[], type: Extract<Norma
   return "";
 }
 
-function getAssistantReply(options: {
+function buildConversationEvents(options: {
+  runId?: string | null;
+  events: NormalizedRunEvent[];
   finalOutput?: string | null;
   errorMessage?: string | null;
-  events: NormalizedRunEvent[];
   status?: RunRecord["status"] | AssistantState["status"];
-  pendingText: string;
+  updatedAt?: string | null;
+  pendingQuestionId?: string | null;
 }) {
-  const finalOutput = options.finalOutput?.trim() || getLatestEventMessage(options.events, "result");
-  if (finalOutput) {
-    return { text: finalOutput, tone: "final" as const };
+  const events = [...options.events];
+  const finalOutput = options.finalOutput?.trim() || getLatestEventMessage(events, "result");
+  const errorMessage = options.errorMessage?.trim() || getLatestEventMessage(events, "error");
+  const lastResult = [...events].reverse().find((event) => event.type === "result" && event.message.trim());
+  const lastError = [...events].reverse().find((event) => event.type === "error" && event.message.trim());
+  const lastEvent = events[events.length - 1];
+
+  if (finalOutput && (!lastResult || lastResult.message.trim() !== finalOutput)) {
+    events.push({
+      id: `synthetic-result-${options.runId ?? "standalone"}`,
+      runId: options.runId ?? lastResult?.runId ?? lastError?.runId ?? "standalone-run",
+      type: "result",
+      createdAt: options.updatedAt ?? lastResult?.createdAt ?? new Date().toISOString(),
+      sequence: (events[events.length - 1]?.sequence ?? 0) + 1,
+      message: finalOutput,
+      title: "分析结果"
+    });
+  } else if (options.status === "error" && errorMessage && (!lastError || lastError.message.trim() !== errorMessage)) {
+    events.push({
+      id: `synthetic-error-${options.runId ?? "standalone"}`,
+      runId: options.runId ?? lastError?.runId ?? lastResult?.runId ?? "standalone-run",
+      type: "error",
+      createdAt: options.updatedAt ?? lastError?.createdAt ?? new Date().toISOString(),
+      sequence: (events[events.length - 1]?.sequence ?? 0) + 1,
+      message: errorMessage,
+      title: "运行失败"
+    });
+  } else if (options.status === "streaming" && lastEvent?.type === "question" && options.pendingQuestionId === null) {
+    events.push({
+      id: `synthetic-thinking-${options.runId ?? "standalone"}`,
+      runId: options.runId ?? lastEvent.runId ?? "standalone-run",
+      type: "thinking",
+      createdAt: options.updatedAt ?? lastEvent.createdAt ?? new Date().toISOString(),
+      sequence: (events[events.length - 1]?.sequence ?? 0) + 1,
+      message: "",
+      title: "处理中"
+    });
   }
 
-  if (options.status === "error") {
-    return {
-      text: options.errorMessage?.trim() || getLatestEventMessage(options.events, "error") || "本轮回答失败，请重试。",
-      tone: "error" as const
-    };
-  }
-
-  return { text: options.pendingText, tone: "pending" as const };
+  return events;
 }
 
 export function mergeStateUpdate(current: AssistantState, payload: AssistantState, history: AssistantState["history"], selectedHistoryDetail: AssistantState["selectedHistoryDetail"]): AssistantState {
@@ -521,19 +551,22 @@ export function App() {
   const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent);
   const livePrompt = state.currentRun?.prompt ?? prompt;
   const historyPrompt = selectedHistoryDetail?.run.prompt ?? "";
-  const liveAssistantReply = getAssistantReply({
+  const liveConversationEvents = buildConversationEvents({
+    runId: state.currentRun?.runId ?? state.stream.runId,
+    events: state.runEvents,
     finalOutput: state.currentRun?.finalOutput,
     errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError,
-    events: state.runEvents,
     status: state.currentRun?.status ?? state.status,
-    pendingText: "正在生成回答…"
+    updatedAt: state.currentRun?.updatedAt,
+    pendingQuestionId: state.stream.pendingQuestionId
   });
-  const historyAssistantReply = selectedHistoryDetail ? getAssistantReply({
+  const historyConversationEvents = selectedHistoryDetail ? buildConversationEvents({
+    runId: selectedHistoryDetail.run.runId,
+    events: selectedHistoryDetail.events,
     finalOutput: selectedHistoryDetail.run.finalOutput,
     errorMessage: selectedHistoryDetail.run.errorMessage,
-    events: selectedHistoryDetail.events,
     status: selectedHistoryDetail.run.status,
-    pendingText: "尚未完成"
+    updatedAt: selectedHistoryDetail.run.updatedAt
   }) : null;
 
   return (
@@ -581,21 +614,13 @@ export function App() {
               ) : null}
 
               {(state.currentRun || state.runEvents.length) ? (
-                <article className="conversation-turn turn-assistant is-active">
-                  <div className="conversation-avatar" aria-hidden="true">AI</div>
-                  <div className="conversation-bubble">
-                    <div className="conversation-turn-header">
-                      <div className="conversation-turn-heading">
-                        <strong>Assistant</strong>
-                      </div>
-                      {state.currentRun ? <small>{new Date(state.currentRun.updatedAt).toLocaleTimeString()}</small> : null}
-                    </div>
-
-                    <p className={`conversation-message${liveAssistantReply.tone === "pending" ? " conversation-message-muted" : ""}`}>
-                      {liveAssistantReply.text}
-                    </p>
-                  </div>
-                </article>
+                <ReasoningTimeline
+                  events={liveConversationEvents}
+                  live
+                  streamStatus={state.stream.status}
+                  runStatus={state.currentRun?.status}
+                  emptyText="正在生成回答…"
+                />
               ) : null}
 
               {questionEvent?.question ? <QuestionCard question={questionEvent.question} onSubmit={handleQuestionSubmit} /> : null}
@@ -688,20 +713,11 @@ export function App() {
                     </div>
                   </article>
                 ) : null}
-                <article className="conversation-turn turn-assistant">
-                  <div className="conversation-avatar" aria-hidden="true">AI</div>
-                  <div className="conversation-bubble">
-                    <div className="conversation-turn-header">
-                      <div className="conversation-turn-heading">
-                        <strong>Assistant</strong>
-                      </div>
-                      <small>{new Date(selectedHistoryDetail.run.updatedAt).toLocaleTimeString()}</small>
-                    </div>
-                    <p className={`conversation-message${historyAssistantReply?.tone === "pending" ? " conversation-message-muted" : ""}`}>
-                      {historyAssistantReply?.text}
-                    </p>
-                  </div>
-                </article>
+                <ReasoningTimeline
+                  events={historyConversationEvents ?? []}
+                  runStatus={selectedHistoryDetail.run.status}
+                  emptyText="尚未完成"
+                />
                 <div className="field-list compact-list">
                   <div className="field-item"><dt>software_version</dt><dd>{selectedHistoryDetail.run.softwareVersion}</dd></div>
                   <div className="field-item"><dt>selected_sr</dt><dd>{selectedHistoryDetail.run.selectedSr}</dd></div>

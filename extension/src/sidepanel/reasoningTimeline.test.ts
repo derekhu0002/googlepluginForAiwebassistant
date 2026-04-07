@@ -66,6 +66,18 @@ describe("reasoning timeline view-model", () => {
     expect(turns[0]?.processSummary).toContain("读取页面上下文");
   });
 
+  it("keeps process steps after a final result so the full conversation can be rendered", () => {
+    const turns = buildConversationTurns([
+      createEvent(1, { type: "thinking", message: "读取页面上下文" }),
+      createEvent(2, { type: "tool_call", message: "查询历史 SR" }),
+      createEvent(3, { type: "result", message: "完整回答正文" })
+    ]);
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0]?.summary).toBe("完整回答正文");
+    expect(turns[0]?.processItems.map((item) => item.entries[0]?.message)).toEqual(["读取页面上下文", "查询历史 SR"]);
+  });
+
   it("breaks conversation turns when a question arrives", () => {
     const turns = buildConversationTurns([
       createEvent(1, { type: "thinking", message: "准备提问" }),
