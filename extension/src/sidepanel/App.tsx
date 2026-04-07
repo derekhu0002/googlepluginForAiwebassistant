@@ -65,6 +65,73 @@ function getLatestEventMessage(events: NormalizedRunEvent[], type: Extract<Norma
   return "";
 }
 
+function getLatestEvent(events: NormalizedRunEvent[], type: Extract<NormalizedRunEvent["type"], "result" | "error">) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type !== type) {
+      continue;
+    }
+
+    const message = event.message.trim();
+    if (message) {
+      return event;
+    }
+  }
+
+  return null;
+}
+
+function resolveAssistantReply(options: {
+  events: NormalizedRunEvent[];
+  finalOutput?: string | null;
+  errorMessage?: string | null;
+  status?: RunRecord["status"] | AssistantState["status"];
+  updatedAt?: string | null;
+}) {
+  const latestResult = getLatestEvent(options.events, "result");
+  const latestError = getLatestEvent(options.events, "error");
+  const finalOutput = options.finalOutput?.trim() || latestResult?.message.trim() || "";
+
+  if (finalOutput) {
+    return {
+      kind: "assistant" as const,
+      message: finalOutput,
+      updatedAt: options.updatedAt ?? latestResult?.createdAt ?? null,
+      muted: false
+    };
+  }
+
+  const errorMessage = options.errorMessage?.trim() || latestError?.message.trim() || "";
+  if (options.status === "error" && errorMessage) {
+    return {
+      kind: "error" as const,
+      message: errorMessage,
+      updatedAt: options.updatedAt ?? latestError?.createdAt ?? null,
+      muted: false
+    };
+  }
+
+  if (options.status === "waiting_for_answer") {
+    return {
+      kind: "assistant" as const,
+      message: "助手正在等待你的补充信息。",
+      updatedAt: options.updatedAt ?? null,
+      muted: true
+    };
+  }
+
+  if (options.status === "streaming") {
+    return {
+      kind: "assistant" as const,
+      message: "正在生成回答…",
+      updatedAt: options.updatedAt ?? null,
+      muted: true
+    };
+  }
+
+  return null;
+}
+
 function buildConversationEvents(options: {
   runId?: string | null;
   events: NormalizedRunEvent[];
@@ -232,6 +299,41 @@ function QuestionCard({ question, onSubmit }: { question: QuestionPayload; onSub
       <button onClick={() => onSubmit({ answer: freeText || question.options.find((item) => item.id === choiceId)?.value || "", choiceId: choiceId || undefined })}>
         提交回答
       </button>
+    </article>
+  );
+}
+
+function AssistantReplyTurn({
+  reply,
+  fallbackTimestamp
+}: {
+  reply: NonNullable<ReturnType<typeof resolveAssistantReply>>;
+  fallbackTimestamp?: string | null;
+}) {
+  const timestamp = reply.updatedAt ?? fallbackTimestamp ?? null;
+  const roleLabel = reply.kind === "error" ? "Assistant failed" : "Assistant";
+  const avatarLabel = reply.kind === "error" ? "!" : "AI";
+  const className = [
+    "conversation-turn",
+    reply.kind === "error" ? "turn-error" : "turn-assistant"
+  ].join(" ");
+  const messageClassName = [
+    "conversation-message",
+    reply.muted ? "conversation-message-muted" : ""
+  ].filter(Boolean).join(" ");
+
+  return (
+    <article className={className}>
+      <div className="conversation-avatar" aria-hidden="true">{avatarLabel}</div>
+      <div className="conversation-bubble">
+        <div className="conversation-turn-header">
+          <div className="conversation-turn-heading">
+            <strong>{roleLabel}</strong>
+          </div>
+          {timestamp ? <small>{new Date(timestamp).toLocaleTimeString()}</small> : null}
+        </div>
+        <p className={messageClassName}>{reply.message}</p>
+      </div>
     </article>
   );
 }
@@ -560,9 +662,23 @@ export function App() {
     updatedAt: state.currentRun?.updatedAt,
     pendingQuestionId: state.stream.pendingQuestionId
   });
+  const liveAssistantReply = resolveAssistantReply({
+    events: liveConversationEvents,
+    finalOutput: state.currentRun?.finalOutput,
+    errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError,
+    status: state.currentRun?.status ?? state.status,
+    updatedAt: state.currentRun?.updatedAt
+  });
   const historyConversationEvents = selectedHistoryDetail ? buildConversationEvents({
     runId: selectedHistoryDetail.run.runId,
     events: selectedHistoryDetail.events,
+    finalOutput: selectedHistoryDetail.run.finalOutput,
+    errorMessage: selectedHistoryDetail.run.errorMessage,
+    status: selectedHistoryDetail.run.status,
+    updatedAt: selectedHistoryDetail.run.updatedAt
+  }) : null;
+  const historyAssistantReply = selectedHistoryDetail ? resolveAssistantReply({
+    events: historyConversationEvents ?? [],
     finalOutput: selectedHistoryDetail.run.finalOutput,
     errorMessage: selectedHistoryDetail.run.errorMessage,
     status: selectedHistoryDetail.run.status,
@@ -613,12 +729,21 @@ export function App() {
                 </article>
               ) : null}
 
+              {liveAssistantReply ? (
+                <AssistantReplyTurn
+                  reply={liveAssistantReply}
+                  fallbackTimestamp={state.currentRun?.updatedAt ?? state.currentRun?.startedAt}
+                />
+              ) : null}
+
               {(state.currentRun || state.runEvents.length) ? (
                 <ReasoningTimeline
                   events={liveConversationEvents}
                   live
                   streamStatus={state.stream.status}
                   runStatus={state.currentRun?.status}
+                  collapsible
+                  defaultCollapsed
                   emptyText="正在生成回答…"
                 />
               ) : null}
@@ -713,9 +838,17 @@ export function App() {
                     </div>
                   </article>
                 ) : null}
+                {historyAssistantReply ? (
+                  <AssistantReplyTurn
+                    reply={historyAssistantReply}
+                    fallbackTimestamp={selectedHistoryDetail.run.updatedAt ?? selectedHistoryDetail.run.startedAt}
+                  />
+                ) : null}
                 <ReasoningTimeline
                   events={historyConversationEvents ?? []}
                   runStatus={selectedHistoryDetail.run.status}
+                  collapsible
+                  defaultCollapsed
                   emptyText="尚未完成"
                 />
                 <div className="field-list compact-list">

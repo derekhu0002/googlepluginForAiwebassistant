@@ -61,7 +61,9 @@ async def start_run(request: RunStartRequest, _auth: None = Depends(enforce_api_
     try:
         run_id = await adapter.start_run(request)
     except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail={"code": "ANALYSIS_ERROR", "message": str(exc)}) from exc
+        error_message = str(exc)
+        error_code = "SESSION_AGENT_ENFORCEMENT_ERROR" if "primary agent" in error_message.lower() else "ANALYSIS_ERROR"
+        raise HTTPException(status_code=500, detail={"code": error_code, "message": error_message}) from exc
     logger.write({
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "run_id": run_id,

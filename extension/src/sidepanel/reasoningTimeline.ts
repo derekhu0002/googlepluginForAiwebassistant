@@ -77,6 +77,11 @@ export interface ConversationTurnModel {
   question?: QuestionPayload;
 }
 
+export interface ReasoningSectionModel {
+  items: TimelineCardModel[];
+  summary: string;
+}
+
 export function getEventTitle(event: Pick<NormalizedRunEvent, "type" | "title" | "question">) {
   if (event.question?.title) {
     return event.question.title;
@@ -194,6 +199,30 @@ function createAssistantTurn(item: TimelineCardModel, summary: string): Conversa
     processItems: [],
     processSummary: ""
   };
+}
+
+function describeReasoningItem(item: TimelineCardModel) {
+  if (item.type === "tool_call") {
+    return item.title || DEFAULT_EVENT_TITLES[item.type];
+  }
+
+  if (item.type === "thinking") {
+    return getVisibleThinkingSummary(item) || item.title || DEFAULT_EVENT_TITLES[item.type];
+  }
+
+  return item.summary || item.title || DEFAULT_EVENT_TITLES[item.type];
+}
+
+function createReasoningSummary(items: TimelineCardModel[]) {
+  const parts = items
+    .map((item) => describeReasoningItem(item).trim())
+    .filter(Boolean);
+
+  if (!parts.length) {
+    return "已记录推理过程";
+  }
+
+  return `已记录 ${parts.length} 条推理过程`;
 }
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
@@ -331,6 +360,16 @@ export function buildConversationTurns(events: NormalizedRunEvent[]): Conversati
     ...turn,
     summary: turn.summary || turn.processSummary || ""
   }));
+}
+
+/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+export function buildReasoningSection(events: NormalizedRunEvent[]): ReasoningSectionModel {
+  const items = buildReasoningTimelineItems(events).filter((item) => item.type === "thinking" || item.type === "tool_call");
+
+  return {
+    items,
+    summary: createReasoningSummary(items)
+  };
 }
 
 export function getTimelineCardStatus(options: {

@@ -14,8 +14,10 @@ from .models import NormalizedRunEvent, QuestionAnswerRequest, QuestionOption, Q
 
 
 ClientFactory = Callable[[float | None], httpx.AsyncClient]
+REQUIRED_PRIMARY_AGENT = "TARA_analyst"
 
 
+# @ArchitectureID: ELM-006
 class OpencodeAdapter:
     def __init__(self, settings: Settings, client_factory: ClientFactory | None = None) -> None:
         self.settings = settings
@@ -74,9 +76,9 @@ class OpencodeAdapter:
             raise RuntimeError(f"TARA primary agent guard failed: invalid JSON in {config_path}: {exc}") from exc
 
         default_agent = config_payload.get("default_agent")
-        if default_agent != "TARA_analyst":
+        if default_agent != REQUIRED_PRIMARY_AGENT:
             raise RuntimeError(
-                f"TARA primary agent guard failed: .opencode/opencode.json default_agent must be 'TARA_analyst', got {default_agent!r}"
+                f"TARA primary agent guard failed: .opencode/opencode.json default_agent must be '{REQUIRED_PRIMARY_AGENT}', got {default_agent!r}"
             )
 
         try:
@@ -86,6 +88,79 @@ class OpencodeAdapter:
 
         if not agent_contents.strip():
             raise RuntimeError(f"TARA primary agent guard failed: {agent_path} is empty")
+
+    def _build_session_create_payload(self, request: RunStartRequest) -> dict[str, Any]:
+        title = f"SR {request.capture.get('selected_sr', '').strip() or 'analysis'}"
+        return {
+            "title": title,
+            "agent": REQUIRED_PRIMARY_AGENT,
+            "agentId": REQUIRED_PRIMARY_AGENT,
+            "primaryAgent": REQUIRED_PRIMARY_AGENT,
+        }
+
+    def _extract_primary_agent_name(self, payload: Any) -> str | None:
+        if not isinstance(payload, dict):
+            return None
+
+        direct_keys = (
+            "agent",
+            "agentId",
+            "agentName",
+            "primaryAgent",
+            "primary_agent",
+            "default_agent",
+        )
+        for key in direct_keys:
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            if isinstance(value, dict):
+                nested = value.get("id") or value.get("name") or value.get("slug")
+                if isinstance(nested, str) and nested.strip():
+                    return nested.strip()
+
+        nested_keys = ("config", "metadata", "info", "session")
+        for key in nested_keys:
+            nested_payload = payload.get(key)
+            nested_agent = self._extract_primary_agent_name(nested_payload)
+            if nested_agent:
+                return nested_agent
+
+        return None
+
+    def _session_detail_endpoint(self, session_id: str) -> str:
+        return f"{self.settings.opencode_session_endpoint.rstrip('/')}/{session_id}"
+
+    async def _verify_session_primary_agent(self, client: httpx.AsyncClient, session_payload: dict[str, Any]) -> dict[str, Any]:
+        session_id = session_payload.get("id")
+        configured_agent = self._extract_primary_agent_name(session_payload)
+        if configured_agent:
+            if configured_agent != REQUIRED_PRIMARY_AGENT:
+                raise RuntimeError(
+                    f"TARA primary agent enforcement failed: remote session returned primary agent {configured_agent!r}, expected {REQUIRED_PRIMARY_AGENT!r}"
+                )
+            return session_payload
+
+        if not session_id:
+            raise RuntimeError("TARA primary agent enforcement failed: session create response did not include an id")
+
+        response = await client.get(self._session_detail_endpoint(session_id), params=self._query_params())
+        response.raise_for_status()
+        verification_payload = response.json()
+        verified_agent = self._extract_primary_agent_name(verification_payload)
+        if verified_agent != REQUIRED_PRIMARY_AGENT:
+            if verified_agent:
+                raise RuntimeError(
+                    f"TARA primary agent enforcement failed: remote session {session_id} reported primary agent {verified_agent!r}, expected {REQUIRED_PRIMARY_AGENT!r}"
+                )
+            raise RuntimeError(
+                f"TARA primary agent enforcement failed: remote session {session_id} did not confirm primary agent {REQUIRED_PRIMARY_AGENT!r}"
+            )
+
+        return {
+            **session_payload,
+            **(verification_payload if isinstance(verification_payload, dict) else {}),
+        }
 
     async def start_run(self, request: RunStartRequest) -> str:
         if not self.settings.use_mock_opencode:
@@ -285,18 +360,17 @@ class OpencodeAdapter:
         )
 
     async def _create_session(self, request: RunStartRequest) -> dict[str, Any]:
-        title = f"SR {request.capture.get('selected_sr', '').strip() or 'analysis'}"
         async with self._client_factory(30.0) as client:
             response = await client.post(
                 self.settings.opencode_session_endpoint,
                 params=self._query_params(),
-                json={"title": title},
+                json=self._build_session_create_payload(request),
             )
             response.raise_for_status()
             payload = response.json()
             if not isinstance(payload, dict) or not payload.get("id"):
                 raise ValueError("Invalid session create response")
-            return payload
+            return await self._verify_session_primary_agent(client, payload)
 
     async def _prompt_session(self, session_id: str, request: RunStartRequest) -> None:
         async with self._client_factory(30.0) as client:

@@ -3,9 +3,11 @@ import type { NormalizedEventType, NormalizedRunEvent, RunRecord } from "../shar
 import type { StreamConnectionState } from "../shared/types";
 import {
   buildConversationTurns,
+  buildReasoningSection,
   getTimelineCardStatus,
   getTimelineStatusCopy,
-  type ConversationTurnModel
+  type ConversationTurnModel,
+  type TimelineCardModel
 } from "./reasoningTimeline";
 
 const TYPEWRITER_EVENT_TYPES = new Set<NormalizedEventType>(["thinking"]);
@@ -139,12 +141,40 @@ function ConversationTurn({
   );
 }
 
+function ReasoningItemCard({
+  item,
+  status
+}: {
+  item: TimelineCardModel;
+  status: ReturnType<typeof getTimelineCardStatus>;
+}) {
+  const summary = item.summary || item.entries.map((entry) => entry.message).filter(Boolean).join("\n");
+
+  return (
+    <article className={`conversation-turn turn-assistant is-${status}`}>
+      <div className="conversation-avatar" aria-hidden="true">…</div>
+      <div className="conversation-bubble">
+        <div className="conversation-turn-header">
+          <div className="conversation-turn-heading">
+            <strong>{item.title}</strong>
+            <span className={`status-chip status-${status}`}>{getStatusLabel(status)}</span>
+          </div>
+          <small>{formatTimestamp(item.updatedAt)}</small>
+        </div>
+        {summary ? <p className="conversation-message conversation-message-muted">{summary}</p> : null}
+      </div>
+    </article>
+  );
+}
+
 export interface ReasoningTimelineProps {
   events: NormalizedRunEvent[];
   live?: boolean;
   streamStatus?: StreamConnectionState["status"];
   runStatus?: RunRecord["status"];
   emptyText?: string;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }
 
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
@@ -154,13 +184,25 @@ export function ReasoningTimeline({
   live = false,
   streamStatus,
   runStatus,
-  emptyText = "暂无事件。"
+  emptyText = "暂无事件。",
+  collapsible = false,
+  defaultCollapsed = false
 }: ReasoningTimelineProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [autoFollow, setAutoFollow] = useState(live);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const previousSignatureRef = useRef<string>("");
   const turns = useMemo(() => buildConversationTurns(events), [events]);
+  const reasoningSection = useMemo(() => buildReasoningSection(events), [events]);
+  const visibleConversationTurns = useMemo(
+    () => turns.filter((turn) => turn.kind === "question"),
+    [turns]
+  );
+
+  useEffect(() => {
+    setCollapsed(defaultCollapsed);
+  }, [defaultCollapsed]);
 
   useEffect(() => {
     setAutoFollow(live);
@@ -199,33 +241,83 @@ export function ReasoningTimeline({
 
   return (
     <div className="timeline-shell conversation-timeline-shell">
-      <div
-        className="event-feed reasoning-timeline conversation-thread"
-        ref={containerRef}
-        onScroll={() => {
-          const nearBottom = isNearBottom(containerRef.current);
-          setAutoFollow(nearBottom);
-          if (nearBottom) {
-            setUnreadCount(0);
-          }
-        }}
-      >
-        {turns.length ? turns.map((turn, index) => (
-          <ConversationTurn
-            key={`${turn.id}:${turn.updatedAt}`}
-            turn={turn}
-            status={getTimelineCardStatus({
-              type: turn.primaryType,
-              isLast: index === turns.length - 1,
-              live,
-              streamStatus,
-              runStatus
-            })}
-            animate={live && index === turns.length - 1}
-            live={live}
-          />
-        )) : <p className="empty-state">{emptyText}</p>}
-      </div>
+      {collapsible ? (
+        <div className="timeline-toolbar reasoning-collapse-toolbar">
+          <button
+            className="secondary"
+            type="button"
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((current) => !current)}
+          >
+            {collapsed ? "展开推理过程" : "收起推理过程"}
+          </button>
+          <small className="detail-muted">{reasoningSection.summary}</small>
+        </div>
+      ) : null}
+
+      {collapsible && visibleConversationTurns.length ? (
+        <div className="event-feed reasoning-timeline conversation-thread">
+          {visibleConversationTurns.map((turn, index) => (
+            <ConversationTurn
+              key={`${turn.id}:${turn.updatedAt}`}
+              turn={turn}
+              status={getTimelineCardStatus({
+                type: turn.primaryType,
+                isLast: index === visibleConversationTurns.length - 1 && collapsed,
+                live,
+                streamStatus,
+                runStatus
+              })}
+              animate={false}
+              live={live}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {!collapsed ? (
+        <div
+          className="event-feed reasoning-timeline conversation-thread"
+          ref={containerRef}
+          onScroll={() => {
+            const nearBottom = isNearBottom(containerRef.current);
+            setAutoFollow(nearBottom);
+            if (nearBottom) {
+              setUnreadCount(0);
+            }
+          }}
+        >
+          {collapsible
+            ? (reasoningSection.items.length ? reasoningSection.items.map((item, index) => (
+                <ReasoningItemCard
+                  key={`${item.id}:${item.updatedAt}`}
+                  item={item}
+                  status={getTimelineCardStatus({
+                    type: item.type,
+                    isLast: index === reasoningSection.items.length - 1,
+                    live,
+                    streamStatus,
+                    runStatus
+                  })}
+                />
+              )) : <p className="empty-state">{emptyText}</p>)
+            : (turns.length ? turns.map((turn, index) => (
+                <ConversationTurn
+                  key={`${turn.id}:${turn.updatedAt}`}
+                  turn={turn}
+                  status={getTimelineCardStatus({
+                    type: turn.primaryType,
+                    isLast: index === turns.length - 1,
+                    live,
+                    streamStatus,
+                    runStatus
+                  })}
+                  animate={live && index === turns.length - 1}
+                  live={live}
+                />
+              )) : <p className="empty-state">{emptyText}</p>)}
+        </div>
+      ) : null}
 
       {live ? (
         <div className="timeline-toolbar">
