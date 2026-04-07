@@ -1,7 +1,7 @@
 ---
 description: Tara analyst
 mode: primary
-model: DeepSeek/DeepSeek Chat
+model: github-copilot/gpt-5.4
 temperature: 0.2
 permission:
   edit: allow

@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "DeepSeek/DeepSeek Chat",
+  "model": "github-copilot/gpt-5.4",
   "default_agent": "TARA_analyst",
   "instructions": [
     "AGENTS.md"
