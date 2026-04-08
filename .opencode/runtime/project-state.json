@@ -1,20 +1,21 @@
 {
   "version": 2,
-  "activeGoal": "修复采集后无反馈问题：当前点击采集时 OPENCODE 服务收到请求并创建了 session，但 /session/{id}/prompt_async 返回 UnknownError，导致前端看起来像未创建 SESSION 且没有反馈内容；",
+  "activeGoal": "排查并修复：最新修复后，测试页面中 sidepanel 仍未显示“授权当前域名”入口，且进入测试页面后右侧没有插件图标/无法按预期打开扩展侧边栏。需要基于当前仓库实现确认是真实功能缺陷、配置/加载步骤问题还是文档与实际不符，并在必要时做最小",
   "designSummary": "",
   "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-073",
-      "title": "修复采集后无反馈问题：当前点击采集时 OPENCODE 服务收到请求并创建了 session，但 /session/{id}/prompt_async 返回 UnknownError，导致前端看起来像未创建 SESSION 且没有反馈内容；",
-      "status": "in_progress",
+      "id": "TASK-096",
+      "title": "排查并修复：最新修复后，测试页面中 sidepanel 仍未显示“授权当前域名”入口，且进入测试页面后右侧没有插件图标/无法按预期打开扩展侧边栏。需要基于当前仓库实现确认是真实功能缺陷、配置/加载步骤问题还是文档与实际不符，并在必要时做最小",
+      "status": "done",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
-      "summary": "Fast-track implementation started for localized prompt_async adapter contract fix and related error handling/tests.",
-      "details": "Fast-track implementation started for localized prompt_async adapter contract fix and related error handling/tests.",
-      "createdAt": "2026-04-07T15:28:38.371Z",
-      "updatedAt": "2026-04-07T15:32:02.226Z"
+      "summary": "Completed fast-track issue fix for extension permission-entry visibility and outdated extension build guidance. Added fallback authorization guidance in sidepanel even when current build cannot request permission for the domain, updated README with env/build/reload checks for 127.0.0.1 manifest permissions and missing AI button troubleshooting, and added extension test coverage.",
+      "details": "Completed fast-track issue fix for extension permission-entry visibility and outdated extension build guidance. Added fallback authorization guidance in sidepanel even when current build cannot request permission for the domain, updated README with env/build/reload checks for 127.0.0.1 manifest permissions and missing AI button troubleshooting, and added extension test coverage.",
+      "createdAt": "2026-04-08T05:05:32.860Z",
+      "updatedAt": "2026-04-08T05:11:46.695Z",
+      "commitId": "2c2814c21f3a731a0e56a9701886f37fdf8b06e0"
     }
   ],
   "issues": [],
@@ -22,22 +23,22 @@
     "qa": {
       "status": "not_run",
       "summary": "QA not run for the current goal.",
-      "updatedAt": "2026-04-07T15:28:38.371Z"
+      "updatedAt": "2026-04-08T05:05:32.860Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-07T15:28:38.371Z"
+      "updatedAt": "2026-04-08T05:05:32.860Z"
     }
   },
   "release": {
     "status": "not_started",
     "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-07T15:28:38.371Z"
+    "updatedAt": "2026-04-08T05:05:32.860Z"
   },
   "counters": {
-    "task": 73,
-    "issue": 7
+    "task": 96,
+    "issue": 9
   },
-  "updatedAt": "2026-04-07T15:32:02.229Z"
+  "updatedAt": "2026-04-08T05:11:46.696Z"
 }

@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "ELM-007 approved design: restructure the extension sidepanel into a chat-first single continuous conversation surface. Extend the existing conversation shell, event mapper, renderer, and live/history UX so user prompt, live reasoning summary, stage progress, inline question options, final answer, and follow-up turns appear in one stream. Preserve existing SSE transport, question submission, and history persistence contracts. Default-hide or visually demote legacy context/status/result-summary/history cards so they remain auxiliary rather than primary."
+      "value": "Requirement REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER is decomposed into a brownfield extension refactor across sidepanel composer UX, background run orchestration, shared SSE lifecycle handling, and sidepanel response aggregation. Design direction: decouple page capture from send while reusing the existing START_RUN orchestration path and single AssistantState status model; keep page capture as an explicit independent action; move send affordance into the composer bottom-right with paper-plane semantics; define complete assistant rendering as a multi-source merge where the primary fact source is all valid assistant-visible response content observed for the same run, with finalOutput used only as persistence/fallback supplementation; prevent premature terminal UI or stream shutdown from dropping later valid assistant content; make the conversation mapper the sole source of final rendered assistant text so live and history views stay aligned."
     }
   ],
   "metadata": {
@@ -24,25 +24,25 @@
       "designSummary": "",
       "designDecisions": [],
       "runtime": {
-        "activeGoal": "修复采集后无反馈问题：当前点击采集时 OPENCODE 服务收到请求并创建了 session，但 /session/{id}/prompt_async 返回 UnknownError，导致前端看起来像未创建 SESSION 且没有反馈内容；",
+        "activeGoal": "排查并修复：最新修复后，测试页面中 sidepanel 仍未显示“授权当前域名”入口，且进入测试页面后右侧没有插件图标/无法按预期打开扩展侧边栏。需要基于当前仓库实现确认是真实功能缺陷、配置/加载步骤问题还是文档与实际不符，并在必要时做最小",
         "validations": {
           "qa": {
             "status": "not_run",
             "summary": "QA not run for the current goal.",
-            "updatedAt": "2026-04-07T15:28:38.371Z"
+            "updatedAt": "2026-04-08T05:05:32.860Z"
           },
           "audit": {
             "status": "not_run",
             "summary": "Audit not run for the current goal.",
-            "updatedAt": "2026-04-07T15:28:38.371Z"
+            "updatedAt": "2026-04-08T05:05:32.860Z"
           }
         },
         "release": {
           "status": "not_started",
           "summary": "Release not prepared for the current goal.",
-          "updatedAt": "2026-04-07T15:28:38.371Z"
+          "updatedAt": "2026-04-08T05:05:32.860Z"
         },
-        "updatedAt": "2026-04-07T15:28:38.372Z"
+        "updatedAt": "2026-04-08T05:11:21.103Z"
       }
     }
   },
@@ -678,38 +678,129 @@
         ]
       },
       {
-        "identifier": "PROJECT-CURRENT",
-        "type": "WorkPackage",
+        "identifier": "req.ide-chat-ui-enhancement",
+        "type": "Requirement",
         "name": [
           {
-            "value": "修复采集后无反馈问题：当前点击采集时 OPENCODE 服务收到请求并创建了 session，但 /session/{id}/prompt_async 返回 UnknownError，导致前端看起来像未创建 SESSION 且没有反馈内容；"
+            "value": "Formal Requirement - IDE Chat UI Enhancement"
           }
         ],
         "documentation": [
           {
-            "value": "修复采集后无反馈问题：当前点击采集时 OPENCODE 服务收到请求并创建了 session，但 /session/{id}/prompt_async 返回 UnknownError，导致前端看起来像未创建 SESSION 且没有反馈内容；"
+            "value": "# Approved Requirement\n\n## Goal\n在现有项目 `/mnt/d/projects/googlepluginForAiwebassistant` 中，增强对话界面的 **conversation-first / IDE-chat** 风格，使顶部工具栏、消息操作区、输入区附件/上下文标签区在视觉与交互上更接近用户提供截图的 IDE 风格参考，同时保持当前整体主题色调，不切换为暗色主题。\n\n## Scope\n本次需求包含以下三个范围：\n\n1. **顶部 header / 工具栏 IDE 化改造**\n   - 将现有顶部 header / toolbar 调整为更接近 VS Code 风格的布局、层次与控件组织方式。\n   - 保持现有主题色调与明亮风格，不采用暗色主题。\n   - 目标是提升整体 IDE-chat 观感，而非完全复刻 VS Code 原生样式。\n\n2. **消息 hover 操作能力**\n   - 在单条消息 hover 时展示操作入口。\n   - 本次至少包含：**复制、点赞、点踩、重试**。\n   - 其中：\n     - **重试** 的语义明确为：**重发该轮问题，并重新发起一次新的 run**。\n     - **点赞 / 点踩** 不是纯前端占位，必须对接后端接口，形成真实可提交的反馈动作。\n\n3. **输入框附件 / 上下文标签区**\n   - 在输入区域增加更贴近截图效果的附件 / 上下文标签展示区。\n   - 本轮先实现 **UI 占位 + 标签/chips 展示能力**。\n   - 可以展示上下文 chips。\n   - **不要求**本轮完成完整文件上传闭环、附件解析闭环或复杂上下文管理逻辑。\n\n## User Stories / Usage Scenarios\n1. 作为用户，我希望顶部工具栏更像 IDE 聊天面板，这样我在使用时能感受到更强的一体化工作台风格。\n2. 作为用户，我希望鼠标移入消息时能快速看到常用操作，减少界面噪音并提升操作效率。\n3. 作为用户，我希望可以对回答进行点赞或点踩，并将反馈真实提交到后端，而不是只在前端做样式切换。\n4. 作为用户，我希望对某轮对话执行“重试”，系统能够基于该轮问题重新发起一次新的 run，而不是简单刷新当前显示。\n5. 作为用户，我希望输入框附近能看到附件/上下文标签区，即使当前阶段还不是完整上传闭环，也能先具备接近目标产品形态的视觉与基础展示能力。\n6. 作为产品/设计/开发协作者，我希望本次改造重点强化 conversation-first / IDE-chat 视觉语言，而不破坏现有产品主题基调与主要使用流程。\n\n## Acceptance Criteria\n### A. Header / Toolbar\n1. 顶部区域应呈现更接近 IDE/VS Code 风格的结构化工具栏效果，包括但不限于更明确的层次、分区、按钮编排或标题区组织方式。\n2. 最终效果应保持现有主题色调，不切换为暗色主题。\n3. 样式改造后，页面主流程可正常使用，不因 header/tool 栏调整导致主要聊天交互受阻。\n4. 本次目标为“风格趋近”，允许保留当前产品品牌与现有视觉基因，不要求像素级还原截图。\n\n### B. 消息 Hover 操作\n5. 用户 hover 到单条消息时，应出现操作入口，至少包含：复制、点赞、点踩、重试。\n6. 未 hover 时，消息操作区应弱化或隐藏，以维持对话优先的阅读体验。\n7. “复制”操作可对该条消息内容执行复制，并给出明确的成功反馈或等效确认。\n8. “重试”操作触发后，应基于该轮问题重新发起一次新的 run，而不是只做前端重渲染。\n9. “重试”应明确作用于当前消息所属轮次，并遵循现有会话/run 机制。\n10. “点赞 / 点踩”操作必须调用后端接口提交反馈，不得仅做前端假交互。\n11. 点赞/点踩接口调用后，前端应能够体现提交结果状态（如成功、失败、已提交或等效状态）。\n12. 若后端反馈接口失败，界面应给出可感知的失败提示或等效异常反馈。\n\n### C. 输入框附件 / 上下文标签区\n13. 输入区域应新增附件 / 上下文标签展示区，视觉上贴近参考截图的 IDE-chat 风格。\n14. 本轮至少支持展示上下文 chips / 标签。\n15. 本轮允许附件能力仅为 UI 占位，不要求打通完整上传、存储、解析、引用闭环。\n16. 标签/chips 展示不应影响现有输入、发送等基础聊天流程。\n17. 标签区在无内容时应具备合理的空态或占位呈现方式，与整体界面风格一致。\n\n### D. 整体验收\n18. 三项改造完成后，整体界面应比当前版本更明显体现 conversation-first / IDE-chat 风格。\n19. 本次改造不应引入对现有核心聊天流程的明显破坏，包括消息阅读、输入、发送、run 展示等主路径。\n20. 前后端职责边界应清晰：UI 占位可先行，但涉及反馈提交与重试 run 的能力必须具备真实行为语义。\n\n## Constraints\n1. **不得写成暗色主题**；应延续现有主题色调。\n2. 本次是 **增强现有界面风格**，不是推翻式重做。\n3. 点赞 / 点踩必须接后端接口。\n4. 重试必须对应“重发该轮问题，重新发起一次新的 run”。\n5. 附件 / 上下文标签区本轮只要求实现 UI 占位与 chips 展示，不要求完整文件上传闭环。\n6. 输出应可直接用于后续架构分解，因此需明确区分：\n   - 纯 UI/样式类范围\n   - 需要真实后端接口支持的范围\n   - 暂缓到后续阶段的非目标范围\n\n## Open Questions / Assumptions\n### Assumptions\n1. 用户提供的截图是风格参考，而非像素级还原目标。\n2. 当前系统已具备 run 概念或等效执行机制，重试行为应复用或扩展该机制。\n3. 后端存在或可新增消息反馈接口，以支持点赞 / 点踩提交。\n4. 上下文 chips 的数据来源本轮可先由前端可展示数据驱动，不强制要求复杂上下文编排能力同步落地。\n\n### Non-goals for This Round\n1. 不要求完整文件上传闭环。\n2. 不要求附件实际解析与注入模型上下文的全链路。\n3. 不要求对整体聊天信息架构进行大规模重构。\n4. 不要求对所有历史消息交互形态做超出本需求范围的统一改版。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-APP-EXT-RUN-ORCHESTRATION",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Run Orchestration"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationComponent is a modular, deployable, and replaceable part of a software system that encapsulates its behavior and data and exposes them through interfaces. In this architecture, Extension Run Orchestration owns sidepanel-triggered run startup, active-tab recapture, extension state patching, and reuse of the existing run launch path for retry behavior without introducing a parallel run state machine."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "requirementId": "req.ide-chat-ui-enhancement"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-EXT-SHARED-API-CONTRACT",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Shared Run API Contract"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationComponent is a modular, deployable, and replaceable part of a software system that encapsulates its behavior and data and exposes them through interfaces. In this architecture, Extension Shared Run API Contract defines the extension-side HTTP protocol, typed request and response models, and validation boundaries for run startup, answer submission, and message feedback submission."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "requirementId": "req.ide-chat-ui-enhancement"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-BACKEND-RUN-FEEDBACK-SERVICE",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Backend Run Feedback Service"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationComponent is a modular, deployable, and replaceable part of a software system that encapsulates its behavior and data and exposes them through interfaces. In this architecture, Backend Run Feedback Service exposes authenticated HTTP endpoints for assistant-message like and dislike feedback, validates feedback payloads, and serves as the stable backend boundary for extension UI feedback actions."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "requirementId": "req.ide-chat-ui-enhancement"
+          }
+        }
+      },
+      {
+        "identifier": "REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER",
+        "type": "Requirement",
+        "name": [
+          {
+            "value": "Formal Requirement - Decouple Page Collection and Send Button; Fix Incomplete Assistant Response Rendering"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "# Formal Requirement Draft\n\n## Goal\n在插件聊天/助手界面中完成一项混合需求交付：\n1. 对页面数据采集与会话发送行为进行解耦，避免用户在发送消息时被动触发页面数据采集；\n2. 修复当前 AI Assistant 回复内容显示不完整的问题，确保同一 run 内的有效 assistant response 内容被完整呈现。\n\n## Scope\n### In Scope\n- 聊天/助手界面的发送交互重构；\n- 页面数据采集触发方式与发送触发方式分离；\n- 发送按钮位置调整到用户输入框右下角；\n- 发送按钮图标调整为纸飞机；\n- assistant 回复聚合、终态判断、消息提取、渲染链路排查与修复；\n- 同一 run 内 assistant 有效 response 内容的完整展示。\n\n### Out of Scope\n- 更换 AI 模型、服务端业务协议或新增新的会话能力；\n- 对页面数据采集内容结构进行业务扩展；\n- 对历史会话数据进行离线修复，除非现有渲染链路本身会读取历史 run。\n\n## User Stories / Usage Scenarios\n1. 作为插件用户，我希望“页面数据采集”和“发送消息”是两个独立动作，这样我可以只发送文本，也可以按需要单独采集页面信息。\n2. 作为插件用户，我希望发送按钮位于输入框右下角，并使用纸飞机 icon，以符合常见聊天产品的交互预期。\n3. 作为插件用户，当 AI Assistant 在一次 run 中产生多段、分批、延后到达或终态后仍可读取到的有效 response 内容时，我希望插件界面能完整显示全部有效 assistant 回复，而不是只显示前半段或部分片段。\n4. 作为问题排查人员，我希望系统不要因为当前聚合策略、终态判定策略或渲染策略而漏掉后续 assistant response 内容。\n\n## Acceptance Criteria\n### A. 页面数据采集与发送解耦\n- 页面数据采集不得再与“发送消息”按钮耦合，不得因点击发送而默认附带执行页面数据采集，除非后续另有显式产品规则定义。\n- 页面数据采集必须有独立、可被用户理解和触发的入口/动作。\n- 发送消息动作必须仅以当前输入框中的待发送会话内容为主要触发对象，不依赖页面数据采集成功才可发送。\n\n### B. 发送按钮 UX 调整\n- 会话发送按钮必须放置于用户输入框右下角。\n- 发送按钮图标必须使用纸飞机语义的 icon。\n- 按钮位置调整后，不得遮挡输入内容、占位提示、滚动区域或其它核心交互元素。\n- 在空输入、发送中、可发送等状态下，按钮状态反馈应保持一致且可理解。\n\n### C. Assistant 回复完整呈现修复\n- 必须完整呈现同一 run 中的有效 assistant response 内容，不得因为当前聚合/终态/渲染策略漏掉后续内容。\n- 如果同一 run 存在多段 assistant response、增量内容、分块内容、延迟到达内容或需要在 run 完成后才能汇总出的有效内容，界面最终呈现结果必须包含这些有效内容。\n- 不得仅因检测到某个中间终态、局部完成态、首段消息、首个响应块或当前已渲染快照，就停止后续有效 assistant response 的收集与展示。\n- 渲染层最终显示的 assistant 文本应与该 run 实际可获得的有效 assistant response 语义总量一致；若存在结构化片段，至少其可见文本部分不得丢失。\n- 修复后，用户在插件界面看到的 assistant 回复不得明显短于同一 run 的实际响应结果。\n\n### D. 稳定性与回归要求\n- 本次调整不得破坏现有会话创建、发送、接收、滚动浏览、复制或继续提问等基础聊天流程（如这些流程当前已存在）。\n- 对于不触发页面数据采集的普通纯文本对话，发送与回复展示流程必须可正常工作。\n- 对于会产生较长回复的 run，界面必须能够展示完整内容，不得无故截断。\n\n## Constraints\n- 本需求属于“issue 修复 + UX 调整”混合需求，应优先保证用户可感知问题被修复。\n- 架构与实现阶段需要重点检查：response 聚合策略、run 终态判定、消息来源筛选、增量合并、状态更新时机、最终渲染数据源。\n- 若现有链路中同时存在原始事件流、聚合结果和最终消息列表，必须明确哪个来源作为“同一 run 的完整 assistant response”最终显示依据。\n- 不要求在本阶段指定具体技术方案，但要求后续架构分解时将“采集动作解耦”和“回复完整呈现修复”拆成可独立验证的子任务。\n\n## Open Questions / Assumptions\n- 假设页面数据采集功能已经存在，只需从发送动作中解耦，而不是重新定义采集能力本身。\n- 假设“有效 assistant response 内容”指产品当前会话语义下应向用户展示的 assistant 正常回复内容，不包含纯系统日志、调试事件或内部中间态噪声。\n- 若同一 run 中存在不可见控制字段或工具调用元数据，默认不要求原样展示，但其对应的用户可见 assistant 回复文本必须完整呈现。"
+          }
+        ]
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "排查并修复：最新修复后，测试页面中 sidepanel 仍未显示“授权当前域名”入口，且进入测试页面后右侧没有插件图标/无法按预期打开扩展侧边栏。需要基于当前仓库实现确认是真实功能缺陷、配置/加载步骤问题还是文档与实际不符，并在必要时做最小"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "排查并修复：最新修复后，测试页面中 sidepanel 仍未显示“授权当前域名”入口，且进入测试页面后右侧没有插件图标/无法按预期打开扩展侧边栏。需要基于当前仓库实现确认是真实功能缺陷、配置/加载步骤问题还是文档与实际不符，并在必要时做最小"
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "修复采集后无反馈问题：当前点击采集时 OPENCODE 服务收到请求并创建了 session，但 /session/{id}/prompt_async 返回 UnknownError，导致前端看起来像未创建 SESSION 且没有反馈内容；",
+            "rawRequirement": "排查并修复：最新修复后，测试页面中 sidepanel 仍未显示“授权当前域名”入口，且进入测试页面后右侧没有插件图标/无法按预期打开扩展侧边栏。需要基于当前仓库实现确认是真实功能缺陷、配置/加载步骤问题还是文档与实际不符，并在必要时做最小",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-073",
+        "identifier": "TASK-096",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "修复采集后无反馈问题：当前点击采集时 OPENCODE 服务收到请求并创建了 session，但 /session/{id}/prompt_async 返回 UnknownError，导致前端看起来像未创建 SESSION 且没有反馈内容；"
+            "value": "排查并修复：最新修复后，测试页面中 sidepanel 仍未显示“授权当前域名”入口，且进入测试页面后右侧没有插件图标/无法按预期打开扩展侧边栏。需要基于当前仓库实现确认是真实功能缺陷、配置/加载步骤问题还是文档与实际不符，并在必要时做最小"
           }
         ],
         "documentation": [
           {
-            "value": "Fast-track implementation started for localized prompt_async adapter contract fix and related error handling/tests."
+            "value": "Completed fast-track issue fix for extension permission-entry visibility and outdated extension build guidance. Added fallback authorization guidance in sidepanel even when current build cannot request permission for the domain, updated README with env/build/reload checks for 127.0.0.1 manifest permissions and missing AI button troubleshooting, and added extension test coverage."
           }
         ],
         "extensions": {
@@ -717,15 +808,15 @@
             "managedBy": "opencode-runtime",
             "kind": "Task",
             "taskKind": "planning",
-            "status": "InProgress",
+            "status": "Done",
             "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Fast-track implementation started for localized prompt_async adapter contract fix and related error handling/tests.",
-            "commitId": "",
+            "summary": "Completed fast-track issue fix for extension permission-entry visibility and outdated extension build guidance. Added fallback authorization guidance in sidepanel even when current build cannot request permission for the domain, updated README with env/build/reload checks for 127.0.0.1 manifest permissions and missing AI button troubleshooting, and added extension test coverage.",
+            "commitId": "2c2814c21f3a731a0e56a9701886f37fdf8b06e0",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-07T15:32:02.226Z"
+            "updatedAt": "2026-04-08T05:11:46.695Z"
           }
         }
       }
@@ -1302,15 +1393,15 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-073",
+        "identifier": "REL-PROJECT-TASK-096",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-073"
+            "value": "Project aggregates TASK-096"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-073",
+        "target": "TASK-096",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
