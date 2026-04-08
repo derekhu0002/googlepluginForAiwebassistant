@@ -138,3 +138,62 @@ describe("POST /api/analyze", () => {
     expect(response.body.error.code).toBe("PERMISSION_ERROR");
   });
 });
+
+describe("POST /api/message-feedback", () => {
+  it("accepts like/dislike feedback payloads", async () => {
+    const app = createApp(new ImmediateProvider());
+    const response = await request(app)
+      .post("/api/message-feedback")
+      .send({
+        runId: "run-1",
+        messageId: "message-1",
+        feedback: "like"
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      ok: true,
+      data: {
+        accepted: true,
+        runId: "run-1",
+        messageId: "message-1",
+        feedback: "like"
+      }
+    });
+    expect(response.body.data.updatedAt).toEqual(expect.any(String));
+  });
+
+  it("rejects invalid feedback payload", async () => {
+    const app = createApp(new ImmediateProvider());
+    const response = await request(app)
+      .post("/api/message-feedback")
+      .send({
+        runId: "run-1",
+        messageId: "message-1",
+        feedback: "neutral"
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("requires api key when enabled", async () => {
+    const app = createApp(new ImmediateProvider(), {
+      ...env,
+      API_KEY: "secret-key",
+      ALLOWED_ORIGINS: ["https://example.com"]
+    });
+
+    const response = await request(app)
+      .post("/api/message-feedback")
+      .set("Origin", "https://example.com")
+      .send({
+        runId: "run-1",
+        messageId: "message-1",
+        feedback: "dislike"
+      });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("AUTH_ERROR");
+  });
+});

@@ -80,6 +80,60 @@ describe("streaming api client", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("submits message feedback", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({
+        ok: true,
+        data: {
+          accepted: true,
+          runId: "run-1",
+          messageId: "message-1",
+          feedback: "like",
+          updatedAt: "2026-04-08T00:00:00.000Z"
+        }
+      })
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    const { submitMessageFeedback } = await import("./api");
+    const result = await submitMessageFeedback({ runId: "run-1", messageId: "message-1", feedback: "like" });
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        accepted: true,
+        runId: "run-1",
+        messageId: "message-1",
+        feedback: "like",
+        updatedAt: "2026-04-08T00:00:00.000Z"
+      }
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/message-feedback",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("returns failure state for message feedback network errors", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    global.fetch = vi.fn().mockRejectedValue(new Error("socket closed")) as typeof fetch;
+
+    const { submitMessageFeedback } = await import("./api");
+    const result = await submitMessageFeedback({ runId: "run-1", messageId: "message-1", feedback: "dislike" });
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "NETWORK_ERROR", message: "socket closed" })
+    });
+  });
+
   it("parses incoming SSE messages", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
     vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");

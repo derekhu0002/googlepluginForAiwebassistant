@@ -186,7 +186,9 @@ async function runCaptureOnly() {
   });
 }
 
-async function startRunFromActiveTab(prompt: string) {
+/** @ArchitectureID: ELM-APP-EXT-RUN-ORCHESTRATION */
+async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?: string; retryFromMessageId?: string }) {
+  const { prompt } = options;
   const activeTab = await getActiveTab();
   const rules = await getRules();
   const matchedRule = findMatchingRule(activeTab.url, rules);
@@ -338,7 +340,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
           sendResponse(await getActiveTabContext());
           break;
         case "START_RUN":
-          sendResponse(await startRunFromActiveTab(message.payload.prompt));
+          sendResponse(await startRunFromActiveTab(message.payload));
           break;
         case "RECAPTURE":
           await runCaptureOnly();

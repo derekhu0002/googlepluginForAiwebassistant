@@ -78,6 +78,12 @@ function toTimestamp(value: string | null | undefined) {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
+const COMPOSER_PLACEHOLDER_CHIPS = [
+  { label: "附件", description: "UI 占位" },
+  { label: "页面上下文", description: "已采集字段" },
+  { label: "选中内容", description: "可作为上下文" }
+] as const;
+
 
 export function mergeStateUpdate(current: AssistantState, payload: AssistantState, history: AssistantState["history"], selectedHistoryDetail: AssistantState["selectedHistoryDetail"]): AssistantState {
   const mergedState: AssistantState = {
@@ -363,14 +369,25 @@ export function App() {
     }
   }
 
-  async function startStreamingRun() {
+  async function startStreamingRun(retryPayload?: { prompt: string; retryFromRunId?: string; retryFromMessageId?: string }) {
     setStreamError("");
     eventSourceRef.current?.close();
     clearSelectedRun().catch(() => undefined);
 
+    const nextPrompt = retryPayload?.prompt ?? prompt;
+    if (!nextPrompt.trim()) {
+      return;
+    }
+
+    setPrompt(nextPrompt);
+
     const response = await sendMessage<{ ok: boolean; data?: { runId: string; currentRun: RunRecord } ; error?: { message: string } }>({
       type: "START_RUN",
-      payload: { prompt }
+      payload: {
+        prompt: nextPrompt,
+        retryFromRunId: retryPayload?.retryFromRunId,
+        retryFromMessageId: retryPayload?.retryFromMessageId
+      }
     });
 
     if (!response.ok || !response.data) {
@@ -491,6 +508,14 @@ export function App() {
     refresh().catch(() => undefined);
   }
 
+  async function handleRetry(payload: { prompt: string; runId: string; messageId: string }) {
+    await startStreamingRun({
+      prompt: payload.prompt,
+      retryFromRunId: payload.runId,
+      retryFromMessageId: payload.messageId
+    });
+  }
+
   const selectedRule = draftRule;
   const errorTitle = state.error?.code ? `${state.error.code}` : null;
   const errorDescription = state.error ? toDisplayMessage(state.error) : state.errorMessage || streamError;
@@ -520,11 +545,23 @@ export function App() {
   return (
     <main className="app-shell chat-app-shell">
       <header className="app-header chat-app-header">
-        <div>
-          <h1>AI Web Assistant</h1>
-          <p>conversation-first / 单一连续对话流</p>
+        <div className="ide-header-titlebar">
+          <div>
+            <h1>AI Web Assistant</h1>
+            <p>conversation-first / 单一连续对话流</p>
+          </div>
+          <span className="mode-chip">{isEmbedded || state.uiMode === "embedded" ? "Embedded" : "Side Panel"}</span>
         </div>
-        <span className="mode-chip">{isEmbedded || state.uiMode === "embedded" ? "Embedded" : "Side Panel"}</span>
+        <div className="ide-toolbar" aria-label="IDE chat toolbar">
+          <div className="ide-toolbar-group">
+            <span className="ide-toolbar-label">Chat</span>
+            <span className="ide-toolbar-pill">Light IDE</span>
+          </div>
+          <div className="ide-toolbar-group">
+            <span className="ide-toolbar-pill">Live / History</span>
+            <span className="ide-toolbar-pill">Run {shellStatusLabel}</span>
+          </div>
+        </div>
       </header>
 
       <section className="panel-block chat-primary-panel">
@@ -554,6 +591,7 @@ export function App() {
               updatedAt={state.currentRun?.updatedAt ?? state.currentRun?.startedAt}
               pendingQuestionId={state.stream.pendingQuestionId}
               emptyText="正在生成回答…"
+              onRetry={handleRetry}
               onQuestionSubmit={handleQuestionSubmit}
               questionSubmitDisabled={!questionEvent?.question}
             />
@@ -563,6 +601,14 @@ export function App() {
         </div>
 
         <div className="conversation-composer docked-composer">
+          <div className="composer-chip-zone" aria-label="composer placeholders">
+            {COMPOSER_PLACEHOLDER_CHIPS.map((chip) => (
+              <span key={chip.label} className="composer-chip">
+                <strong>{chip.label}</strong>
+                <small>{chip.description}</small>
+              </span>
+            ))}
+          </div>
           <label>
             <span>{questionEvent?.question ? "继续回答或追问" : "发送消息"}</span>
             <textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} rows={4} placeholder="输入你的问题，或继续追问…" />
@@ -662,6 +708,7 @@ export function App() {
                   errorMessage={selectedHistoryDetail.run.errorMessage}
                   updatedAt={selectedHistoryDetail.run.updatedAt ?? selectedHistoryDetail.run.startedAt}
                   emptyText="尚未完成"
+                  onRetry={handleRetry}
                 />
               ) : <p className="empty-state">选择一条历史记录查看详情。</p>}
             </div>

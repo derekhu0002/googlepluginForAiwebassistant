@@ -159,6 +159,93 @@ describe("background rule-driven capture flow", () => {
     expect(sendMessage).toHaveBeenCalledWith(1, expect.objectContaining({ type: "COLLECT_FIELDS" }));
   });
 
+  it("reuses START_RUN orchestration when retry metadata is present", async () => {
+    const storageState: Record<string, unknown> = {
+      "ai-web-assistant-rules": [
+        {
+          id: "rule-1",
+          name: "Example rule",
+          hostnamePattern: "example.com",
+          pathPattern: "*",
+          enabled: true,
+          fields: [
+            { id: "field-1", key: "pageTitle", label: "页面标题", source: "documentTitle", enabled: true }
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ]
+    };
+
+    const listenerRegistry: { handler?: (message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean } = {};
+    const sendMessage = vi.fn(async (_tabId: number, message: { type: string }) => {
+      if (message.type === "PING") {
+        return { ready: true };
+      }
+      if (message.type === "COLLECT_FIELDS") {
+        return { pageTitle: "Demo", pageUrl: "https://example.com/page" };
+      }
+      if (message.type === "GET_USERNAME_CONTEXT") {
+        return { username: "alice", usernameSource: "dom_text" };
+      }
+      return undefined;
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { runId: "run-2" } })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.stubGlobal("chrome", {
+      tabs: {
+        query: vi.fn().mockResolvedValue([{ id: 1, url: "https://example.com/page" }]),
+        get: vi.fn().mockResolvedValue({ id: 1, url: "https://example.com/page" }),
+        sendMessage
+      },
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: storageState[key] })),
+          set: vi.fn(async (payload: Record<string, unknown>) => Object.assign(storageState, payload))
+        }
+      },
+      permissions: {
+        contains: vi.fn().mockResolvedValue(true),
+        request: vi.fn().mockResolvedValue(true)
+      },
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        onMessage: { addListener: vi.fn((handler) => { listenerRegistry.handler = handler; }) },
+        onInstalled: { addListener: vi.fn() }
+      },
+      sidePanel: {
+        setOptions: vi.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
+        setPanelBehavior: vi.fn().mockResolvedValue(undefined)
+      },
+      scripting: {
+        executeScript: vi.fn().mockResolvedValue(undefined)
+      }
+    } as unknown as typeof chrome);
+
+    await import("./index");
+
+    const response = await new Promise<unknown>((resolve) => {
+      listenerRegistry.handler?.({
+        type: "START_RUN",
+        payload: {
+          prompt: "原始用户问题",
+          retryFromRunId: "run-1",
+          retryFromMessageId: "message-1"
+        }
+      }, {}, resolve);
+    }) as { ok: boolean; data: { currentRun: { prompt: string; runId: string } } };
+
+    expect(response.ok).toBe(true);
+    expect(response.data.currentRun.prompt).toBe("原始用户问题");
+    expect(response.data.currentRun.runId).toBe("run-2");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("protects GET_USERNAME_CONTEXT with ready handshake and single controlled retry", async () => {
     const storageState: Record<string, unknown> = {
       "ai-web-assistant-rules": [

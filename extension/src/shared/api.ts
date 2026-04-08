@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { extensionConfig } from "./config";
 import { createDomainError, ERROR_CODES } from "./errors";
-import type { AnswerApiResponse, CapturedFields, StartRunApiResponse, UsernameContext } from "./types";
-import type { NormalizedRunEvent, QuestionAnswerRequest, RunStartRequest } from "./protocol";
+import type { AnswerApiResponse, CapturedFields, FeedbackApiResponse, StartRunApiResponse, UsernameContext } from "./types";
+import type { MessageFeedbackRequest, NormalizedRunEvent, QuestionAnswerRequest, RunStartRequest } from "./protocol";
 
 const failureSchema = z.object({
   ok: z.literal(false),
@@ -30,6 +30,20 @@ const answerSchema = z.union([
       accepted: z.literal(true),
       runId: z.string(),
       questionId: z.string()
+    })
+  }),
+  failureSchema
+]);
+
+const feedbackSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    data: z.object({
+      accepted: z.literal(true),
+      runId: z.string(),
+      messageId: z.string(),
+      feedback: z.enum(["like", "dislike"]),
+      updatedAt: z.string()
     })
   }),
   failureSchema
@@ -179,6 +193,24 @@ export async function submitQuestionAnswer(runId: string, payload: QuestionAnswe
     });
 
     return answerSchema.parse(await parseJsonOrFailure(response));
+  } catch (error) {
+    return {
+      ok: false,
+      error: createDomainError("NETWORK_ERROR", error instanceof Error ? error.message : "Unknown network error")
+    };
+  }
+}
+
+/** @ArchitectureID: ELM-APP-EXT-SHARED-API-CONTRACT */
+export async function submitMessageFeedback(payload: MessageFeedbackRequest): Promise<FeedbackApiResponse> {
+  try {
+    const response = await fetch(`${extensionConfig.apiBaseUrl}/api/message-feedback`, {
+      method: "POST",
+      headers: withHeaders(),
+      body: JSON.stringify(payload)
+    });
+
+    return feedbackSchema.parse(await parseJsonOrFailure(response));
   } catch (error) {
     return {
       ok: false,

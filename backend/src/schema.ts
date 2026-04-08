@@ -16,4 +16,11 @@ export const analyzeRequestSchema = z.object({
   }).optional()
 });
 
+export const messageFeedbackRequestSchema = z.object({
+  runId: z.string().min(1).max(200),
+  messageId: z.string().min(1).max(200),
+  feedback: z.enum(["like", "dislike"])
+});
+
 export type AnalyzeRequestInput = z.infer<typeof analyzeRequestSchema>;
+export type MessageFeedbackRequestInput = z.infer<typeof messageFeedbackRequestSchema>;

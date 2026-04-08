@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { env, type BackendEnv } from "./config.js";
 import { AnalysisError, AppError, AuthError, PermissionError, ValidationError } from "./errors.js";
 import type { AnalysisProvider } from "./types.js";
-import { analyzeRequestSchema } from "./schema.js";
+import { analyzeRequestSchema, messageFeedbackRequestSchema } from "./schema.js";
 import { withTimeout } from "./timeout.js";
 
 export function createApp(provider: AnalysisProvider, appEnv: BackendEnv = env) {
@@ -49,6 +49,32 @@ export function createApp(provider: AnalysisProvider, appEnv: BackendEnv = env) 
       response.json({
         ok: true,
         data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /** @ArchitectureID: ELM-APP-BACKEND-RUN-FEEDBACK-SERVICE */
+  app.post("/api/message-feedback", async (request, response, next) => {
+    try {
+      if (appEnv.API_KEY) {
+        const incomingApiKey = request.header("x-api-key");
+        if (incomingApiKey !== appEnv.API_KEY) {
+          throw new AuthError();
+        }
+      }
+
+      const payload = messageFeedbackRequestSchema.parse(request.body);
+      response.json({
+        ok: true,
+        data: {
+          accepted: true,
+          runId: payload.runId,
+          messageId: payload.messageId,
+          feedback: payload.feedback,
+          updatedAt: new Date().toISOString()
+        }
       });
     } catch (error) {
       next(error);

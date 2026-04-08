@@ -255,4 +255,56 @@ describe("reasoning timeline view-model", () => {
     expect(liveItems.map((item) => item.kind)).toEqual(historyItems.map((item) => item.kind));
     expect(liveItems.at(-1)?.summary).toBe(historyItems.at(-1)?.summary);
   });
+
+  it("adds hover action metadata for assistant result items", () => {
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "原始问题",
+      events: [createEvent(1, { type: "result", message: "最终回答" })],
+      status: "done",
+      finalOutput: "最终回答"
+    });
+
+    const resultItem = items.find((item) => item.kind === "assistant_result");
+    expect(resultItem).toMatchObject({
+      supportsCopy: true,
+      supportsRetry: true,
+      supportsFeedback: true,
+      sourceQuestionPrompt: "原始问题",
+      feedbackState: { status: "idle" }
+    });
+  });
+
+  it("does not offer feedback or retry for user answer items", () => {
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "原始问题",
+      answers: [{
+        id: "answer-1",
+        runId: "run-1",
+        questionId: "q-1",
+        answer: "继续执行",
+        submittedAt: "2026-04-02T00:00:01.000Z"
+      }],
+      events: [createEvent(1, {
+        type: "question",
+        message: "请选择下一步",
+        question: {
+          questionId: "q-1",
+          title: "需要确认",
+          message: "请选择下一步",
+          options: [],
+          allowFreeText: true
+        }
+      })],
+      status: "waiting_for_answer"
+    });
+
+    const userAnswer = items.find((item) => item.kind === "user_answer");
+    expect(userAnswer).toMatchObject({
+      supportsCopy: true,
+      supportsRetry: false,
+      supportsFeedback: false
+    });
+  });
 });

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
-import type { AnswerRecord, QuestionPayload, RunRecord } from "../shared/protocol";
-import type { StreamConnectionState } from "../shared/types";
+import { submitMessageFeedback } from "../shared/api";
+import type { AnswerRecord, MessageFeedbackValue, QuestionPayload, RunRecord } from "../shared/protocol";
+import type { MessageFeedbackUiState, StreamConnectionState } from "../shared/types";
 import {
   buildChatStreamItems,
+  getDefaultFeedbackMessage,
   getTimelineCardStatus,
   getTimelineStatusCopy,
   resolveTimelinePresentationState,
@@ -101,6 +103,10 @@ function renderAnswerLabel(answer?: AnswerRecord) {
   return <span className="inline-answer-pill">已选择</span>;
 }
 
+function normalizeFeedbackFailureMessage(message: string) {
+  return message.trim() || "反馈提交失败";
+}
+
 function InlineQuestionComposer({
   question,
   disabled,
@@ -169,6 +175,9 @@ function ChatStreamTurn({
   status,
   animate,
   live,
+  onRetry,
+  onCopy,
+  onFeedback,
   onQuestionSubmit,
   questionSubmitDisabled
 }: {
@@ -176,6 +185,9 @@ function ChatStreamTurn({
   status: ReturnType<typeof getTimelineCardStatus>;
   animate: boolean;
   live: boolean;
+  onRetry?: (item: ChatStreamItemModel) => void;
+  onCopy?: (item: ChatStreamItemModel) => void;
+  onFeedback?: (item: ChatStreamItemModel, feedback: MessageFeedbackValue) => void;
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
 }) {
@@ -185,6 +197,7 @@ function ChatStreamTurn({
   const avatarLabel = item.kind === "assistant_question" ? "?" : item.kind === "assistant_error" ? "!" : isUser ? "你" : "AI";
   const messageText = displayedSummary || (item.kind === "assistant_progress" && live ? "正在生成回答…" : "");
   const processPreview = !isUser && item.processSummary && item.kind !== "assistant_progress" ? item.processSummary : "";
+  const feedbackMessage = item.feedbackState?.message || getDefaultFeedbackMessage(item.feedbackState?.status ?? "idle", item.feedbackState?.selected);
   const messageClassName = [
     "conversation-message",
     item.kind === "assistant_progress" ? "conversation-message-muted" : ""
@@ -205,6 +218,37 @@ function ChatStreamTurn({
 
         {messageText ? <p className={messageClassName}>{messageText}</p> : null}
         {processPreview ? <p className="conversation-process-summary">{processPreview}</p> : null}
+
+        {!isUser ? (
+          <div className="conversation-hover-actions" aria-label="message actions">
+            {item.supportsCopy ? <button type="button" className="icon-button" onClick={() => onCopy?.(item)}>复制</button> : null}
+            {item.supportsFeedback ? (
+              <>
+                <button
+                  type="button"
+                  className={`icon-button ${item.feedbackState?.selected === "like" && item.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
+                  disabled={item.feedbackState?.status === "submitting"}
+                  onClick={() => onFeedback?.(item, "like")}
+                >
+                  点赞
+                </button>
+                <button
+                  type="button"
+                  className={`icon-button ${item.feedbackState?.selected === "dislike" && item.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
+                  disabled={item.feedbackState?.status === "submitting"}
+                  onClick={() => onFeedback?.(item, "dislike")}
+                >
+                  点踩
+                </button>
+              </>
+            ) : null}
+            {item.supportsRetry ? <button type="button" className="icon-button" onClick={() => onRetry?.(item)}>重试</button> : null}
+          </div>
+        ) : null}
+
+        {!isUser && feedbackMessage ? (
+          <small className={`feedback-status feedback-${item.feedbackState?.status ?? "idle"}`}>{feedbackMessage}</small>
+        ) : null}
 
         {item.kind === "assistant_question" && item.question && item.pendingQuestion && onQuestionSubmit ? (
           <InlineQuestionComposer question={item.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
@@ -227,6 +271,7 @@ export interface ChatStreamViewProps {
   updatedAt?: string | null;
   pendingQuestionId?: string | null;
   emptyText?: string;
+  onRetry?: (payload: { prompt: string; runId: string; messageId: string }) => void | Promise<void>;
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
 }
@@ -246,12 +291,14 @@ export function ReasoningTimeline({
   updatedAt,
   pendingQuestionId,
   emptyText = "暂无事件。",
+  onRetry,
   onQuestionSubmit,
   questionSubmitDisabled = false
 }: ChatStreamViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [autoFollow, setAutoFollow] = useState(live);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, MessageFeedbackUiState>>({});
   const previousSignatureRef = useRef<string>("");
   const presentationState = useMemo(() => resolveTimelinePresentationState({
     events,
@@ -265,12 +312,17 @@ export function ReasoningTimeline({
     prompt,
     events,
     answers,
+    feedbackByMessageId,
     finalOutput,
     errorMessage,
     status: runStatus,
     updatedAt,
     pendingQuestionId
-  }), [answers, errorMessage, events, finalOutput, pendingQuestionId, prompt, runId, runStatus, updatedAt]);
+  }), [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runStatus, updatedAt]);
+
+  useEffect(() => {
+    setFeedbackByMessageId({});
+  }, [runId]);
 
   useEffect(() => {
     setAutoFollow(live);
@@ -307,6 +359,67 @@ export function ReasoningTimeline({
     setUnreadCount(0);
   }
 
+  async function handleCopy(item: ChatStreamItemModel) {
+    const text = item.summary.trim();
+    if (!text) {
+      return;
+    }
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    }
+  }
+
+  async function handleFeedback(item: ChatStreamItemModel, feedback: MessageFeedbackValue) {
+    setFeedbackByMessageId((current) => ({
+      ...current,
+      [item.id]: {
+        status: "submitting",
+        selected: feedback,
+        message: getDefaultFeedbackMessage("submitting", feedback)
+      }
+    }));
+
+    const response = await submitMessageFeedback({
+      runId: item.runId,
+      messageId: item.id,
+      feedback
+    });
+
+    if (!response.ok) {
+      setFeedbackByMessageId((current) => ({
+        ...current,
+        [item.id]: {
+          status: "error",
+          selected: feedback,
+          message: normalizeFeedbackFailureMessage(response.error.message)
+        }
+      }));
+      return;
+    }
+
+    setFeedbackByMessageId((current) => ({
+      ...current,
+      [item.id]: {
+        status: "submitted",
+        selected: response.data.feedback,
+        message: getDefaultFeedbackMessage("submitted", response.data.feedback)
+      }
+    }));
+  }
+
+  async function handleRetry(item: ChatStreamItemModel) {
+    if (!item.sourceQuestionPrompt || !item.runId || !onRetry) {
+      return;
+    }
+
+    await onRetry({
+      prompt: item.sourceQuestionPrompt,
+      runId: item.runId,
+      messageId: item.id
+    });
+  }
+
   return (
     <div className="timeline-shell conversation-timeline-shell chat-stream-shell">
       <div
@@ -336,9 +449,12 @@ export function ReasoningTimeline({
                 && index === items.length - 1
                 && (item.kind === "assistant_progress" || item.kind === "assistant_result")}
               live={live}
-            onQuestionSubmit={item.kind === "assistant_question" ? onQuestionSubmit : undefined}
-            questionSubmitDisabled={questionSubmitDisabled}
-          />
+              onCopy={handleCopy}
+              onFeedback={handleFeedback}
+              onRetry={handleRetry}
+             onQuestionSubmit={item.kind === "assistant_question" ? onQuestionSubmit : undefined}
+             questionSubmitDisabled={questionSubmitDisabled}
+           />
         )) : <p className="empty-state chat-empty-state">{emptyText}</p>}
       </div>
 

@@ -1,4 +1,5 @@
-import type { AnswerRecord, NormalizedEventType, NormalizedRunEvent, QuestionPayload, RunRecord } from "../shared/protocol";
+import type { AnswerRecord, MessageFeedbackValue, NormalizedEventType, NormalizedRunEvent, QuestionPayload, RunRecord } from "../shared/protocol";
+import type { MessageFeedbackUiState } from "../shared/types";
 
 const DEFAULT_EVENT_TITLES: Record<NormalizedEventType, string> = {
   thinking: "分析中",
@@ -104,6 +105,33 @@ export interface ChatStreamItemModel {
   question?: QuestionPayload;
   answer?: AnswerRecord;
   pendingQuestion?: boolean;
+  sourceQuestionPrompt?: string;
+  supportsCopy: boolean;
+  supportsRetry: boolean;
+  supportsFeedback: boolean;
+  feedbackState?: MessageFeedbackUiState;
+}
+
+export function createIdleFeedbackState(): MessageFeedbackUiState {
+  return {
+    status: "idle"
+  };
+}
+
+export function getDefaultFeedbackMessage(status: MessageFeedbackUiState["status"], selected?: MessageFeedbackValue) {
+  if (status === "submitted") {
+    return selected === "like" ? "已提交点赞" : selected === "dislike" ? "已提交点踩" : "已提交反馈";
+  }
+
+  if (status === "error") {
+    return "反馈提交失败";
+  }
+
+  if (status === "submitting") {
+    return "反馈提交中";
+  }
+
+  return "";
 }
 
 export function getEventTitle(event: Pick<NormalizedRunEvent, "type" | "title" | "question">) {
@@ -271,6 +299,7 @@ export interface BuildChatStreamItemsOptions {
   prompt?: string | null;
   events: NormalizedRunEvent[];
   answers?: AnswerRecord[];
+  feedbackByMessageId?: Record<string, MessageFeedbackUiState>;
   finalOutput?: string | null;
   errorMessage?: string | null;
   status?: RunRecord["status"];
@@ -372,7 +401,11 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
       updatedAt: reasoningItems[0]?.createdAt ?? fallbackTimestamp,
       primaryType: "user_prompt",
       processItems: [],
-      processSummary: ""
+      processSummary: "",
+      sourceQuestionPrompt: prompt,
+      supportsCopy: true,
+      supportsRetry: false,
+      supportsFeedback: false
     });
   }
 
@@ -395,7 +428,12 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
         processItems: pendingProcessItems,
         processSummary: createReasoningSummary(pendingProcessItems),
         question: item.question,
-        pendingQuestion: item.question?.questionId === options.pendingQuestionId
+        pendingQuestion: item.question?.questionId === options.pendingQuestionId,
+      sourceQuestionPrompt: prompt,
+      supportsCopy: true,
+      supportsRetry: true,
+      supportsFeedback: true,
+      feedbackState: options.feedbackByMessageId?.[item.id] ?? createIdleFeedbackState()
       });
       pendingProcessItems = [];
 
@@ -405,14 +443,17 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
           runId: item.runId,
           kind: "user_answer",
           title: "You",
-          summary: answer.answer,
+        summary: answer.answer,
           createdAt: answer.submittedAt,
           updatedAt: answer.submittedAt,
           primaryType: "user_answer",
           processItems: [],
           processSummary: "",
-          answer
-        });
+        answer,
+        supportsCopy: true,
+        supportsRetry: false,
+        supportsFeedback: false
+      });
       }
       continue;
     }
@@ -429,7 +470,12 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
         updatedAt: item.updatedAt,
         primaryType: "result",
         processItems: pendingProcessItems,
-        processSummary: createReasoningSummary(pendingProcessItems)
+        processSummary: createReasoningSummary(pendingProcessItems),
+        sourceQuestionPrompt: prompt,
+        supportsCopy: true,
+        supportsRetry: true,
+        supportsFeedback: true,
+        feedbackState: options.feedbackByMessageId?.[item.id] ?? createIdleFeedbackState()
       });
       pendingProcessItems = [];
       continue;
@@ -446,7 +492,11 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
       updatedAt: item.updatedAt,
       primaryType: "error",
       processItems: pendingProcessItems,
-      processSummary: createReasoningSummary(pendingProcessItems)
+      processSummary: createReasoningSummary(pendingProcessItems),
+      sourceQuestionPrompt: prompt,
+      supportsCopy: true,
+      supportsRetry: true,
+      supportsFeedback: false
     });
     pendingProcessItems = [];
   }
@@ -462,7 +512,11 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
       updatedAt: pendingProcessItems[pendingProcessItems.length - 1]?.updatedAt ?? options.updatedAt ?? new Date().toISOString(),
       primaryType: pendingProcessItems[pendingProcessItems.length - 1]?.type ?? "thinking",
       processItems: pendingProcessItems,
-      processSummary: createReasoningSummary(pendingProcessItems)
+      processSummary: createReasoningSummary(pendingProcessItems),
+      sourceQuestionPrompt: prompt,
+      supportsCopy: false,
+      supportsRetry: false,
+      supportsFeedback: false
     });
     pendingProcessItems = [];
   }
@@ -478,7 +532,12 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
       updatedAt: fallbackTimestamp,
       primaryType: "result",
       processItems: [],
-      processSummary: ""
+      processSummary: "",
+      sourceQuestionPrompt: prompt,
+      supportsCopy: true,
+      supportsRetry: true,
+      supportsFeedback: true,
+      feedbackState: options.feedbackByMessageId?.[`synthetic-result-${options.runId ?? "standalone"}`] ?? createIdleFeedbackState()
     });
   }
 
@@ -493,7 +552,11 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
       updatedAt: fallbackTimestamp,
       primaryType: "error",
       processItems: [],
-      processSummary: ""
+      processSummary: "",
+      sourceQuestionPrompt: prompt,
+      supportsCopy: true,
+      supportsRetry: true,
+      supportsFeedback: false
     });
   }
 
@@ -514,7 +577,11 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
         updatedAt: lastItem?.updatedAt ?? fallbackTimestamp,
         primaryType: "thinking",
         processItems: [],
-        processSummary: ""
+        processSummary: "",
+        sourceQuestionPrompt: prompt,
+        supportsCopy: false,
+        supportsRetry: false,
+        supportsFeedback: false
       });
     }
   }

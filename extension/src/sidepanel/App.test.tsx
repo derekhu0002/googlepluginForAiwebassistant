@@ -8,6 +8,7 @@ import type { NormalizedRunEvent, RunRecord } from "../shared/protocol";
 const {
   mockCreateRunEventStream,
   mockSubmitQuestionAnswer,
+  mockSubmitMessageFeedback,
   mockRefreshHistory,
   mockSaveRun,
   mockSaveEvent,
@@ -19,6 +20,7 @@ const {
 } = vi.hoisted(() => ({
   mockCreateRunEventStream: vi.fn(() => ({ close: mockStreamClose })),
   mockSubmitQuestionAnswer: vi.fn(),
+  mockSubmitMessageFeedback: vi.fn(),
   mockRefreshHistory: vi.fn(async () => undefined),
   mockSaveRun: vi.fn(async () => undefined),
   mockSaveEvent: vi.fn(async () => undefined),
@@ -49,7 +51,8 @@ vi.mock("../shared/config", () => ({
 
 vi.mock("../shared/api", () => ({
   createRunEventStream: mockCreateRunEventStream,
-  submitQuestionAnswer: mockSubmitQuestionAnswer
+  submitQuestionAnswer: mockSubmitQuestionAnswer,
+  submitMessageFeedback: mockSubmitMessageFeedback
 }));
 
 vi.mock("./useRunHistory", () => ({
@@ -212,6 +215,11 @@ describe("side panel host permission request flow", () => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
     vi.useFakeTimers();
+    vi.stubGlobal("navigator", {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined)
+      }
+    });
     mockRunHistoryState.history = [];
     mockRunHistoryState.selectedHistoryDetail = null;
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -945,6 +953,191 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("底部输入区始终可用");
     expect(container.textContent).toContain("历史详情沿用同一对话流呈现。");
     expect(container.textContent).toContain("持续输出中");
+  });
+
+  it("renders light IDE header toolbar and composer placeholder chips", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("Light IDE");
+    expect(container.textContent).toContain("Live / History");
+    expect(container.textContent).toContain("附件");
+    expect(container.textContent).toContain("页面上下文");
+    expect(container.textContent).toContain("选中内容");
+  });
+
+  it("shows hover action buttons for assistant messages", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          finalOutput: "最终回答",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [createRunEvent(1, { type: "result", message: "最终回答" })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(Array.from(container.querySelectorAll("button")).some((node) => node.textContent === "复制")).toBe(true);
+    expect(Array.from(container.querySelectorAll("button")).some((node) => node.textContent === "点赞")).toBe(true);
+    expect(Array.from(container.querySelectorAll("button")).some((node) => node.textContent === "点踩")).toBe(true);
+    expect(Array.from(container.querySelectorAll("button")).some((node) => node.textContent === "重试")).toBe(true);
+  });
+
+  it("retries by starting a new run with the original user question", async () => {
+    const { runtimeSendMessage } = setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          prompt: "原始用户问题",
+          status: "done",
+          finalOutput: "最终回答",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [createRunEvent(1, { type: "result", message: "最终回答" })]
+      }),
+      startRunResponse: { ok: true, data: { runId: "run-2", currentRun: { ...createCurrentRun(), runId: "run-2", prompt: "原始用户问题" } } }
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const retryButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent === "重试");
+    await act(async () => {
+      retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(runtimeSendMessage).toHaveBeenCalledWith({
+      type: "START_RUN",
+      payload: {
+        prompt: "原始用户问题",
+        retryFromRunId: "run-1",
+        retryFromMessageId: "event-1"
+      }
+    });
+    expect(mockCreateRunEventStream).toHaveBeenCalledWith("run-2", expect.objectContaining({ onEvent: expect.any(Function) }));
+  });
+
+  it("submits feedback and shows submitted state in the UI", async () => {
+    mockSubmitMessageFeedback.mockResolvedValue({
+      ok: true,
+      data: {
+        accepted: true,
+        runId: "run-1",
+        messageId: "event-1",
+        feedback: "like",
+        updatedAt: "2026-04-08T00:00:00.000Z"
+      }
+    });
+
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          finalOutput: "最终回答",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [createRunEvent(1, { type: "result", message: "最终回答" })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const likeButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent === "点赞");
+    await act(async () => {
+      likeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(mockSubmitMessageFeedback).toHaveBeenCalledWith({
+      runId: "run-1",
+      messageId: "event-1",
+      feedback: "like"
+    });
+    expect(container.textContent).toContain("已提交点赞");
+  });
+
+  it("shows feedback failure state in the UI", async () => {
+    mockSubmitMessageFeedback.mockResolvedValue({
+      ok: false,
+      error: {
+        code: "NETWORK_ERROR",
+        message: "feedback failed"
+      }
+    });
+
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          finalOutput: "最终回答",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [createRunEvent(1, { type: "result", message: "最终回答" })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const dislikeButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent === "点踩");
+    await act(async () => {
+      dislikeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("feedback failed");
   });
 
   it("clears the waiting question state immediately after answer submission", async () => {

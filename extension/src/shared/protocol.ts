@@ -57,6 +57,24 @@ export interface QuestionAnswerRequest {
   choiceId?: string;
 }
 
+export const MESSAGE_FEEDBACK_VALUES = ["like", "dislike"] as const;
+
+export type MessageFeedbackValue = typeof MESSAGE_FEEDBACK_VALUES[number];
+
+export interface MessageFeedbackRequest {
+  runId: string;
+  messageId: string;
+  feedback: MessageFeedbackValue;
+}
+
+export interface MessageFeedbackResponse {
+  accepted: true;
+  runId: string;
+  messageId: string;
+  feedback: MessageFeedbackValue;
+  updatedAt: string;
+}
+
 export interface RunRecord {
   runId: string;
   prompt: string;

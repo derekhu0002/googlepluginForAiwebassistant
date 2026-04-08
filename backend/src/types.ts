@@ -20,6 +20,22 @@ export interface AnalyzeResult {
   durationMs: number;
 }
 
+export type MessageFeedbackValue = "like" | "dislike";
+
+export interface MessageFeedbackRequest {
+  runId: string;
+  messageId: string;
+  feedback: MessageFeedbackValue;
+}
+
+export interface MessageFeedbackResult {
+  accepted: true;
+  runId: string;
+  messageId: string;
+  feedback: MessageFeedbackValue;
+  updatedAt: string;
+}
+
 export interface AnalysisProvider {
   readonly name: string;
   analyze(input: AnalyzeRequest, options?: { signal?: AbortSignal }): Promise<AnalyzeResult>;

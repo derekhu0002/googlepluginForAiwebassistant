@@ -1,5 +1,5 @@
 import type { DomainError } from "./errors";
-import type { AnswerRecord, NormalizedRunEvent, QuestionAnswerRequest, RunHistoryDetail, RunRecord, UsernameSource } from "./protocol";
+import type { AnswerRecord, MessageFeedbackRequest, MessageFeedbackResponse, NormalizedRunEvent, QuestionAnswerRequest, RunHistoryDetail, RunRecord, UsernameSource } from "./protocol";
 
 export type CapturedFields = Record<string, string>;
 
@@ -117,6 +117,19 @@ export interface AnswerSuccessResponse {
 
 export type AnswerApiResponse = AnswerSuccessResponse | ExtensionApiFailureResponse;
 
+export interface FeedbackSuccessResponse {
+  ok: true;
+  data: MessageFeedbackResponse;
+}
+
+export type FeedbackApiResponse = FeedbackSuccessResponse | ExtensionApiFailureResponse;
+
+export interface MessageFeedbackUiState {
+  status: "idle" | "submitting" | "submitted" | "error";
+  selected?: MessageFeedbackRequest["feedback"];
+  message?: string;
+}
+
 export interface ContentScriptReadyResponse {
   ready: true;
 }
@@ -132,7 +145,14 @@ export type RuntimeMessage =
   | { type: "UPSERT_RULE"; payload: PageRule }
   | { type: "DELETE_RULE"; payload: { ruleId: string } }
   | { type: "GET_ACTIVE_CONTEXT" }
-  | { type: "START_RUN"; payload: { prompt: string } }
+  | {
+      type: "START_RUN";
+      payload: {
+        prompt: string;
+        retryFromRunId?: string;
+        retryFromMessageId?: string;
+      };
+    }
   | { type: "SUBMIT_QUESTION_ANSWER"; payload: QuestionAnswerRequest }
   | { type: "RECAPTURE" }
   | { type: "CLEAR_RESULT" }
