@@ -49,6 +49,7 @@ export const RUN_STREAM_LIFECYCLE: RunStreamLifecycle = {
 export interface RunStartRequest {
   prompt: string;
   capture?: Record<string, string>;
+  sessionId?: string;
   context: {
     source: string;
     capturedAt: string;
@@ -85,6 +86,7 @@ export interface MessageFeedbackResponse {
 
 export interface RunRecord {
   runId: string;
+  sessionId?: string;
   prompt: string;
   username: string;
   usernameSource: UsernameSource;

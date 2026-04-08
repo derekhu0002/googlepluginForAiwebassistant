@@ -20,6 +20,7 @@ class RunContext(BaseModel):
 class RunStartRequest(BaseModel):
     prompt: str = Field(min_length=1)
     capture: dict[str, str] = Field(default_factory=dict)
+    sessionId: str | None = None
     context: RunContext
 
 

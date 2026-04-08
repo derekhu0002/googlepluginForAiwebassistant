@@ -44,7 +44,7 @@ describe("streaming api client", () => {
     vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
 
     const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-1" } })
+      json: async () => ({ ok: true, data: { runId: "run-1", sessionId: "ses-1" } })
     });
     global.fetch = fetchMock as typeof fetch;
 
@@ -57,14 +57,15 @@ describe("streaming api client", () => {
       selectedText: "picked",
       software_version: "v1",
       selected_sr: "SR-1"
-    }, { username: "alice", usernameSource: "dom_text" });
+    }, { username: "alice", usernameSource: "dom_text" }, "ses-0");
 
-    expect(result).toEqual({ ok: true, data: { runId: "run-1" } });
+    expect(result).toEqual({ ok: true, data: { runId: "run-1", sessionId: "ses-1" } });
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/api/runs",
       expect.objectContaining({ method: "POST" })
     );
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      sessionId: "ses-0",
       capture: expect.objectContaining({
         pageTitle: "Example",
         selected_sr: "SR-1"
@@ -114,6 +115,7 @@ describe("streaming api client", () => {
       }
     });
     expect(requestBody).not.toHaveProperty("capture");
+    expect(requestBody).not.toHaveProperty("sessionId");
   });
 
   it("submits message feedback", async () => {

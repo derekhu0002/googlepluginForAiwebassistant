@@ -18,6 +18,7 @@ REQUIRED_PRIMARY_AGENT = "TARA_analyst"
 
 
 # @ArchitectureID: ELM-006
+# @ArchitectureID: ELM-APP-008C
 class OpencodeAdapter:
     def __init__(self, settings: Settings, client_factory: ClientFactory | None = None) -> None:
         self.settings = settings
@@ -94,6 +95,10 @@ class OpencodeAdapter:
         return {
             "title": title,
         }
+
+    def _normalize_existing_session_id(self, request: RunStartRequest) -> str | None:
+        session_id = request.sessionId.strip() if isinstance(request.sessionId, str) else None
+        return session_id or None
 
     def _response_text_data(self, message_id: str | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {"field": "text"}
@@ -172,36 +177,71 @@ class OpencodeAdapter:
             return run_id
 
         try:
-            session = await self._create_session(request)
-            run["session_id"] = session["id"]
-            run["events"] = [
-                self._next_event(
-                    run,
-                    "thinking",
-                    f"已创建 opencode session，准备提交 prompt。software_version={request.capture.get('software_version', '') or '(empty)'}；selected_sr={request.capture.get('selected_sr', '') or '(empty)'}。",
-                    data={"session_id": session["id"]},
-                ),
-                self._next_tool_event(
-                    run,
-                    "已连接主分析代理，正在准备执行分析步骤。",
-                    data={
-                        "stage": "dispatch_prompt",
-                        "target": self.settings.opencode_base_url,
-                        "session_id": session["id"],
-                        "event_endpoint": self.settings.opencode_global_event_endpoint,
-                        "mock_mode": False,
-                        "mock_fallback_enabled": self.settings.allow_mock_fallback,
-                    },
-                    log_data={
-                        "target": self.settings.opencode_base_url,
-                        "session_id": session["id"],
-                        "event_endpoint": self.settings.opencode_global_event_endpoint,
-                        "mock_mode": False,
-                        "mock_fallback_enabled": self.settings.allow_mock_fallback,
-                    },
-                ),
-            ]
-            await self._prompt_session(session["id"], request)
+            existing_session_id = self._normalize_existing_session_id(request)
+            if existing_session_id:
+                run["session_id"] = existing_session_id
+                session_id = existing_session_id
+                run["events"] = [
+                    self._next_event(
+                        run,
+                        "thinking",
+                        "已复用当前 opencode session，准备继续提交 follow-up prompt。",
+                        data={"session_id": session_id, "session_reused": True},
+                    ),
+                    self._next_tool_event(
+                        run,
+                        "已连接当前会话，正在继续执行分析步骤。",
+                        data={
+                            "stage": "dispatch_prompt",
+                            "target": self.settings.opencode_base_url,
+                            "session_id": session_id,
+                            "session_reused": True,
+                            "event_endpoint": self.settings.opencode_global_event_endpoint,
+                            "mock_mode": False,
+                            "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                        },
+                        log_data={
+                            "target": self.settings.opencode_base_url,
+                            "session_id": session_id,
+                            "session_reused": True,
+                            "event_endpoint": self.settings.opencode_global_event_endpoint,
+                            "mock_mode": False,
+                            "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                        },
+                    ),
+                ]
+            else:
+                session = await self._create_session(request)
+                run["session_id"] = session["id"]
+                session_id = session["id"]
+                run["events"] = [
+                    self._next_event(
+                        run,
+                        "thinking",
+                        f"已创建 opencode session，准备提交 prompt。software_version={request.capture.get('software_version', '') or '(empty)'}；selected_sr={request.capture.get('selected_sr', '') or '(empty)'}。",
+                        data={"session_id": session_id},
+                    ),
+                    self._next_tool_event(
+                        run,
+                        "已连接主分析代理，正在准备执行分析步骤。",
+                        data={
+                            "stage": "dispatch_prompt",
+                            "target": self.settings.opencode_base_url,
+                            "session_id": session_id,
+                            "event_endpoint": self.settings.opencode_global_event_endpoint,
+                            "mock_mode": False,
+                            "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                        },
+                        log_data={
+                            "target": self.settings.opencode_base_url,
+                            "session_id": session_id,
+                            "event_endpoint": self.settings.opencode_global_event_endpoint,
+                            "mock_mode": False,
+                            "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                        },
+                    ),
+                ]
+            await self._prompt_session(session_id, request)
         except Exception as exc:
             if self.settings.allow_mock_fallback:
                 run["mode"] = "mock-fallback"

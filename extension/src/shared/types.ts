@@ -75,6 +75,7 @@ export interface StreamConnectionState {
 
 export interface AssistantState {
   status: "idle" | "collecting" | "streaming" | "waiting_for_answer" | "done" | "error";
+  activeSessionId: string | null;
   capturedFields: CapturedFields | null;
   runPrompt: string;
   runEvents: NormalizedRunEvent[];
@@ -96,6 +97,7 @@ export interface StartRunResponse {
   ok: true;
   data: {
     runId: string;
+    sessionId?: string;
   };
 }
 

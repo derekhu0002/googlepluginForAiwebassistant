@@ -196,6 +196,7 @@ async function runCaptureOnly() {
 
 async function buildRunRecord(options: {
   runId: string;
+  sessionId?: string | null;
   prompt: string;
   usernameContext: UsernameContext;
   capturedFields: CapturedFields | null;
@@ -204,6 +205,7 @@ async function buildRunRecord(options: {
 
   const currentRun: RunRecord = {
     runId: options.runId,
+    ...(options.sessionId ? { sessionId: options.sessionId } : {}),
     prompt: options.prompt,
     username: options.usernameContext.username,
     usernameSource: options.usernameContext.usernameSource,
@@ -222,12 +224,14 @@ async function buildRunRecord(options: {
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-ORCHESTRATION */
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
+/** @ArchitectureID: ELM-APP-008B */
 async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?: string; retryFromMessageId?: string; capturePageData?: boolean }) {
   const { prompt } = options;
   const activeTab = await getActiveTab();
   const rules = await getRules();
   const matchedRule = findMatchingRule(activeTab.url, rules);
   const shouldCapture = options.capturePageData ?? false;
+  const existingState = await getState();
 
   await patchState({
     status: shouldCapture ? "collecting" : "streaming",
@@ -244,7 +248,7 @@ async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?:
         ...toCanonicalCapturedFields(capturedFields)
       }
     : null;
-  const runResponse = await startRun(prompt, runCapture, usernameContext);
+  const runResponse = await startRun(prompt, runCapture, usernameContext, existingState.activeSessionId);
 
   if (!runResponse.ok) {
     const domainError = normalizeDomainError(runResponse.error, createDomainError("ANALYSIS_ERROR", runResponse.error.message));
@@ -254,6 +258,7 @@ async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?:
 
   const { currentRun } = await buildRunRecord({
     runId: runResponse.data.runId,
+    sessionId: runResponse.data.sessionId ?? existingState.activeSessionId,
     prompt,
     usernameContext,
     capturedFields
@@ -265,6 +270,7 @@ async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?:
     error: null,
     errorMessage: "",
     lastCapturedUrl: capturedFields ? activeTab.url ?? null : (await getState()).lastCapturedUrl,
+    activeSessionId: runResponse.data.sessionId ?? existingState.activeSessionId,
     currentRun,
     usernameContext,
     runPrompt: prompt,
@@ -281,6 +287,7 @@ async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?:
     ok: true,
     data: {
         runId: currentRun.runId,
+        sessionId: currentRun.sessionId,
         capturedFields,
         usernameContext,
         currentRun
@@ -292,6 +299,7 @@ async function clearResult() {
   await setState({
     ...initialAssistantState,
     capturedFields: null,
+    activeSessionId: null,
     lastUpdatedAt: new Date().toISOString()
   });
 }

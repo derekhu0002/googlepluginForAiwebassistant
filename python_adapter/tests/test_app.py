@@ -41,7 +41,12 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
         )
 
     submit_answer = AsyncMock(return_value=None)
-    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(return_value="run-1"))
+
+    async def fake_start_run(_request):
+        main.adapter._runs["run-1"] = {"session_id": "ses-1"}
+        return "run-1"
+
+    monkeypatch.setattr(main.adapter, "start_run", fake_start_run)
     monkeypatch.setattr(main.adapter, "stream_events", fake_stream_events)
     monkeypatch.setattr(main.adapter, "submit_answer", submit_answer)
 
@@ -49,6 +54,7 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
         "/api/runs",
         json={
             "prompt": "hello",
+            "sessionId": "ses-1",
             "capture": {
                 "pageTitle": "Example",
                 "pageUrl": "https://example.com",
@@ -67,6 +73,7 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
     )
     assert response.status_code == 200
     run_id = response.json()["data"]["runId"]
+    assert response.json()["data"]["sessionId"] == "ses-1"
 
     with client.stream("GET", f"/api/runs/{run_id}/events") as stream_response:
         body = "".join(chunk.decode() if isinstance(chunk, bytes) else chunk for chunk in stream_response.iter_text())
@@ -80,6 +87,32 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
     assert answer_response.status_code == 200
     assert answer_response.json()["data"]["accepted"] is True
     submit_answer.assert_awaited_once()
+
+
+def test_start_run_returns_active_session_id(monkeypatch) -> None:
+    async def fake_start_run(request):
+        main.adapter._runs["run-1"] = {"session_id": request.sessionId}
+        return "run-1"
+
+    monkeypatch.setattr(main.adapter, "start_run", fake_start_run)
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "prompt": "hello",
+            "sessionId": "ses-active",
+            "capture": {},
+            "context": {
+                "source": "chrome-extension",
+                "capturedAt": "2026-04-01T00:00:00.000Z",
+                "username": "alice",
+                "usernameSource": "dom_text",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"runId": "run-1", "sessionId": "ses-active"}
 
 
 def test_start_run_surfaces_session_agent_enforcement_error(monkeypatch) -> None:

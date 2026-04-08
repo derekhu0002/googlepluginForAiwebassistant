@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { initialAssistantState } from "../shared/state";
 
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 describe("background rule-driven capture flow", () => {
@@ -112,7 +113,7 @@ describe("background rule-driven capture flow", () => {
     const executeScript = vi.fn().mockResolvedValue(undefined);
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-1" } })
+      json: async () => ({ ok: true, data: { runId: "run-1", sessionId: "ses-1" } })
     }));
 
     vi.stubGlobal("chrome", {
@@ -150,10 +151,11 @@ describe("background rule-driven capture flow", () => {
 
     const response = await new Promise<unknown>((resolve) => {
       listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", capturePageData: true } }, {}, resolve);
-    }) as { ok: boolean; data: { runId: string } };
+    }) as { ok: boolean; data: { runId: string; sessionId?: string } };
 
     expect(response.ok).toBe(true);
     expect(response.data.runId).toBe("run-1");
+    expect(response.data.sessionId).toBe("ses-1");
     expect(executeScript).toHaveBeenCalledWith({ target: { tabId: 1 }, files: ["content.js"] });
     expect(sendMessage).toHaveBeenNthCalledWith(1, 1, { type: "PING" });
     expect(sendMessage).toHaveBeenNthCalledWith(2, 1, { type: "PING" });
@@ -193,7 +195,7 @@ describe("background rule-driven capture flow", () => {
     });
 
     const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-send-only" } })
+      json: async () => ({ ok: true, data: { runId: "run-send-only", sessionId: "ses-active" } })
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -232,12 +234,14 @@ describe("background rule-driven capture flow", () => {
 
     const response = await new Promise<unknown>((resolve) => {
       listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", capturePageData: false } }, {}, resolve);
-    }) as { ok: boolean; data: { runId: string; capturedFields: Record<string, string> | null; currentRun: { pageTitle: string } } };
+    }) as { ok: boolean; data: { runId: string; sessionId?: string; capturedFields: Record<string, string> | null; currentRun: { pageTitle: string; sessionId?: string } } };
 
     expect(response.ok).toBe(true);
     expect(response.data.runId).toBe("run-send-only");
+    expect(response.data.sessionId).toBe("ses-active");
     expect(response.data.capturedFields).toBeNull();
     expect(response.data.currentRun.pageTitle).toBe("");
+    expect(response.data.currentRun.sessionId).toBe("ses-active");
     expect(sendMessage).not.toHaveBeenCalledWith(1, expect.objectContaining({ type: "COLLECT_FIELDS" }));
     const fetchCall = fetchMock.mock.calls[0];
     expect(fetchCall?.[0]).toBe("http://localhost:8000/api/runs");
@@ -283,7 +287,7 @@ describe("background rule-driven capture flow", () => {
     });
 
     const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-2" } })
+      json: async () => ({ ok: true, data: { runId: "run-2", sessionId: "ses-existing" } })
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -295,7 +299,11 @@ describe("background rule-driven capture flow", () => {
       },
       storage: {
         local: {
-          get: vi.fn(async (key: string) => ({ [key]: storageState[key] })),
+          get: vi.fn(async (key: string) => ({
+            [key]: key === "ai-web-assistant-state"
+              ? { ...initialAssistantState, activeSessionId: "ses-existing" }
+              : storageState[key]
+          })),
           set: vi.fn(async (payload: Record<string, unknown>) => Object.assign(storageState, payload))
         }
       },
@@ -336,6 +344,77 @@ describe("background rule-driven capture flow", () => {
     expect(response.data.currentRun.prompt).toBe("原始用户问题");
     expect(response.data.currentRun.runId).toBe("run-2");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({ sessionId: "ses-existing" });
+  });
+
+  it("clears active session when CLEAR_RESULT is triggered", async () => {
+    const storageState: Record<string, unknown> = {
+      "ai-web-assistant-state": {
+        ...initialAssistantState,
+        activeSessionId: "ses-1",
+        currentRun: {
+          runId: "run-1",
+          sessionId: "ses-1",
+          prompt: "hello",
+          username: "alice",
+          usernameSource: "dom_text",
+          softwareVersion: "v1",
+          selectedSr: "SR-1",
+          pageTitle: "Demo",
+          pageUrl: "https://example.com/page",
+          status: "done",
+          startedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          finalOutput: "done"
+        },
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        }
+      }
+    };
+
+    const listenerRegistry: { handler?: (message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean } = {};
+    vi.stubGlobal("chrome", {
+      tabs: {
+        query: vi.fn().mockResolvedValue([{ id: 1, url: "https://example.com/page" }]),
+        get: vi.fn().mockResolvedValue({ id: 1, url: "https://example.com/page" }),
+        sendMessage: vi.fn()
+      },
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: storageState[key] })),
+          set: vi.fn(async (payload: Record<string, unknown>) => Object.assign(storageState, payload))
+        }
+      },
+      permissions: {
+        contains: vi.fn().mockResolvedValue(true),
+        request: vi.fn().mockResolvedValue(true)
+      },
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        onMessage: { addListener: vi.fn((handler) => { listenerRegistry.handler = handler; }) },
+        onInstalled: { addListener: vi.fn() }
+      },
+      sidePanel: {
+        setOptions: vi.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
+        setPanelBehavior: vi.fn().mockResolvedValue(undefined)
+      },
+      scripting: {
+        executeScript: vi.fn().mockResolvedValue(undefined)
+      }
+    } as unknown as typeof chrome);
+
+    await import("./index");
+
+    const response = await new Promise<unknown>((resolve) => {
+      listenerRegistry.handler?.({ type: "CLEAR_RESULT" }, {}, resolve);
+    }) as { ok: boolean };
+
+    expect(response.ok).toBe(true);
+    expect((storageState["ai-web-assistant-state"] as { activeSessionId: string | null }).activeSessionId).toBeNull();
   });
 
   it("protects GET_USERNAME_CONTEXT with ready handshake and single controlled retry", async () => {

@@ -118,7 +118,8 @@ async def start_run(request: RunStartRequest, _auth: None = Depends(enforce_api_
         "output": None,
         "phase": "start_run",
     })
-    return JSONResponse({"ok": True, "data": {"runId": run_id}})
+    run = adapter._runs.get(run_id, {})
+    return JSONResponse({"ok": True, "data": {"runId": run_id, "sessionId": run.get("session_id")}})
 
 
 @app.get("/api/runs/{run_id}/events")

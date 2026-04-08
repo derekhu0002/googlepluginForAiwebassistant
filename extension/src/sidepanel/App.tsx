@@ -197,9 +197,11 @@ function SendIcon() {
 
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL */
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
+/** @ArchitectureID: ELM-APP-008A */
 export function App() {
   const [state, setState] = useState<AssistantState>(initialAssistantState);
   const [rules, setRules] = useState<PageRule[]>([]);
+  const [isRulesCenterExpanded, setIsRulesCenterExpanded] = useState(false);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [draftRule, setDraftRule] = useState<PageRule | null>(null);
   const [activeContext, setActiveContext] = useState<ActiveTabContext | null>(null);
@@ -390,7 +392,7 @@ export function App() {
 
     setPrompt(nextPrompt);
 
-    const response = await sendMessage<{ ok: boolean; data?: { runId: string; currentRun: RunRecord } ; error?: { message: string } }>({
+    const response = await sendMessage<{ ok: boolean; data?: { runId: string; sessionId?: string; currentRun: RunRecord } ; error?: { message: string } }>({
       type: "START_RUN",
       payload: {
         prompt: nextPrompt,
@@ -409,6 +411,7 @@ export function App() {
 
     setState((current) => ({
       ...current,
+      activeSessionId: responseData.sessionId ?? current.activeSessionId,
       currentRun: responseData.currentRun,
       runEvents: [],
       answers: [],
@@ -783,124 +786,133 @@ export function App() {
         </details>
       </section>
 
-      <section className="panel-block">
-        <div className="section-header">
+      <details className="panel-block rules-config-panel" open={isRulesCenterExpanded}>
+        <summary className="section-header" onClick={(event) => {
+          event.preventDefault();
+          setIsRulesCenterExpanded((current) => !current);
+        }}>
           <h2>规则配置中心</h2>
-          <div className="inline-actions">
-            <button className="secondary" onClick={() => addRule()}>新增规则</button>
-            <button className="secondary" disabled={!selectedRuleId} onClick={() => deleteCurrentRule()}>删除规则</button>
-            <button disabled={!selectedRule || savingRule} onClick={() => saveCurrentRule()}>{savingRule ? "保存中..." : "保存规则"}</button>
-          </div>
-        </div>
+          <small>{isRulesCenterExpanded ? "点击折叠" : "默认折叠，点击展开"}</small>
+        </summary>
 
-        <div className="rules-layout">
-          <aside className="rule-list">
-            {rules.map((rule) => (
-              <button
-                key={rule.id}
-                className={`rule-list-item ${selectedRuleId === rule.id ? "active" : ""}`}
-                onClick={() => {
-                  setSelectedRuleId(rule.id);
-                  setDraftRule(cloneRule(rule));
-                }}
-              >
-                <strong>{rule.name}</strong>
-                <small>{rule.hostnamePattern}{rule.pathPattern !== "*" ? ` · ${rule.pathPattern}` : ""}</small>
-              </button>
-            ))}
-          </aside>
+        {isRulesCenterExpanded ? (
+          <>
+            <div className="inline-actions">
+              <button className="secondary" onClick={() => addRule()}>新增规则</button>
+              <button className="secondary" disabled={!selectedRuleId} onClick={() => deleteCurrentRule()}>删除规则</button>
+              <button disabled={!selectedRule || savingRule} onClick={() => saveCurrentRule()}>{savingRule ? "保存中..." : "保存规则"}</button>
+            </div>
 
-          {selectedRule ? (
-            <div className="rule-editor">
-              <label>
-                <span>规则名称</span>
-                <input value={selectedRule.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} />
-              </label>
-              <div className="two-column">
-                <label>
-                  <span>Hostname 模式</span>
-                  <input value={selectedRule.hostnamePattern} onChange={(event) => updateDraft((current) => ({ ...current, hostnamePattern: event.target.value }))} placeholder="如 *.example.com" />
-                </label>
-                <label>
-                  <span>Path 模式</span>
-                  <input value={selectedRule.pathPattern} onChange={(event) => updateDraft((current) => ({ ...current, pathPattern: event.target.value }))} placeholder="如 /products/*" />
-                </label>
-              </div>
-              <label className="checkbox-row">
-                <input type="checkbox" checked={selectedRule.enabled} onChange={(event) => updateDraft((current) => ({ ...current, enabled: event.target.checked }))} />
-                <span>启用规则</span>
-              </label>
+            <div className="rules-layout">
+              <aside className="rule-list">
+                {rules.map((rule) => (
+                  <button
+                    key={rule.id}
+                    className={`rule-list-item ${selectedRuleId === rule.id ? "active" : ""}`}
+                    onClick={() => {
+                      setSelectedRuleId(rule.id);
+                      setDraftRule(cloneRule(rule));
+                    }}
+                  >
+                    <strong>{rule.name}</strong>
+                    <small>{rule.hostnamePattern}{rule.pathPattern !== "*" ? ` · ${rule.pathPattern}` : ""}</small>
+                  </button>
+                ))}
+              </aside>
 
-              <div className="section-header compact">
-                <h3>字段规则</h3>
-                <button className="secondary" onClick={() => updateDraft((current) => ({ ...current, fields: [...current.fields, createFieldRule()] }))}>新增字段</button>
-              </div>
-
-              <div className="field-rule-list">
-                {selectedRule.fields.map((field, index) => (
-                  <div key={field.id} className="field-rule-card">
-                    <div className="field-rule-toolbar">
-                      <strong>{field.label || `字段 ${index + 1}`}</strong>
-                      <button className="secondary" onClick={() => updateDraft((current) => ({ ...current, fields: current.fields.filter((item) => item.id !== field.id) }))}>删除</button>
-                    </div>
-                    <div className="two-column">
-                      <label>
-                        <span>字段 key</span>
-                        <input value={field.key} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, key: event.target.value } : item) }))} />
-                      </label>
-                      <label>
-                        <span>展示名称</span>
-                        <input value={field.label} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, label: event.target.value } : item) }))} />
-                      </label>
-                    </div>
-                    <div className="two-column">
-                      <label>
-                        <span>来源类型</span>
-                        <select value={field.source} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, source: event.target.value as FieldRuleDefinition["source"] } : item) }))}>
-                          <option value="documentTitle">document.title</option>
-                          <option value="pageUrl">window.location.href</option>
-                          <option value="selectedText">window.getSelection()</option>
-                          <option value="meta">meta[name]</option>
-                          <option value="selectorText">selector.textContent</option>
-                          <option value="selectorAttribute">selector.getAttribute</option>
-                        </select>
-                      </label>
-                      <label className="checkbox-row">
-                        <input type="checkbox" checked={field.enabled} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, enabled: event.target.checked } : item) }))} />
-                        <span>启用字段</span>
-                      </label>
-                    </div>
-                    {(field.source === "selectorText" || field.source === "selectorAttribute") ? (
-                      <label>
-                        <span>CSS Selector</span>
-                        <input value={field.selector ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, selector: event.target.value } : item) }))} />
-                      </label>
-                    ) : null}
-                    {field.source === "selectorAttribute" ? (
-                      <label>
-                        <span>属性名</span>
-                        <input value={field.attribute ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, attribute: event.target.value } : item) }))} />
-                      </label>
-                    ) : null}
-                    {field.source === "meta" ? (
-                      <label>
-                        <span>meta name</span>
-                        <input value={field.metaName ?? "description"} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, metaName: event.target.value } : item) }))} />
-                      </label>
-                    ) : null}
+              {selectedRule ? (
+                <div className="rule-editor">
+                  <label>
+                    <span>规则名称</span>
+                    <input value={selectedRule.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} />
+                  </label>
+                  <div className="two-column">
                     <label>
-                      <span>兜底值</span>
-                      <input value={field.fallbackValue ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, fallbackValue: event.target.value } : item) }))} />
+                      <span>Hostname 模式</span>
+                      <input value={selectedRule.hostnamePattern} onChange={(event) => updateDraft((current) => ({ ...current, hostnamePattern: event.target.value }))} placeholder="如 *.example.com" />
+                    </label>
+                    <label>
+                      <span>Path 模式</span>
+                      <input value={selectedRule.pathPattern} onChange={(event) => updateDraft((current) => ({ ...current, pathPattern: event.target.value }))} placeholder="如 /products/*" />
                     </label>
                   </div>
-                ))}
-              </div>
+                  <label className="checkbox-row">
+                    <input type="checkbox" checked={selectedRule.enabled} onChange={(event) => updateDraft((current) => ({ ...current, enabled: event.target.checked }))} />
+                    <span>启用规则</span>
+                  </label>
+
+                  <div className="section-header compact">
+                    <h3>字段规则</h3>
+                    <button className="secondary" onClick={() => updateDraft((current) => ({ ...current, fields: [...current.fields, createFieldRule()] }))}>新增字段</button>
+                  </div>
+
+                  <div className="field-rule-list">
+                    {selectedRule.fields.map((field, index) => (
+                      <div key={field.id} className="field-rule-card">
+                        <div className="field-rule-toolbar">
+                          <strong>{field.label || `字段 ${index + 1}`}</strong>
+                          <button className="secondary" onClick={() => updateDraft((current) => ({ ...current, fields: current.fields.filter((item) => item.id !== field.id) }))}>删除</button>
+                        </div>
+                        <div className="two-column">
+                          <label>
+                            <span>字段 key</span>
+                            <input value={field.key} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, key: event.target.value } : item) }))} />
+                          </label>
+                          <label>
+                            <span>展示名称</span>
+                            <input value={field.label} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, label: event.target.value } : item) }))} />
+                          </label>
+                        </div>
+                        <div className="two-column">
+                          <label>
+                            <span>来源类型</span>
+                            <select value={field.source} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, source: event.target.value as FieldRuleDefinition["source"] } : item) }))}>
+                              <option value="documentTitle">document.title</option>
+                              <option value="pageUrl">window.location.href</option>
+                              <option value="selectedText">window.getSelection()</option>
+                              <option value="meta">meta[name]</option>
+                              <option value="selectorText">selector.textContent</option>
+                              <option value="selectorAttribute">selector.getAttribute</option>
+                            </select>
+                          </label>
+                          <label className="checkbox-row">
+                            <input type="checkbox" checked={field.enabled} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, enabled: event.target.checked } : item) }))} />
+                            <span>启用字段</span>
+                          </label>
+                        </div>
+                        {(field.source === "selectorText" || field.source === "selectorAttribute") ? (
+                          <label>
+                            <span>CSS Selector</span>
+                            <input value={field.selector ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, selector: event.target.value } : item) }))} />
+                          </label>
+                        ) : null}
+                        {field.source === "selectorAttribute" ? (
+                          <label>
+                            <span>属性名</span>
+                            <input value={field.attribute ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, attribute: event.target.value } : item) }))} />
+                          </label>
+                        ) : null}
+                        {field.source === "meta" ? (
+                          <label>
+                            <span>meta name</span>
+                            <input value={field.metaName ?? "description"} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, metaName: event.target.value } : item) }))} />
+                          </label>
+                        ) : null}
+                        <label>
+                          <span>兜底值</span>
+                          <input value={field.fallbackValue ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, fallbackValue: event.target.value } : item) }))} />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="empty-state">暂无规则，点击“新增规则”开始配置。</p>
+              )}
             </div>
-          ) : (
-            <p className="empty-state">暂无规则，点击“新增规则”开始配置。</p>
-          )}
-        </div>
-      </section>
+          </>
+        ) : null}
+      </details>
     </main>
   );
 }

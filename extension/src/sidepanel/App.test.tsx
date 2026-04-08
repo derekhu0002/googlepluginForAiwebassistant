@@ -74,7 +74,7 @@ const { App, mergeStateUpdate } = await import("./App");
 interface ChromeStubOptions {
   contexts: ActiveTabContext[];
   permissionsRequest?: ReturnType<typeof vi.fn>;
-  startRunResponse?: { ok: boolean; data?: { runId: string; currentRun: AssistantState["currentRun"] }; error?: { message: string } };
+  startRunResponse?: { ok: boolean; data?: { runId: string; sessionId?: string; currentRun: AssistantState["currentRun"] }; error?: { message: string } };
   rules?: PageRule[];
   getStateResponse?: AssistantState;
 }
@@ -98,6 +98,7 @@ function createContext(overrides: Partial<ActiveTabContext> = {}): ActiveTabCont
 function createCurrentRun() {
   return {
     runId: "run-1",
+    sessionId: "ses-1",
     prompt: "hello",
     username: "alice",
     usernameSource: "dom_text" as const,
@@ -290,6 +291,40 @@ describe("side panel host permission request flow", () => {
     expect(detailsButton).toBeNull();
   });
 
+  it("keeps rules configuration center collapsed by default and expands on explicit user action", async () => {
+    setupChromeStub({
+      contexts: [createContext()],
+      rules: [{
+        id: "rule-1",
+        name: "Example rule",
+        hostnamePattern: "example.com",
+        pathPattern: "*",
+        enabled: true,
+        fields: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const details = container.querySelector("details.rules-config-panel") as HTMLDetailsElement | null;
+    expect(details?.open).toBe(false);
+    expect(container.textContent).not.toContain("保存规则");
+
+    const summary = details?.querySelector("summary");
+    await act(async () => {
+      summary?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(details?.open).toBe(true);
+    expect(container.textContent).toContain("保存规则");
+  });
+
   it("keeps the permission callout visible with rebuild guidance when the current build cannot request this host", async () => {
     setupChromeStub({
       contexts: [createContext({
@@ -374,6 +409,27 @@ describe("side panel host permission request flow", () => {
     expect(mockCreateRunEventStream).toHaveBeenCalledWith("run-1", expect.objectContaining({ onEvent: expect.any(Function), onError: expect.any(Function) }));
     expect(container.textContent).toContain("You");
     expect(container.textContent).toContain(initialAssistantState.runPrompt);
+  });
+
+  it("stores the returned session id when a follow-up run starts", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: { ...initialAssistantState, activeSessionId: "ses-existing" },
+      startRunResponse: { ok: true, data: { runId: "run-2", sessionId: "ses-existing", currentRun: { ...createCurrentRun(), runId: "run-2", sessionId: "ses-existing" } } }
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = container.querySelector("button[aria-label='发送消息']");
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("Run：run-2");
   });
 
   it("keeps independent page capture entry working", async () => {

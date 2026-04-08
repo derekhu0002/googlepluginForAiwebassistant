@@ -212,6 +212,32 @@ def test_request_without_capture_defaults_to_generic_session_title() -> None:
     anyio.run(scenario)
 
 
+def test_real_contract_reuses_existing_session_for_follow_up_prompt() -> None:
+    response_sets = [
+        [("POST", "/session/ses-existing/prompt_async", make_response("POST", "/session/ses-existing/prompt_async", status_code=204))],
+    ]
+
+    clients: list[FakeAsyncClient] = []
+
+    def factory(_timeout):
+        client = FakeAsyncClient(response_sets.pop(0))
+        clients.append(client)
+        return client
+
+    async def scenario() -> None:
+        request = create_request().model_copy(update={"sessionId": "ses-existing"})
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(request)
+
+        assert run_id.startswith("run-")
+        assert len(clients) == 1
+        assert clients[0].calls[0][1] == "/session/ses-existing/prompt_async"
+        assert adapter._runs[run_id]["session_id"] == "ses-existing"
+        assert all(event.data and event.data.get("session_reused") is True for event in adapter._runs[run_id]["events"])
+
+    anyio.run(scenario)
+
+
 def test_real_path_returns_error_when_session_create_fails() -> None:
     def factory(_timeout):
         return FakeAsyncClient([
