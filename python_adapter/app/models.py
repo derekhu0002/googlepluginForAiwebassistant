@@ -29,6 +29,12 @@ class QuestionAnswerRequest(BaseModel):
     choiceId: str | None = None
 
 
+class MessageFeedbackRequest(BaseModel):
+    runId: str = Field(min_length=1)
+    messageId: str = Field(min_length=1)
+    feedback: Literal["like", "dislike"]
+
+
 class QuestionOption(BaseModel):
     id: str
     label: str

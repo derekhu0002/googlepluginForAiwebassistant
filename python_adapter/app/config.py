@@ -35,6 +35,8 @@ class Settings:
     opencode_session_messages_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_SESSION_MESSAGES_ENDPOINT", "/session/{session_id}/message"))
     opencode_global_event_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_GLOBAL_EVENT_ENDPOINT", "/global/event"))
     opencode_health_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_HEALTH_ENDPOINT", "/global/health"))
+    feedback_backend_base_url: str = field(default_factory=lambda: os.getenv("FEEDBACK_BACKEND_BASE_URL", "http://127.0.0.1:8787"))
+    feedback_backend_endpoint: str = field(default_factory=lambda: os.getenv("FEEDBACK_BACKEND_ENDPOINT", "/api/message-feedback"))
     opencode_config_path: str = field(default_factory=lambda: os.getenv("OPENCODE_CONFIG_PATH", str(ADAPTER_ROOT.parent / ".opencode" / "opencode.json")))
     opencode_tara_agent_path: str = field(default_factory=lambda: os.getenv("OPENCODE_TARA_AGENT_PATH", str(ADAPTER_ROOT.parent / ".opencode" / "agents" / "TARA_analyst.md")))
     log_dir: str = field(default_factory=lambda: os.getenv("PYTHON_ADAPTER_LOG_DIR", str(ADAPTER_ROOT / "logs")))
@@ -46,6 +48,11 @@ class Settings:
         if not self.opencode_directory.strip():
             object.__setattr__(self, "opencode_directory", str(ADAPTER_ROOT.parent))
         object.__setattr__(self, "opencode_workspace", self.opencode_workspace.strip())
+        object.__setattr__(self, "feedback_backend_base_url", self.feedback_backend_base_url.rstrip("/"))
+        endpoint = self.feedback_backend_endpoint.strip() or "/api/message-feedback"
+        if not endpoint.startswith("/"):
+            endpoint = f"/{endpoint}"
+        object.__setattr__(self, "feedback_backend_endpoint", endpoint)
         log_dir = Path(self.log_dir)
         if not log_dir.is_absolute():
             log_dir = ADAPTER_ROOT / log_dir

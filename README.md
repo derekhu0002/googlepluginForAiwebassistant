@@ -8,6 +8,7 @@
 - Extension 与 Python adapter 通过 SSE 流式通信
 - 统一事件：`thinking / tool_call / question / result / error`
 - question 通过独立 `POST /api/runs/{runId}/answers` 提交并继续原 run
+- message feedback 通过 `Python adapter -> backend TS service` 主链路转发到产品级 feedback 边界
 - Side Panel 支持事件流自动滚动、question 卡片交互、历史记录查看
 - 浏览器主存储使用 IndexedDB（runs/events/answers）
 - 用户名从网站登录态提取，支持 `unknown` 降级并记录 `username_source`
@@ -72,6 +73,12 @@ uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8000 --rel
 - 若真实 opencode API 与预期不同，可通过这些变量调整，或继续扩展 `python_adapter/app/opencode_adapter.py`
 - 仅当显式设置 `PYTHON_ADAPTER_USE_MOCK_OPENCODE=1` 时才走 mock 主路径
 - 仅当显式设置 `PYTHON_ADAPTER_ALLOW_MOCK_FALLBACK=1` 时，真实 serve 失败后才允许回退 mock 结果
+
+### feedback backend 配置
+
+- Python adapter 默认通过 `FEEDBACK_BACKEND_BASE_URL=http://127.0.0.1:8787` 转发 `/api/message-feedback`
+- backend TS service 继续作为点赞 / 点踩的产品级 HTTP 边界
+- extension 默认仍连接 `http://localhost:8000`，由 Python adapter 暴露统一主链路入口
 
 ## 启动 test site
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,7 +11,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .config import settings
 from .logging_store import JsonlInvocationLogger
-from .models import QuestionAnswerRequest, RunStartRequest
+from .models import MessageFeedbackRequest, QuestionAnswerRequest, RunStartRequest
 from .opencode_adapter import OpencodeAdapter
 
 app = FastAPI(title="AI Web Assistant Python Adapter")
@@ -24,6 +25,33 @@ app.add_middleware(
 
 logger = JsonlInvocationLogger(settings.log_dir)
 adapter = OpencodeAdapter(settings)
+
+
+async def post_feedback_to_backend(request: MessageFeedbackRequest) -> dict[str, object]:
+    url = f"{settings.feedback_backend_base_url}{settings.feedback_backend_endpoint}"
+    headers = {"Content-Type": "application/json"}
+    if settings.api_key:
+        headers["x-api-key"] = settings.api_key
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.post(url, json=request.model_dump(), headers=headers)
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail={"code": "ANALYSIS_ERROR", "message": "Invalid feedback backend response"}) from exc
+
+    if response.status_code >= 400:
+        detail = payload.get("error") if isinstance(payload, dict) else None
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=detail if isinstance(detail, dict) else {"code": "ANALYSIS_ERROR", "message": "Feedback backend request failed"},
+        )
+
+    if not isinstance(payload, dict) or payload.get("ok") is not True or not isinstance(payload.get("data"), dict):
+        raise HTTPException(status_code=502, detail={"code": "ANALYSIS_ERROR", "message": "Unexpected feedback backend payload"})
+
+    return payload["data"]
 
 
 @app.exception_handler(HTTPException)
@@ -102,3 +130,16 @@ async def answer_question(run_id: str, request: QuestionAnswerRequest, _auth: No
         "answer": request.model_dump(),
     })
     return JSONResponse({"ok": True, "data": {"accepted": True, "runId": run_id, "questionId": request.questionId}})
+
+
+@app.post("/api/message-feedback")
+async def submit_message_feedback(request: MessageFeedbackRequest, _auth: None = Depends(enforce_api_key)) -> JSONResponse:
+    result = await post_feedback_to_backend(request)
+    logger.write({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "run_id": request.runId,
+        "phase": "message_feedback",
+        "feedback": request.model_dump(),
+        "backend_response": result,
+    })
+    return JSONResponse({"ok": True, "data": result})

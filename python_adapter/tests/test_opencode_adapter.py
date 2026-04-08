@@ -298,7 +298,7 @@ def test_real_contract_allows_session_payload_without_agent_confirmation() -> No
 
         assert run_id.startswith("run-")
         assert clients[1].calls[0][1] == "/session/ses-1/prompt_async"
-        assert clients[0].calls == [("POST", "/session", {"directory": "/mnt/d/projects/googlepluginForAiwebassistant"}, {"title": "SR SR-1"})]
+        assert clients[0].calls == [("POST", "/session", {"directory": adapter.settings.opencode_directory}, {"title": "SR SR-1"})]
 
     anyio.run(scenario)
 
