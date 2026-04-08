@@ -78,6 +78,22 @@ function toTimestamp(value: string | null | undefined) {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
+function isSameRunEvent(current: NormalizedRunEvent, incoming: NormalizedRunEvent) {
+  return current.id === incoming.id || (current.runId === incoming.runId && current.sequence === incoming.sequence);
+}
+
+function mergeRunEvent(currentEvents: NormalizedRunEvent[], incomingEvent: NormalizedRunEvent) {
+  const existingIndex = currentEvents.findIndex((event) => isSameRunEvent(event, incomingEvent));
+
+  if (existingIndex < 0) {
+    return [...currentEvents, incomingEvent];
+  }
+
+  const nextEvents = [...currentEvents];
+  nextEvents[existingIndex] = incomingEvent;
+  return nextEvents;
+}
+
 function deriveLifecycleStatus(current: AssistantState, event: NormalizedRunEvent, nextEvents: NormalizedRunEvent[]) {
   const pendingQuestionId = getNextPendingQuestionId(current.stream.pendingQuestionId, event);
   const hasResultEvidence = nextEvents.some((item) => item.type === "result");
@@ -644,7 +660,7 @@ export function App() {
         await saveEvent(event);
 
         setState((current) => {
-          const nextEvents = [...current.runEvents, event];
+          const nextEvents = mergeRunEvent(current.runEvents, event);
           const lifecycleStatus = deriveLifecycleStatus(current, event, nextEvents);
           const nextRun = current.currentRun && current.currentRun.runId === event.runId
             ? {

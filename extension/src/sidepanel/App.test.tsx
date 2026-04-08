@@ -612,6 +612,97 @@ describe("side panel host permission request flow", () => {
     expect(merged.currentRun?.runId).toBe("run-1");
   });
 
+  it("does not duplicate a replayed thinking event in the current run state", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = container.querySelector("button[aria-label='发送消息']");
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
+    const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void> };
+    const replayedThinkingEvent = createRunEvent(1, {
+      type: "thinking",
+      message: "Summarizing SR risks and actions\n\nI need to answer the user in Chinese about the current SR's risk and next steps."
+    });
+    const assistantDeltaEvent = createRunEvent(2, {
+      type: "thinking",
+      message: "## 当前风险结论\n\n1. SR 本体缺失。",
+      data: { field: "text", message_id: "msg-1" }
+    });
+
+    await act(async () => {
+      await handlers.onEvent?.(replayedThinkingEvent);
+      await handlers.onEvent?.(replayedThinkingEvent);
+      await handlers.onEvent?.(assistantDeltaEvent);
+    });
+    await flushUi();
+    await flushAllTimers();
+
+    const thinkingItems = container.querySelectorAll(".assistant-thinking-item");
+    expect(thinkingItems).toHaveLength(1);
+    expect(thinkingItems[0]?.textContent).toContain("Summarizing SR risks and actions");
+    expect(mockSaveEvent).toHaveBeenNthCalledWith(1, replayedThinkingEvent);
+    expect(mockSaveEvent).toHaveBeenNthCalledWith(2, replayedThinkingEvent);
+  });
+
+  it("replaces the in-memory event when the same run sequence is replayed with a fuller thinking snapshot", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = container.querySelector("button[aria-label='发送消息']");
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
+    const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void> };
+    const assistantDeltaEvent = createRunEvent(2, {
+      type: "thinking",
+      message: "## 当前风险结论\n\n1. SR 本体缺失。",
+      data: { field: "text", message_id: "msg-1" }
+    });
+
+    await act(async () => {
+      await handlers.onEvent?.(createRunEvent(1, {
+        id: "event-short",
+        type: "thinking",
+        message: "Summarizing project risks in Chinese"
+      }));
+      await handlers.onEvent?.(createRunEvent(1, {
+        id: "event-long",
+        type: "thinking",
+        message: "Summarizing project risks in Chinese\n\nI need to provide an answer in Chinese about the current SR risks."
+      }));
+      await handlers.onEvent?.(assistantDeltaEvent);
+    });
+    await flushUi();
+    await flushAllTimers();
+
+    const thinkingItems = container.querySelectorAll(".assistant-thinking-item");
+    expect(thinkingItems).toHaveLength(1);
+    expect(thinkingItems[0]?.textContent).toContain("I need to provide an answer in Chinese about the current SR risks.");
+    expect(thinkingItems[0]?.textContent).not.toBe("Summarizing project risks in Chinese");
+  });
+
   it("still syncs background state for a different run", () => {
     const current = createAssistantState({
       runEvents: [createRunEvent(1)],
