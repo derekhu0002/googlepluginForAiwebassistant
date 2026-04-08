@@ -110,7 +110,7 @@ def test_start_run_surfaces_session_agent_enforcement_error(monkeypatch) -> None
     payload = response.json()
     assert payload["ok"] is False
     assert payload["error"]["code"] == "ANALYSIS_ERROR"
-    assert "opencode 主分析代理预检失败" in payload["error"]["message"]
+    assert "opencode 主分析代理校验失败" in payload["error"]["message"]
     assert "other_agent" in payload["error"]["message"]
 
 
@@ -159,7 +159,7 @@ def test_start_run_returns_explicit_error_when_primary_agent_guard_fails(monkeyp
     payload = response.json()
     assert payload["ok"] is False
     assert payload["error"]["code"] == "ANALYSIS_ERROR"
-    assert "opencode 主分析代理预检失败" in payload["error"]["message"]
+    assert "opencode 主分析代理校验失败" in payload["error"]["message"]
     assert "missing agent" in payload["error"]["message"]
 
 

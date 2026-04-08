@@ -37,8 +37,8 @@ def map_start_run_error(exc: RuntimeError) -> HTTPException:
             detail={
                 "code": "ANALYSIS_ERROR",
                 "message": (
-                    "opencode 主分析代理预检失败，请确认 TARA_analyst 已正确配置，且 opencode serve 的 /agent "
-                    f"已暴露该 primary agent 后重试。原因：{error_message}"
+                    "opencode 主分析代理校验失败，请确认 TARA_analyst 本地配置正确，且真实运行时未落到其他 agent。"
+                    f"原因：{error_message}"
                 ),
             },
         )

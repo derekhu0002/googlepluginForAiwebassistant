@@ -130,7 +130,6 @@ def test_real_contract_uses_session_prompt_async_and_question_reply() -> None:
 
     clients: list[FakeAsyncClient] = []
     response_sets = [
-        [("GET", "/agent", make_response("GET", "/agent", json_body=[{"name": "TARA_analyst", "mode": "primary"}]))],
         [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
         [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
         [
@@ -162,19 +161,18 @@ def test_real_contract_uses_session_prompt_async_and_question_reply() -> None:
         all_events = events + remaining
         assert [event.type for event in all_events] == ["thinking", "tool_call", "thinking", "question", "thinking", "thinking", "result"]
         assert all_events[-1].message == "final answer from session"
-        assert clients[0].calls[0][1] == "/agent"
-        assert clients[1].calls[0][1] == "/session"
-        assert clients[1].calls[0][3] == {
+        assert clients[0].calls[0][1] == "/session"
+        assert clients[0].calls[0][3] == {
             "title": "SR SR-1",
         }
-        assert clients[2].calls[0][1] == "/session/ses-1/prompt_async"
-        assert clients[2].calls[0][3] == {
+        assert clients[1].calls[0][1] == "/session/ses-1/prompt_async"
+        assert clients[1].calls[0][3] == {
             "agent": "TARA_analyst",
             "parts": [{"type": "text", "text": "hello from adapter"}],
         }
-        assert clients[3].calls[0][1] == "/global/event"
-        assert clients[4].calls[0][1] == "/question/req-1/reply"
-        assert clients[5].calls[0][1] == "/session/ses-1/message"
+        assert clients[2].calls[0][1] == "/global/event"
+        assert clients[3].calls[0][1] == "/question/req-1/reply"
+        assert clients[4].calls[0][1] == "/session/ses-1/message"
 
     anyio.run(scenario)
 
@@ -191,7 +189,6 @@ def test_request_without_capture_defaults_to_generic_session_title() -> None:
     }
 
     response_sets = [
-        [("GET", "/agent", make_response("GET", "/agent", json_body=[{"name": "TARA_analyst", "mode": "primary"}]))],
         [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
         [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
         [("GET", "/global/event", make_sse_response([]))],
@@ -208,7 +205,7 @@ def test_request_without_capture_defaults_to_generic_session_title() -> None:
         adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
         await adapter.start_run(create_request_without_capture())
 
-        assert clients[1].calls[0][3] == {
+        assert clients[0].calls[0][3] == {
             "title": "SR analysis",
         }
 
@@ -218,7 +215,6 @@ def test_request_without_capture_defaults_to_generic_session_title() -> None:
 def test_real_path_returns_error_when_session_create_fails() -> None:
     def factory(_timeout):
         return FakeAsyncClient([
-            ("GET", "/agent", make_response("GET", "/agent", json_body=[{"name": "TARA_analyst", "mode": "primary"}])),
             ("POST", "/session", httpx.ConnectError("boom")),
         ])
 
@@ -236,7 +232,6 @@ def test_real_path_returns_error_when_session_create_fails() -> None:
 def test_explicit_mock_fallback_keeps_flow_when_real_contract_fails() -> None:
     def factory(_timeout):
         return FakeAsyncClient([
-            ("GET", "/agent", make_response("GET", "/agent", json_body=[{"name": "TARA_analyst", "mode": "primary"}])),
             ("POST", "/session", httpx.ConnectError("boom")),
         ])
 
@@ -339,7 +334,6 @@ def test_real_contract_allows_session_payload_without_agent_confirmation() -> No
 
     clients: list[FakeAsyncClient] = []
     response_sets = [
-        [("GET", "/agent", make_response("GET", "/agent", json_body=[{"name": "TARA_analyst", "mode": "primary"}]))],
         [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
         [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
     ]
@@ -354,8 +348,8 @@ def test_real_contract_allows_session_payload_without_agent_confirmation() -> No
         run_id = await adapter.start_run(create_request())
 
         assert run_id.startswith("run-")
-        assert clients[2].calls[0][1] == "/session/ses-1/prompt_async"
-        assert clients[1].calls == [("POST", "/session", {"directory": adapter.settings.opencode_directory}, {"title": "SR SR-1"})]
+        assert clients[1].calls[0][1] == "/session/ses-1/prompt_async"
+        assert clients[0].calls == [("POST", "/session", {"directory": adapter.settings.opencode_directory}, {"title": "SR SR-1"})]
 
     anyio.run(scenario)
 
@@ -372,7 +366,6 @@ def test_real_contract_fails_when_message_event_reports_wrong_primary_agent() ->
     }
 
     response_sets = [
-        [("GET", "/agent", make_response("GET", "/agent", json_body=[{"name": "TARA_analyst", "mode": "primary"}]))],
         [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
         [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
         [(
@@ -418,7 +411,6 @@ def test_real_contract_fails_when_assistant_message_reports_wrong_primary_agent(
     ]
 
     response_sets = [
-        [("GET", "/agent", make_response("GET", "/agent", json_body=[{"name": "TARA_analyst", "mode": "primary"}]))],
         [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
         [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
         [(
@@ -468,7 +460,6 @@ def test_real_contract_does_not_fail_when_runtime_omits_agent_evidence() -> None
     ]
 
     response_sets = [
-        [("GET", "/agent", make_response("GET", "/agent", json_body=[{"name": "TARA_analyst", "mode": "primary"}]))],
         [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
         [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
         [("GET", "/global/event", make_sse_response(sse_events))],
@@ -489,19 +480,34 @@ def test_real_contract_does_not_fail_when_runtime_omits_agent_evidence() -> None
     anyio.run(scenario)
 
 
-def test_real_contract_fails_fast_when_remote_primary_agent_is_unavailable() -> None:
+def test_real_contract_does_not_preflight_remote_agent_catalog() -> None:
     clients: list[FakeAsyncClient] = []
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+    response_sets = [
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+    ]
 
     def factory(_timeout):
-        client = FakeAsyncClient([("GET", "/agent", make_response("GET", "/agent", json_body=[{"name": "build", "mode": "primary"}]))])
+        client = FakeAsyncClient(response_sets.pop(0))
         clients.append(client)
         return client
 
     async def scenario() -> None:
         adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
-        with pytest.raises(RuntimeError, match="does not expose primary agent 'TARA_analyst'"):
-            await adapter.start_run(create_request())
+        run_id = await adapter.start_run(create_request())
 
-        assert len(clients) == 1
+        assert run_id.startswith("run-")
+        assert len(clients) == 2
+        assert clients[0].calls[0][1] == "/session"
+        assert clients[1].calls[0][1] == "/session/ses-1/prompt_async"
 
     anyio.run(scenario)
