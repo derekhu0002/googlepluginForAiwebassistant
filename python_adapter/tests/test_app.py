@@ -106,14 +106,12 @@ def test_start_run_surfaces_session_agent_enforcement_error(monkeypatch) -> None
         },
     )
 
-    assert response.status_code == 500
-    assert response.json() == {
-        "ok": False,
-        "error": {
-            "code": "SESSION_AGENT_ENFORCEMENT_ERROR",
-            "message": "TARA primary agent enforcement failed: remote session reported primary agent 'other_agent'",
-        },
-    }
+    assert response.status_code == 502
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "ANALYSIS_ERROR"
+    assert "opencode 主分析代理预检失败" in payload["error"]["message"]
+    assert "other_agent" in payload["error"]["message"]
 
 
 def test_health_exposes_runtime_defaults(monkeypatch) -> None:
@@ -157,12 +155,44 @@ def test_start_run_returns_explicit_error_when_primary_agent_guard_fails(monkeyp
         },
     )
 
+    assert response.status_code == 502
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "ANALYSIS_ERROR"
+    assert "opencode 主分析代理预检失败" in payload["error"]["message"]
+    assert "missing agent" in payload["error"]["message"]
+
+
+def test_start_run_keeps_unexpected_runtime_errors_as_internal_server_error(monkeypatch) -> None:
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("unexpected session bootstrap failure")))
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "prompt": "hello",
+            "capture": {
+                "pageTitle": "Example",
+                "pageUrl": "https://example.com",
+                "software_version": "v1.0.0",
+                "selected_sr": "SR-1",
+            },
+            "context": {
+                "source": "chrome-extension",
+                "capturedAt": "2026-04-01T00:00:00.000Z",
+                "username": "alice",
+                "usernameSource": "dom_text",
+                "pageTitle": "Example",
+                "pageUrl": "https://example.com",
+            },
+        },
+    )
+
     assert response.status_code == 500
     assert response.json() == {
         "ok": False,
         "error": {
-            "code": "SESSION_AGENT_ENFORCEMENT_ERROR",
-            "message": "TARA primary agent guard failed: missing agent",
+            "code": "ANALYSIS_ERROR",
+            "message": "unexpected session bootstrap failure",
         },
     }
 

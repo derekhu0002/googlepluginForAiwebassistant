@@ -27,6 +27,25 @@ logger = JsonlInvocationLogger(settings.log_dir)
 adapter = OpencodeAdapter(settings)
 
 
+def map_start_run_error(exc: RuntimeError) -> HTTPException:
+    error_message = str(exc)
+    normalized_message = error_message.lower()
+
+    if "primary agent" in normalized_message or "guard failed" in normalized_message:
+        return HTTPException(
+            status_code=502,
+            detail={
+                "code": "ANALYSIS_ERROR",
+                "message": (
+                    "opencode 主分析代理预检失败，请确认 TARA_analyst 已正确配置，且 opencode serve 的 /agent "
+                    f"已暴露该 primary agent 后重试。原因：{error_message}"
+                ),
+            },
+        )
+
+    return HTTPException(status_code=500, detail={"code": "ANALYSIS_ERROR", "message": error_message})
+
+
 async def post_feedback_to_backend(request: MessageFeedbackRequest) -> dict[str, object]:
     url = f"{settings.feedback_backend_base_url}{settings.feedback_backend_endpoint}"
     headers = {"Content-Type": "application/json"}
@@ -89,9 +108,7 @@ async def start_run(request: RunStartRequest, _auth: None = Depends(enforce_api_
     try:
         run_id = await adapter.start_run(request)
     except RuntimeError as exc:
-        error_message = str(exc)
-        error_code = "SESSION_AGENT_ENFORCEMENT_ERROR" if "primary agent" in error_message.lower() else "ANALYSIS_ERROR"
-        raise HTTPException(status_code=500, detail={"code": error_code, "message": error_message}) from exc
+        raise map_start_run_error(exc) from exc
     logger.write({
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "run_id": run_id,
