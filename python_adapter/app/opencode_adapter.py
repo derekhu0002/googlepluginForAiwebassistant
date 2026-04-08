@@ -89,6 +89,31 @@ class OpencodeAdapter:
         if not agent_contents.strip():
             raise RuntimeError(f"TARA primary agent guard failed: {agent_path} is empty")
 
+    async def _ensure_tara_primary_agent_available(self) -> None:
+        async with self._client_factory(30.0) as client:
+            response = await client.get(self.settings.opencode_agent_list_endpoint, params=self._query_params())
+            response.raise_for_status()
+            payload = response.json()
+
+        if not isinstance(payload, list):
+            raise RuntimeError("TARA primary agent guard failed: invalid /agent response from opencode serve")
+
+        available_primary_agents: list[str] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            mode = item.get("mode")
+            if isinstance(name, str) and name.strip() and mode in {"primary", "all"}:
+                available_primary_agents.append(name.strip())
+
+        if REQUIRED_PRIMARY_AGENT not in available_primary_agents:
+            available = ", ".join(sorted(available_primary_agents)) or "(none)"
+            raise RuntimeError(
+                f"TARA primary agent guard failed: opencode serve does not expose primary agent {REQUIRED_PRIMARY_AGENT!r}. "
+                f"Available primary agents: {available}"
+            )
+
     def _build_session_create_payload(self, request: RunStartRequest) -> dict[str, Any]:
         title = f"SR {request.capture.get('selected_sr', '').strip() or 'analysis'}"
         return {
@@ -144,6 +169,7 @@ class OpencodeAdapter:
     async def start_run(self, request: RunStartRequest) -> str:
         if not self.settings.use_mock_opencode:
             self._ensure_tara_primary_agent()
+            await self._ensure_tara_primary_agent_available()
 
         run_id = f"run-{uuid4().hex}"
         run = {

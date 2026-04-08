@@ -29,6 +29,7 @@ class Settings:
     opencode_directory: str = field(default_factory=lambda: os.getenv("OPENCODE_DIRECTORY", str(ADAPTER_ROOT.parent)))
     opencode_workspace: str = field(default_factory=lambda: os.getenv("OPENCODE_WORKSPACE", ""))
     opencode_session_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_SESSION_ENDPOINT", "/session"))
+    opencode_agent_list_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_AGENT_LIST_ENDPOINT", "/agent"))
     opencode_prompt_async_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_PROMPT_ASYNC_ENDPOINT", "/session/{session_id}/prompt_async"))
     opencode_question_list_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_QUESTION_LIST_ENDPOINT", "/question"))
     opencode_question_reply_endpoint: str = field(default_factory=lambda: os.getenv("OPENCODE_QUESTION_REPLY_ENDPOINT", "/question/{request_id}/reply"))

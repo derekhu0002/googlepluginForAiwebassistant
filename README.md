@@ -57,6 +57,8 @@ cp backend/.env.example backend/.env
 - opencode 默认探测 `http://localhost:8123`
 - backend 默认监听 `8787`
 
+如果点击发送后 opencode server 侧出现 `prompt_async failed` / `session.error`，先检查 `GET http://localhost:8123/agent?directory=<repo>` 是否真的包含 `TARA_analyst` 且其 `mode` 为 `primary`/`all`。当前 adapter 已在启动真实 run 前做该校验；若 serve 端仍只暴露 `build / explore / general / plan`，需要先修正 opencode 的 agent 加载环境，再重试。
+
 > 提示：`python_adapter/.env.example` 与 `backend/.env.example` 中的 `chrome-extension://dev-extension-id` 只是示例值。实际加载 unpacked extension 后，如需严格校准 allowlist，请替换成你本机扩展的真实 ID。
 
 ## 推荐本地调试顺序
