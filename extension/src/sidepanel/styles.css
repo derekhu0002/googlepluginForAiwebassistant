@@ -140,6 +140,22 @@ textarea {
   border-color: rgba(148, 163, 184, 0.22);
 }
 
+.host-permission-callout {
+  gap: 12px;
+  border-color: rgba(217, 119, 6, 0.28);
+  background: linear-gradient(180deg, rgba(255, 251, 235, 0.98) 0%, rgba(255, 255, 255, 0.96) 100%);
+  box-shadow: 0 12px 30px rgba(217, 119, 6, 0.08);
+}
+
+.host-permission-callout strong {
+  color: #92400e;
+}
+
+.host-permission-callout p {
+  margin: 4px 0 0;
+  color: #78350f;
+}
+
 .chat-primary-panel {
   display: flex;
   flex-direction: column;

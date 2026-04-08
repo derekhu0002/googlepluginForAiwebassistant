@@ -557,6 +557,7 @@ export function App() {
   const liveAssistantText = collectRunAssistantResponseText(state.runEvents, state.currentRun?.finalOutput);
   const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent || liveAssistantText);
   const livePrompt = state.currentRun?.prompt ?? prompt;
+  const shouldShowPermissionCallout = !activeContext?.permissionGranted && activeContext?.canRequestPermission;
   const livePresentationState = useMemo(() => resolveTimelinePresentationState({
     events: state.runEvents,
     runStatus: state.currentRun?.status,
@@ -599,6 +600,19 @@ export function App() {
           </div>
         </div>
       </header>
+
+      {shouldShowPermissionCallout ? (
+        <section className="panel-block host-permission-callout" aria-label="当前域名授权提示">
+          <div>
+            <strong>当前页面需要先授权域名访问</strong>
+            <p>{activeContext?.message || "授权当前域名后，扩展才能继续读取页面上下文并正常工作。"}</p>
+          </div>
+          <button className="secondary" disabled={requestingPermission} onClick={() => requestPermission()}>
+            {requestingPermission ? "授权中..." : "授权当前域名"}
+          </button>
+          {contextError ? <p className="error-text">{contextError}</p> : null}
+        </section>
+      ) : null}
 
       <section className="panel-block chat-primary-panel">
         <div className="section-header compact chat-primary-header">
@@ -689,12 +703,7 @@ export function App() {
                   {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
                 </span>
               </div>
-              {!activeContext?.permissionGranted && activeContext?.canRequestPermission ? (
-                <button className="secondary" disabled={requestingPermission} onClick={() => requestPermission()}>
-                  {requestingPermission ? "授权中..." : "授权当前域名"}
-                </button>
-              ) : null}
-              {contextError ? <p className="error-text">{contextError}</p> : null}
+              {!shouldShowPermissionCallout && contextError ? <p className="error-text">{contextError}</p> : null}
               <small>用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
             </section>
 

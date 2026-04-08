@@ -266,6 +266,30 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("域名已授权");
   });
 
+  it("surfaces the host permission action before the collapsed context panel when permission is missing", async () => {
+    setupChromeStub({
+      contexts: [createContext()]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const callout = container.querySelector(".host-permission-callout");
+    expect(callout).toBeTruthy();
+    expect(callout?.textContent).toContain("当前页面需要先授权域名访问");
+
+    const calloutButton = callout?.querySelector("button");
+    expect(calloutButton?.textContent).toContain("授权当前域名");
+
+    const details = container.querySelector("details.utility-panel") as HTMLDetailsElement | null;
+    expect(details?.open).toBe(false);
+
+    const detailsButton = details?.querySelector("button");
+    expect(detailsButton).toBeNull();
+  });
+
   it("shows explicit error when user rejects the permission prompt", async () => {
     const { permissionsRequest } = setupChromeStub({
       contexts: [createContext()],
