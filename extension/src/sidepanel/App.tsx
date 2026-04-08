@@ -4,10 +4,10 @@ import { createRunEventStream, submitQuestionAnswer } from "../shared/api";
 import { toDisplayMessage } from "../shared/errors";
 import { createDefaultFieldTemplates, createDefaultRule, createId } from "../shared/rules";
 import { initialAssistantState } from "../shared/state";
-import type { NormalizedRunEvent, RunRecord } from "../shared/protocol";
+import type { NormalizedRunEvent, RunHistoryDetail, RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
-import { collectRunAssistantResponseText, isAssistantResponseDeltaEvent, resolveTimelinePresentationState } from "./reasoningTimeline";
+import { collectRunAssistantResponseText, isAssistantResponseDeltaEvent, resolveTimelinePresentationState, type BuildChatStreamItemsOptions } from "./reasoningTimeline";
 import { ReasoningTimeline } from "./reasoningTimelineView";
 import { useRunHistory } from "./useRunHistory";
 
@@ -234,6 +234,101 @@ function SendIcon() {
   );
 }
 
+function truncateText(value: string, maxLength: number) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function deriveRunTitle(run: Pick<RunRecord, "selectedSr" | "prompt" | "pageTitle" | "softwareVersion">) {
+  if (run.selectedSr.trim()) {
+    return truncateText(`SR ${run.selectedSr.trim()}`, 40);
+  }
+
+  if (run.prompt.trim()) {
+    return truncateText(run.prompt, 40);
+  }
+
+  if (run.pageTitle.trim()) {
+    return truncateText(run.pageTitle, 40);
+  }
+
+  if (run.softwareVersion.trim()) {
+    return truncateText(`版本 ${run.softwareVersion.trim()}`, 40);
+  }
+
+  return "未命名会话";
+}
+
+function deriveRunSummary(run: Pick<RunRecord, "finalOutput" | "errorMessage" | "pageTitle" | "prompt" | "softwareVersion" | "username">) {
+  if (run.finalOutput.trim()) {
+    return truncateText(run.finalOutput, 84);
+  }
+
+  if (run.errorMessage?.trim()) {
+    return truncateText(run.errorMessage, 84);
+  }
+
+  if (run.pageTitle.trim()) {
+    return truncateText(run.pageTitle, 84);
+  }
+
+  if (run.prompt.trim()) {
+    return truncateText(run.prompt, 84);
+  }
+
+  const fallback = [run.softwareVersion.trim(), run.username.trim()].filter(Boolean).join(" · ");
+  return truncateText(fallback || "等待更多会话内容", 84);
+}
+
+interface SessionNavigationItem {
+  key: string;
+  sessionId: string | null;
+  latestRun: RunRecord;
+  runCount: number;
+}
+
+function deriveSessionKey(run: Pick<RunRecord, "runId" | "sessionId">) {
+  return run.sessionId ? `session:${run.sessionId}` : `run:${run.runId}`;
+}
+
+function buildSessionNavigationItems(history: RunRecord[], currentRun: RunRecord | null) {
+  const runs = currentRun && !history.some((item) => item.runId === currentRun.runId)
+    ? [currentRun, ...history]
+    : history;
+  const sessions = new Map<string, SessionNavigationItem>();
+
+  for (const run of runs) {
+    const key = deriveSessionKey(run);
+    const current = sessions.get(key);
+
+    if (!current) {
+      sessions.set(key, {
+        key,
+        sessionId: run.sessionId ?? null,
+        latestRun: run,
+        runCount: 1
+      });
+      continue;
+    }
+
+    sessions.set(key, {
+      ...current,
+      latestRun: toTimestamp(run.updatedAt) > toTimestamp(current.latestRun.updatedAt) ? run : current.latestRun,
+      runCount: current.runCount + 1
+    });
+  }
+
+  return [...sessions.values()].sort((left, right) => toTimestamp(right.latestRun.updatedAt) - toTimestamp(left.latestRun.updatedAt));
+}
+
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL */
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 /** @ArchitectureID: ELM-APP-008A */
@@ -249,8 +344,11 @@ export function App() {
   const [savingRule, setSavingRule] = useState(false);
   const [prompt, setPrompt] = useState(initialAssistantState.runPrompt);
   const [streamError, setStreamError] = useState<string>("");
+  const [activeSessionRunDetails, setActiveSessionRunDetails] = useState<RunHistoryDetail[]>([]);
+  const [selectedSessionKey, setSelectedSessionKey] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const { history, selectedHistoryDetail, saveRun, saveEvent, saveAnswer, selectRun, refresh, clearSelectedRun } = useRunHistory();
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const { history, selectedHistoryDetail, saveRun, saveEvent, saveAnswer, loadRunDetail, selectRun, refresh, clearSelectedRun } = useRunHistory();
   const historyRef = useRef(history);
   const selectedHistoryDetailRef = useRef(selectedHistoryDetail);
 
@@ -440,11 +538,13 @@ export function App() {
     }
 
     setPrompt(nextPrompt);
+    const targetSessionItem = sessionNavigationItems.find((item) => item.key === selectedSessionKey) ?? null;
 
     const response = await sendMessage<{ ok: boolean; data?: { runId: string; sessionId?: string; currentRun: RunRecord } ; error?: { message: string } }>({
       type: "START_RUN",
       payload: {
         prompt: nextPrompt,
+        ...(targetSessionItem?.sessionId ? { sessionId: targetSessionItem.sessionId } : {}),
         capturePageData: retryPayload?.capturePageData,
         retryFromRunId: retryPayload?.retryFromRunId,
         retryFromMessageId: retryPayload?.retryFromMessageId
@@ -473,6 +573,7 @@ export function App() {
     }));
 
     await saveRun(responseData.currentRun);
+  setSelectedSessionKey(deriveSessionKey(responseData.currentRun));
 
     eventSourceRef.current = createRunEventStream(responseData.runId, {
       onEvent: async (event) => {
@@ -624,6 +725,34 @@ export function App() {
     });
   }
 
+  async function handleStartFreshSession() {
+    if (isBusy) {
+      return;
+    }
+
+    eventSourceRef.current?.close();
+    setStreamError("");
+    setPrompt(initialAssistantState.runPrompt);
+    setSelectedSessionKey(null);
+    await clearSelectedRun().catch(() => undefined);
+    await sendMessage<{ ok: boolean }>({ type: "CLEAR_RESULT" }).catch(() => ({ ok: false }));
+    await loadBaseState().catch(() => undefined);
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+      composerRef.current?.select();
+    });
+  }
+
+  async function handleReturnToCurrentSession() {
+    if (state.currentRun) {
+      setSelectedSessionKey(deriveSessionKey(state.currentRun));
+    }
+    await clearSelectedRun().catch(() => undefined);
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+    });
+  }
+
   async function handleCaptureOnly() {
     if (isBusy) {
       return;
@@ -656,6 +785,18 @@ export function App() {
   const livePrompt = state.currentRun?.prompt ?? prompt;
   const shouldShowPermissionCallout = Boolean(activeContext?.url && !activeContext.permissionGranted && !activeContext.restricted);
   const canShowPermissionButton = shouldShowPermissionCallout && activeContext?.canRequestPermission;
+  const sortedHistory = useMemo(() => [...history].sort((left, right) => toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt)), [history]);
+  const pinnedCurrentRun = state.currentRun;
+  const currentSessionKey = state.currentRun ? deriveSessionKey(state.currentRun) : null;
+  const sessionNavigationItems = useMemo(
+    () => buildSessionNavigationItems(sortedHistory, state.currentRun),
+    [sortedHistory, state.currentRun]
+  );
+  const selectedSessionItem = useMemo(
+    () => sessionNavigationItems.find((item) => item.key === selectedSessionKey) ?? null,
+    [selectedSessionKey, sessionNavigationItems]
+  );
+  const draftSessionSummary = truncateText(prompt.trim() || initialAssistantState.runPrompt, 84);
   const livePresentationState = useMemo(() => resolveTimelinePresentationState({
     events: state.runEvents,
     runStatus: state.currentRun?.status,
@@ -676,6 +817,114 @@ export function App() {
             : hasLiveConversation
               ? "持续输出中"
               : "待开始";
+    const selectedSessionIsCurrent = !selectedSessionKey || selectedSessionKey === currentSessionKey;
+
+    useEffect(() => {
+      if (!sessionNavigationItems.length) {
+        if (selectedSessionKey !== null) {
+          setSelectedSessionKey(null);
+        }
+        return;
+      }
+
+      if (selectedSessionKey && sessionNavigationItems.some((item) => item.key === selectedSessionKey)) {
+        return;
+      }
+
+      setSelectedSessionKey(currentSessionKey ?? sessionNavigationItems[0].key);
+    }, [currentSessionKey, selectedSessionKey, sessionNavigationItems]);
+
+    useEffect(() => {
+      if (!selectedSessionKey) {
+        setActiveSessionRunDetails([]);
+        return;
+      }
+
+      const selectedRuns = sortedHistory
+        .filter((run) => deriveSessionKey(run) === selectedSessionKey)
+        .filter((run) => !(selectedSessionKey === currentSessionKey && run.runId === state.currentRun?.runId))
+        .sort((left, right) => toTimestamp(left.startedAt) - toTimestamp(right.startedAt));
+
+      if (!selectedRuns.length) {
+        setActiveSessionRunDetails([]);
+        return;
+      }
+
+      let cancelled = false;
+      Promise.all(selectedRuns.map((run) => loadRunDetail(run.runId)))
+        .then((details) => {
+          if (cancelled) {
+            return;
+          }
+
+          setActiveSessionRunDetails(details.filter((detail): detail is RunHistoryDetail => Boolean(detail)));
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setActiveSessionRunDetails([]);
+          }
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [currentSessionKey, loadRunDetail, selectedSessionKey, sortedHistory, state.currentRun?.runId]);
+
+    const liveConversationSegments = useMemo<BuildChatStreamItemsOptions[]>(() => {
+      const historicalSegments = activeSessionRunDetails.map((detail) => ({
+        runId: detail.run.runId,
+        prompt: detail.run.prompt,
+        events: detail.events,
+        answers: detail.answers,
+        finalOutput: collectRunAssistantResponseText(detail.events, detail.run.finalOutput),
+        errorMessage: detail.run.errorMessage,
+        status: detail.run.status,
+        updatedAt: detail.run.updatedAt ?? detail.run.startedAt,
+        pendingQuestionId: null
+      }));
+
+      if (!selectedSessionIsCurrent) {
+        return historicalSegments;
+      }
+
+      if (!state.currentRun && !state.runEvents.length) {
+        return historicalSegments;
+      }
+
+      return [
+        ...historicalSegments,
+        {
+          runId: state.currentRun?.runId ?? state.stream.runId,
+          prompt: livePrompt,
+          events: state.runEvents,
+          answers: state.answers,
+          finalOutput: liveAssistantText,
+          errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError,
+          status: livePresentationState.runStatus,
+          updatedAt: state.currentRun?.updatedAt ?? state.currentRun?.startedAt,
+          pendingQuestionId: state.stream.pendingQuestionId
+        }
+      ];
+    }, [activeSessionRunDetails, liveAssistantText, livePresentationState.runStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, streamError]);
+    const selectedConversationHasContent = liveConversationSegments.length > 0;
+    const selectedThreadRun = selectedSessionItem?.latestRun ?? state.currentRun;
+    const selectedThreadStatus = selectedSessionIsCurrent ? livePresentationState.runStatus : selectedThreadRun?.status;
+    const selectedThreadStreamStatus = selectedSessionIsCurrent ? livePresentationState.streamStatus : undefined;
+    const selectedThreadUpdatedAt = selectedSessionIsCurrent
+      ? (state.currentRun?.updatedAt ?? state.currentRun?.startedAt)
+      : (selectedThreadRun?.updatedAt ?? selectedThreadRun?.startedAt);
+    const selectedThreadError = selectedSessionIsCurrent
+      ? (state.currentRun?.errorMessage ?? state.errorMessage ?? streamError)
+      : (selectedThreadRun?.errorMessage ?? null);
+    const selectedThreadFinalOutput = selectedSessionIsCurrent
+      ? liveAssistantText
+      : collectRunAssistantResponseText(
+          activeSessionRunDetails.flatMap((detail) => detail.events),
+          selectedThreadRun?.finalOutput
+        );
+    const composerModeLabel = selectedSessionIsCurrent
+      ? (questionEvent?.question ? "继续回答或追问" : "发送消息")
+      : `继续会话: ${deriveRunTitle(selectedThreadRun ?? { selectedSr: "", prompt: prompt, pageTitle: "", softwareVersion: "" })}`;
 
   return (
     <main className="app-shell chat-app-shell">
@@ -683,14 +932,15 @@ export function App() {
         <div className="ide-header-titlebar">
           <div>
             <h1>AI Web Assistant</h1>
-            <p>conversation-first / 单一连续对话流</p>
+            <p>Copilot 风格会话工作区 / 单一连续对话流</p>
           </div>
           <span className="mode-chip">{isEmbedded || state.uiMode === "embedded" ? "Embedded" : "Side Panel"}</span>
         </div>
         <div className="ide-toolbar" aria-label="IDE chat toolbar">
           <div className="ide-toolbar-group">
             <span className="ide-toolbar-label">Chat</span>
-            <span className="ide-toolbar-pill">Light IDE</span>
+            <span className="ide-toolbar-pill">Copilot Session</span>
+            <span className="ide-toolbar-pill">{activeContext?.hostname ?? "No page"}</span>
           </div>
           <div className="ide-toolbar-group">
             <span className="ide-toolbar-pill">Live / History</span>
@@ -698,189 +948,198 @@ export function App() {
           </div>
         </div>
       </header>
-
-      {shouldShowPermissionCallout ? (
-        <section className="panel-block host-permission-callout" aria-label="当前域名授权提示">
-          <div>
-            <strong>当前页面需要先授权域名访问</strong>
-            <p>{activeContext?.message || "授权当前域名后，扩展才能继续读取页面上下文并正常工作。"}</p>
-            {!canShowPermissionButton ? (
-              <p>
-                当前构建尚未把这个域名加入可申请授权清单。请先确认已将 <code>extension/.env.example</code> 复制为 <code>extension/.env</code>，重新执行 <code>npm run build --workspace extension</code>，然后在 <code>chrome://extensions</code> 里重新加载 <code>extension/dist</code>。
-              </p>
-            ) : null}
-          </div>
-          {canShowPermissionButton ? (
-            <button className="secondary" disabled={requestingPermission} onClick={() => requestPermission()}>
-              {requestingPermission ? "授权中..." : "授权当前域名"}
-            </button>
-          ) : null}
-          {contextError ? <p className="error-text">{contextError}</p> : null}
-        </section>
-      ) : null}
-
-      <section className="panel-block chat-primary-panel">
-        <div className="section-header compact chat-primary-header">
-          <div>
-            <h2>对话</h2>
-            <small>用户提问、问题确认与最终回答统一展示</small>
-          </div>
-          <div className="chat-primary-meta">
-            <small className="conversation-live-chip">{shellStatusLabel}</small>
-            {(state.stream.runId || state.currentRun?.runId) ? <small className="detail-muted">Run：{state.currentRun?.runId ?? state.stream.runId}</small> : null}
-          </div>
-        </div>
-
-        <div className="conversation-mainline chat-primary-mainline">
-          {hasLiveConversation ? (
-            <ReasoningTimeline
-              runId={state.currentRun?.runId ?? state.stream.runId}
-              prompt={livePrompt}
-              events={state.runEvents}
-              answers={state.answers}
-              live
-              streamStatus={livePresentationState.streamStatus}
-              runStatus={livePresentationState.runStatus}
-              finalOutput={liveAssistantText}
-              errorMessage={state.currentRun?.errorMessage ?? state.errorMessage ?? streamError}
-              updatedAt={state.currentRun?.updatedAt ?? state.currentRun?.startedAt}
-              pendingQuestionId={state.stream.pendingQuestionId}
-              emptyText="正在生成回答…"
-              onRetry={handleRetry}
-              onQuestionSubmit={handleQuestionSubmit}
-              questionSubmitDisabled={!questionEvent?.question}
-            />
-          ) : (
-            <p className="empty-state">提交 prompt 后，这里会展示用户消息与助手回复。</p>
-          )}
-        </div>
-
-        <div className="conversation-composer docked-composer">
-          <div className="composer-chip-zone" aria-label="composer placeholders">
-            {COMPOSER_PLACEHOLDER_CHIPS.map((chip) => (
-              <span key={chip.label} className="composer-chip">
-                <strong>{chip.label}</strong>
-                <small>{chip.description}</small>
-              </span>
-            ))}
-          </div>
-          <div className="composer-toolbar">
-            <button className="secondary capture-button" disabled={isBusy} onClick={() => handleCaptureOnly()}>
-              {state.status === "collecting" ? "采集中..." : "采集页面"}
-            </button>
-            <small className="detail-muted">发送默认不会触发页面采集；如需更新上下文，请先使用独立采集入口。</small>
-          </div>
-          <label className="composer-input-shell">
-            <span>{questionEvent?.question ? "继续回答或追问" : "发送消息"}</span>
-            <textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} rows={4} placeholder="输入你的问题，或继续追问…" />
-            <button
-              className="send-button"
-              aria-label={questionEvent?.question ? "发送补充说明" : "发送消息"}
-              title={questionEvent?.question ? "发送补充说明" : "发送消息"}
-              disabled={isSendDisabled}
-              onClick={() => startStreamingRun({ capturePageData: false })}
-            >
-              <SendIcon />
-            </button>
-          </label>
-          <div className="conversation-composer-actions">
-            <small className="detail-muted">底部输入区始终可用；内联选项回答与自由输入追问共享同一条会话主线。</small>
-          </div>
-        </div>
-      </section>
-
-      <section className="secondary-surface-stack">
-        <details className="secondary-panel utility-panel">
-          <summary>
-            <span>上下文与运行状态</span>
-            <small>默认折叠</small>
-          </summary>
-          <div className="context-grid demoted-grid">
-            <section className="status-card demoted-card">
-              <strong>当前页面上下文</strong>
-              <small>{activeContext?.url ?? "尚未读取当前标签页"}</small>
-              <small>{activeContext?.message ?? ""}</small>
-              <div className="context-actions">
-                <span className={`pill ${activeContext?.matchedRule ? "pill-success" : "pill-muted"}`}>
-                  {activeContext?.matchedRule ? `命中规则：${activeContext.matchedRule.name}` : "未命中规则"}
-                </span>
-                <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
-                  {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
-                </span>
+      <div className="chat-workspace-shell">
+        <aside className="chat-session-sidebar" aria-label="会话侧栏">
+          <section className="secondary-panel session-sidebar-panel" aria-label="会话导航">
+            <div className="section-header compact session-sidebar-header">
+              <div>
+                <h2>会话</h2>
+                <small>点击左侧会话后可在主窗口继续对话</small>
               </div>
-              {!shouldShowPermissionCallout && contextError ? <p className="error-text">{contextError}</p> : null}
-              <small>用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
-            </section>
-
-            <section className="status-card demoted-card">
-              <strong>状态：</strong>
-              <span>{state.status}</span>
-              {state.stream.runId ? <small>流连接：{state.stream.status}</small> : null}
-              {state.lastUpdatedAt ? <small>更新时间：{new Date(state.lastUpdatedAt).toLocaleString()}</small> : null}
-              {state.currentRun ? <small>Run ID：{state.currentRun.runId}</small> : null}
-              {errorTitle ? <small>错误域：{errorTitle}</small> : null}
-              {errorDescription ? <p className="error-text">{errorDescription}</p> : null}
-            </section>
-
-            <section className="panel-block demoted-card legacy-summary-card">
-              <h2>采集结果摘要</h2>
-              {state.capturedFields ? (
-                <dl className="field-list compact-list">
-                  <div className="field-item">
-                    <dt>software_version</dt>
-                    <dd>{state.capturedFields.software_version || <span className="empty-value">(empty)</span>}</dd>
+              <div className="session-sidebar-actions">
+                <button className="secondary" disabled={isBusy} onClick={() => handleStartFreshSession()}>新会话</button>
+                <button className="secondary" onClick={() => refresh()}>刷新</button>
+              </div>
+            </div>
+            <div className="session-sidebar-meta">
+              <span className="pill pill-muted">{sessionNavigationItems.length} 个会话</span>
+              <span className={`pill ${selectedSessionIsCurrent ? "pill-success" : "pill-muted"}`}>{selectedSessionIsCurrent ? "当前会话" : "历史会话"}</span>
+            </div>
+            <div className="history-list copilot-history-list">
+              {sessionNavigationItems.length ? sessionNavigationItems.map((item) => (
+                <button key={item.key} className={`rule-list-item history-nav-item ${selectedSessionKey === item.key ? "active" : ""}`} onClick={() => setSelectedSessionKey(item.key)}>
+                  <div className="history-nav-item-header">
+                    <strong>{deriveRunTitle(item.latestRun)}</strong>
+                    <span className={`status-dot status-${item.latestRun.status}`} aria-hidden="true" />
                   </div>
-                  <div className="field-item">
-                    <dt>selected_sr</dt>
-                    <dd>{state.capturedFields.selected_sr || <span className="empty-value">(empty)</span>}</dd>
-                  </div>
-                </dl>
-              ) : (
-                <p className="empty-state">尚未采集任何字段。</p>
-              )}
-            </section>
-          </div>
-        </details>
-
-        <details className="secondary-panel history-secondary-panel">
-          <summary>
-            <span>历史记录</span>
-            <small>{history.length} 条</small>
-          </summary>
-          <div className="section-header compact history-secondary-header">
-            <small className="detail-muted">历史详情沿用同一对话流呈现。</small>
-            <button className="secondary" onClick={() => refresh()}>刷新</button>
-          </div>
-          <div className="history-layout demoted-history-layout">
-            <aside className="history-list">
-              {history.length ? history.map((item) => (
-                <button key={item.runId} className={`rule-list-item ${selectedHistoryDetail?.run.runId === item.runId ? "active" : ""}`} onClick={() => selectRun(item.runId)}>
-                  <strong>{item.selectedSr || "(no SR)"}</strong>
-                  <small>{item.softwareVersion || "(no version)"} · {item.username}</small>
+                  <p className="session-summary-text">{deriveRunSummary(item.latestRun)}</p>
+                  <small>{item.runCount} 轮消息 · {item.latestRun.username}</small>
                 </button>
               )) : <p className="empty-state">暂无历史记录。</p>}
-            </aside>
-            <div className="history-detail">
-              {selectedHistoryDetail ? (
-                <ReasoningTimeline
-                  runId={selectedHistoryDetail.run.runId}
-                  prompt={selectedHistoryDetail.run.prompt}
-                  events={selectedHistoryDetail.events}
-                  answers={selectedHistoryDetail.answers}
-                  runStatus={selectedHistoryDetail.run.status}
-                  finalOutput={collectRunAssistantResponseText(selectedHistoryDetail.events, selectedHistoryDetail.run.finalOutput)}
-                  errorMessage={selectedHistoryDetail.run.errorMessage}
-                  updatedAt={selectedHistoryDetail.run.updatedAt ?? selectedHistoryDetail.run.startedAt}
-                  emptyText="尚未完成"
-                  onRetry={handleRetry}
-                />
-              ) : <p className="empty-state">选择一条历史记录查看详情。</p>}
             </div>
-          </div>
-        </details>
-      </section>
+          </section>
+        </aside>
 
-      <details className="panel-block rules-config-panel" open={isRulesCenterExpanded}>
+        <section className="chat-stage-shell">
+          {shouldShowPermissionCallout ? (
+            <section className="panel-block host-permission-callout" aria-label="当前域名授权提示">
+              <div>
+                <strong>当前页面需要先授权域名访问</strong>
+                <p>{activeContext?.message || "授权当前域名后，扩展才能继续读取页面上下文并正常工作。"}</p>
+                {!canShowPermissionButton ? (
+                  <p>
+                    当前构建尚未把这个域名加入可申请授权清单。请先确认已将 extension/.env.example 复制为 extension/.env，重新执行 npm run build --workspace extension，然后在 chrome://extensions 里重新加载 extension/dist。
+                  </p>
+                ) : null}
+              </div>
+              {canShowPermissionButton ? (
+                <button className="secondary" disabled={requestingPermission} onClick={() => requestPermission()}>
+                  {requestingPermission ? "授权中..." : "授权当前域名"}
+                </button>
+              ) : null}
+              {contextError ? <p className="error-text">{contextError}</p> : null}
+            </section>
+          ) : null}
+
+          <section className="panel-block chat-primary-panel">
+            <div className="section-header compact chat-primary-header">
+              <div>
+                <h2>对话</h2>
+                <small>{selectedSessionItem ? deriveRunTitle(selectedSessionItem.latestRun) : "用户消息、问题确认与最终回答统一展示"}</small>
+              </div>
+              <div className="chat-primary-meta">
+                <small className="conversation-live-chip">{selectedSessionIsCurrent ? shellStatusLabel : (selectedThreadRun?.status ?? "done")}</small>
+                {selectedThreadRun?.runId ? <small className="detail-muted">Run：{selectedThreadRun.runId}</small> : null}
+              </div>
+            </div>
+
+            <div className="chat-stage-statusbar">
+              <span className="pill pill-muted">页面：{activeContext?.hostname ?? "未读取"}</span>
+              <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
+                {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
+              </span>
+              <span className={`pill ${selectedSessionIsCurrent && questionEvent?.question ? "pill-warning" : "pill-muted"}`}>
+                {selectedSessionIsCurrent && questionEvent?.question ? "等待补充信息" : "自由对话"}
+              </span>
+            </div>
+
+            <div className="conversation-mainline chat-primary-mainline">
+              {selectedConversationHasContent ? (
+                <ReasoningTimeline
+                  runId={selectedThreadRun?.runId ?? state.stream.runId}
+                  prompt={selectedThreadRun?.prompt ?? livePrompt}
+                  events={selectedSessionIsCurrent ? state.runEvents : (activeSessionRunDetails[activeSessionRunDetails.length - 1]?.events ?? [])}
+                  runSegments={liveConversationSegments}
+                  answers={selectedSessionIsCurrent ? state.answers : (activeSessionRunDetails[activeSessionRunDetails.length - 1]?.answers ?? [])}
+                  live={selectedSessionIsCurrent}
+                  streamStatus={selectedThreadStreamStatus}
+                  runStatus={selectedThreadStatus}
+                  finalOutput={selectedThreadFinalOutput}
+                  errorMessage={selectedThreadError}
+                  updatedAt={selectedThreadUpdatedAt}
+                  pendingQuestionId={selectedSessionIsCurrent ? state.stream.pendingQuestionId : null}
+                  emptyText="正在生成回答…"
+                  onRetry={handleRetry}
+                  onQuestionSubmit={selectedSessionIsCurrent ? handleQuestionSubmit : undefined}
+                  questionSubmitDisabled={selectedSessionIsCurrent ? !questionEvent?.question : true}
+                />
+              ) : (
+                <div className="chat-empty-hero empty-state">
+                  <strong>开始一段新的会话</strong>
+                  <p>提交 prompt 后，这里会像 Copilot 一样展示用户消息、流式回复和追问。</p>
+                </div>
+              )}
+            </div>
+
+            <div className="conversation-composer docked-composer">
+              <div className="composer-chip-zone" aria-label="composer placeholders">
+                {COMPOSER_PLACEHOLDER_CHIPS.map((chip) => (
+                  <span key={chip.label} className="composer-chip">
+                    <strong>{chip.label}</strong>
+                    <small>{chip.description}</small>
+                  </span>
+                ))}
+              </div>
+              <div className="composer-toolbar">
+                <button className="secondary capture-button" disabled={isBusy} onClick={() => handleCaptureOnly()}>
+                  {state.status === "collecting" ? "采集中..." : "采集页面"}
+                </button>
+                <small className="detail-muted">发送默认不会触发页面采集；如需更新上下文，请先使用独立采集入口。</small>
+              </div>
+              <label className="composer-input-shell copilot-composer-shell">
+                <span>{composerModeLabel}</span>
+                <textarea ref={composerRef} value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} rows={4} placeholder="Ask AI Web Assistant anything about the current page…" />
+                <button
+                  className="send-button"
+                  aria-label={selectedSessionIsCurrent && questionEvent?.question ? "发送补充说明" : "发送消息"}
+                  title={selectedSessionIsCurrent && questionEvent?.question ? "发送补充说明" : "发送消息"}
+                  disabled={isSendDisabled}
+                  onClick={() => startStreamingRun({ capturePageData: false })}
+                >
+                  <SendIcon />
+                </button>
+              </label>
+              <div className="conversation-composer-actions">
+                <small className="detail-muted">左侧选中的会话会成为当前续聊目标，发送消息时直接延续该会话。</small>
+                <small className="detail-muted">用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <aside className="chat-inspector-rail">
+          <details className="secondary-panel utility-panel" open>
+            <summary>
+              <span>上下文与运行状态</span>
+              <small>会话侧信息</small>
+            </summary>
+            <div className="context-grid demoted-grid inspector-grid">
+              <section className="status-card demoted-card">
+                <strong>当前页面上下文</strong>
+                <small>{activeContext?.url ?? "尚未读取当前标签页"}</small>
+                <small>{activeContext?.message ?? ""}</small>
+                <div className="context-actions">
+                  <span className={`pill ${activeContext?.matchedRule ? "pill-success" : "pill-muted"}`}>
+                    {activeContext?.matchedRule ? `命中规则：${activeContext.matchedRule.name}` : "未命中规则"}
+                  </span>
+                  <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
+                    {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
+                  </span>
+                </div>
+                {!shouldShowPermissionCallout && contextError ? <p className="error-text">{contextError}</p> : null}
+              </section>
+
+              <section className="status-card demoted-card">
+                <strong>状态</strong>
+                <span>{state.status}</span>
+                {state.stream.runId ? <small>流连接：{state.stream.status}</small> : null}
+                {state.lastUpdatedAt ? <small>更新时间：{new Date(state.lastUpdatedAt).toLocaleString()}</small> : null}
+                {state.currentRun ? <small>Run ID：{state.currentRun.runId}</small> : null}
+                {errorTitle ? <small>错误域：{errorTitle}</small> : null}
+                {errorDescription ? <p className="error-text">{errorDescription}</p> : null}
+              </section>
+
+              <section className="panel-block demoted-card legacy-summary-card">
+                <h2>采集结果摘要</h2>
+                {state.capturedFields ? (
+                  <dl className="field-list compact-list">
+                    <div className="field-item">
+                      <dt>software_version</dt>
+                      <dd>{state.capturedFields.software_version || <span className="empty-value">(empty)</span>}</dd>
+                    </div>
+                    <div className="field-item">
+                      <dt>selected_sr</dt>
+                      <dd>{state.capturedFields.selected_sr || <span className="empty-value">(empty)</span>}</dd>
+                    </div>
+                  </dl>
+                ) : (
+                  <p className="empty-state">尚未采集任何字段。</p>
+                )}
+              </section>
+            </div>
+          </details>
+
+          <details className="panel-block rules-config-panel" open={isRulesCenterExpanded}>
         <summary className="section-header" onClick={(event) => {
           event.preventDefault();
           setIsRulesCenterExpanded((current) => !current);
@@ -1006,7 +1265,9 @@ export function App() {
             </div>
           </>
         ) : null}
-      </details>
+          </details>
+        </aside>
+      </div>
     </main>
   );
 }

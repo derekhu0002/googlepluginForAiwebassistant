@@ -9,6 +9,10 @@ export function useRunHistory() {
   const [history, setHistory] = useState<RunRecord[]>([]);
   const [selectedHistoryDetail, setSelectedHistoryDetail] = useState<RunHistoryDetail | null>(null);
 
+  async function loadRunDetail(runId: string) {
+    return historyStore.getRunDetail(runId);
+  }
+
   async function refresh() {
     const [runs, currentDetail] = await Promise.all([
       historyStore.listRuns(),
@@ -53,6 +57,7 @@ export function useRunHistory() {
     saveRun,
     saveEvent,
     saveAnswer,
+    loadRunDetail,
     selectRun,
     clearSelectedRun,
     refresh,

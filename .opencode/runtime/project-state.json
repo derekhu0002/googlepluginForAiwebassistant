@@ -1,46 +1,58 @@
 {
   "version": 2,
-  "activeGoal": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。",
+  "activeGoal": "修复 sidepanel 中同一 session 继续追问时发送按钮可能保持禁用的问题；保持修改局部、非结构性，仅调整前端发送按钮可用性判定并补充回归测试。",
   "designSummary": "",
   "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-104",
-      "title": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。",
-      "status": "done",
+      "id": "TASK-105",
+      "title": "修复 sidepanel 中同一 session 继续追问时发送按钮可能保持禁用的问题；保持修改局部、非结构性，仅调整前端发送按钮可用性判定并补充回归测试。",
+      "status": "todo",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
-      "summary": "Fast-track fix completed in existing sidepanel/background modules. Restored follow-up send availability after completed responses, kept active session continuity by syncing live run state back to background storage, stabilized assistant bubble identity for incremental updates, and rendered assistant content as Markdown. Validation: npm test (102/102), npm run typecheck, npm run build in extension workspace.",
-      "details": "Fast-track fix completed in existing sidepanel/background modules. Restored follow-up send availability after completed responses, kept active session continuity by syncing live run state back to background storage, stabilized assistant bubble identity for incremental updates, and rendered assistant content as Markdown. Validation: npm test (102/102), npm run typecheck, npm run build in extension workspace.",
-      "createdAt": "2026-04-08T08:26:28.039Z",
-      "updatedAt": "2026-04-08T08:44:55.042Z",
-      "commitId": "7cf68e050f3809610207d44cb62a9f669c38a4df"
+      "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
+      "details": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks.",
+      "createdAt": "2026-04-08T14:29:24.826Z",
+      "updatedAt": "2026-04-08T14:29:24.826Z"
+    },
+    {
+      "id": "TASK-105-1",
+      "title": "修复 same-session 继续追问时发送按钮保持禁用的问题",
+      "status": "done",
+      "retryCount": 0,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "Fast-track 实现任务：调整 sidepanel 发送按钮禁用判定，并补充回归测试。",
+      "details": "Fast-track 实现任务：调整 sidepanel 发送按钮禁用判定，并补充回归测试。",
+      "commitId": "90d5be0",
+      "createdAt": "2026-04-08T14:44:42.140Z",
+      "updatedAt": "2026-04-08T14:44:42.140Z"
     }
   ],
   "issues": [],
   "validations": {
     "qa": {
       "status": "passed",
-      "summary": "Validated TASK-104 on commit 7cf68e050f3809610207d44cb62a9f669c38a4df. Reviewed sidepanel/background changes and targeted tests covering send-button re-enable after completion, waiting_for_answer not treated as composer-busy, stable assistant message identity across deltas/final result, same-bubble progressive rendering, Markdown rendering via ReactMarkdown, and SYNC_RUN_STATE persistence. Verification executed in extension workspace: npx vitest run src/sidepanel/App.test.tsx src/sidepanel/reasoningTimeline.test.ts src/background/index.test.ts (64 passed), npm test (102 passed), npm run typecheck, npm run build. No defects found. Note: TASK-104 lacks architectureElementId traceability in project graph, but automated coverage exists for touched modules.",
-      "details": "Validated TASK-104 on commit 7cf68e050f3809610207d44cb62a9f669c38a4df. Reviewed sidepanel/background changes and targeted tests covering send-button re-enable after completion, waiting_for_answer not treated as composer-busy, stable assistant message identity across deltas/final result, same-bubble progressive rendering, Markdown rendering via ReactMarkdown, and SYNC_RUN_STATE persistence. Verification executed in extension workspace: npx vitest run src/sidepanel/App.test.tsx src/sidepanel/reasoningTimeline.test.ts src/background/index.test.ts (64 passed), npm test (102 passed), npm run typecheck, npm run build. No defects found. Note: TASK-104 lacks architectureElementId traceability in project graph, but automated coverage exists for touched modules.",
-      "commitId": "7cf68e050f3809610207d44cb62a9f669c38a4df",
-      "updatedAt": "2026-04-08T11:26:20.631Z"
+      "summary": "QA passed for commit 90d5be0 (TASK-105-1). Review confirmed the change is localized to extension/src/sidepanel/App.tsx and extension/src/sidepanel/App.test.tsx. Targeted verification passed: npm run test --workspace extension -- src/sidepanel/App.test.tsx (40 tests passed) and npm run typecheck --workspace extension. Behavior covered: send remains disabled during collecting, send re-enables after completed response, and same-session follow-up remains sendable when terminal evidence exists even if outer status is still streaming. Note: TASK-105-1 lacks architectureElementId traceability in the graph.",
+      "details": "QA passed for commit 90d5be0 (TASK-105-1). Review confirmed the change is localized to extension/src/sidepanel/App.tsx and extension/src/sidepanel/App.test.tsx. Targeted verification passed: npm run test --workspace extension -- src/sidepanel/App.test.tsx (40 tests passed) and npm run typecheck --workspace extension. Behavior covered: send remains disabled during collecting, send re-enables after completed response, and same-session follow-up remains sendable when terminal evidence exists even if outer status is still streaming. Note: TASK-105-1 lacks architectureElementId traceability in the graph.",
+      "commitId": "90d5be0",
+      "updatedAt": "2026-04-08T14:50:12.351Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-08T08:26:28.039Z"
+      "updatedAt": "2026-04-08T14:29:24.826Z"
     }
   },
   "release": {
     "status": "not_started",
     "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-08T08:26:28.039Z"
+    "updatedAt": "2026-04-08T14:29:24.826Z"
   },
   "counters": {
-    "task": 104,
+    "task": 105,
     "issue": 9
   },
-  "updatedAt": "2026-04-08T11:26:20.636Z"
+  "updatedAt": "2026-04-08T14:50:12.352Z"
 }

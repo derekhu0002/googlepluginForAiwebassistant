@@ -151,6 +151,7 @@ export type RuntimeMessage =
       type: "START_RUN";
       payload: {
         prompt: string;
+        sessionId?: string;
         capturePageData?: boolean;
         retryFromRunId?: string;
         retryFromMessageId?: string;

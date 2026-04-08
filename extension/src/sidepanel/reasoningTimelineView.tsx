@@ -10,6 +10,7 @@ import {
   getTimelineCardStatus,
   getTimelineStatusCopy,
   resolveTimelinePresentationState,
+  type BuildChatStreamItemsOptions,
   type ChatStreamItemModel
 } from "./reasoningTimeline";
 
@@ -110,7 +111,7 @@ function normalizeFeedbackFailureMessage(message: string) {
 
 function MarkdownMessage({ text, className }: { text: string; className: string }) {
   return (
-    <div className={className}>
+    <div className={`${className} markdown-body`}>
       <ReactMarkdown>{text}</ReactMarkdown>
     </div>
   );
@@ -275,6 +276,7 @@ export interface ChatStreamViewProps {
   runId?: string | null;
   prompt?: string | null;
   events: import("../shared/protocol").NormalizedRunEvent[];
+  runSegments?: BuildChatStreamItemsOptions[];
   answers?: AnswerRecord[];
   live?: boolean;
   streamStatus?: StreamConnectionState["status"];
@@ -295,6 +297,7 @@ export function ReasoningTimeline({
   runId,
   prompt,
   events,
+  runSegments,
   answers = [],
   live = false,
   streamStatus,
@@ -332,6 +335,25 @@ export function ReasoningTimeline({
     updatedAt,
     pendingQuestionId
   }), [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runStatus, updatedAt]);
+  const mergedItems = useMemo(() => {
+    if (!runSegments?.length) {
+      return items;
+    }
+
+    return runSegments
+      .flatMap((segment) => buildChatStreamItems({
+        ...segment,
+        feedbackByMessageId
+      }))
+      .sort((left, right) => {
+        const timestampDelta = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+        if (timestampDelta !== 0) {
+          return timestampDelta;
+        }
+
+        return left.id.localeCompare(right.id);
+      });
+  }, [feedbackByMessageId, items, runSegments]);
 
   useEffect(() => {
     setFeedbackByMessageId({});
@@ -342,7 +364,7 @@ export function ReasoningTimeline({
   }, [live]);
 
   useEffect(() => {
-    const signature = items.map((item) => `${item.id}:${item.summary.length}:${item.processItems.length}:${item.updatedAt}`).join("|");
+    const signature = mergedItems.map((item) => `${item.id}:${item.summary.length}:${item.processItems.length}:${item.updatedAt}`).join("|");
     if (!live || !signature || signature === previousSignatureRef.current) {
       previousSignatureRef.current = signature;
       return;
@@ -362,7 +384,7 @@ export function ReasoningTimeline({
     }
 
     setUnreadCount((current) => current + 1);
-  }, [autoFollow, items, live]);
+  }, [autoFollow, live, mergedItems]);
 
   function scrollToLatest() {
     if (containerRef.current) {
@@ -446,20 +468,20 @@ export function ReasoningTimeline({
           }
         }}
       >
-        {items.length ? items.map((item, index) => (
+        {mergedItems.length ? mergedItems.map((item, index) => (
           <ChatStreamTurn
             key={item.id}
             item={item}
             status={getTimelineCardStatus({
               type: item.primaryType === "user_prompt" || item.primaryType === "user_answer" ? "result" : item.primaryType,
-              isLast: index === items.length - 1,
+              isLast: index === mergedItems.length - 1,
               live,
               streamStatus: presentationState.streamStatus,
               runStatus: presentationState.runStatus
             })}
             animate={live
               && (presentationState.streamStatus === "connecting" || presentationState.streamStatus === "streaming" || presentationState.streamStatus === "reconnecting")
-              && index === items.length - 1
+              && index === mergedItems.length - 1
               && (item.kind === "assistant_progress" || item.kind === "assistant_result")}
             live={live}
             onCopy={handleCopy}

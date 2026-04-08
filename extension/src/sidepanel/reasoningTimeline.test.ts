@@ -272,6 +272,46 @@ describe("reasoning timeline view-model", () => {
     expect(items.find((item) => item.kind === "assistant_result")?.summary).toBe("先到结果后续补充");
   });
 
+  it("does not duplicate content when assistant delta events contain cumulative snapshots", () => {
+    const events = [
+      createEvent(1, {
+        type: "thinking",
+        message: "Assessing task requirements\n\nIt looks like I need to provide answer in Chinese, but first, I have to understand what SR means in this context.",
+        data: { field: "text", message_id: "msg-1" }
+      }),
+      createEvent(2, {
+        type: "thinking",
+        message: "Assessing task requirements\n\nIt looks like I need to provide answer in Chinese, but first, I have to understand what SR means in this context. Since I'm a TARA risk analyst, I should check the workspace for any SR documents.",
+        data: { field: "text", message_id: "msg-1" }
+      })
+    ];
+
+    expect(collectAssistantResponseAggregation(events).text).toBe(
+      "Assessing task requirements\n\nIt looks like I need to provide answer in Chinese, but first, I have to understand what SR means in this context. Since I'm a TARA risk analyst, I should check the workspace for any SR documents."
+    );
+
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "请总结当前 SR 的风险与建议下一步动作。",
+      events,
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    expect(items.find((item) => item.kind === "assistant_progress")?.summary).toBe(
+      "Assessing task requirements\n\nIt looks like I need to provide answer in Chinese, but first, I have to understand what SR means in this context. Since I'm a TARA risk analyst, I should check the workspace for any SR documents."
+    );
+  });
+
+  it("preserves spaces and paragraph breaks across assistant delta chunks", () => {
+    const aggregation = collectAssistantResponseAggregation([
+      createEvent(1, { type: "thinking", message: "# Summary\n\nHello ", data: { field: "text", message_id: "msg-1" } }),
+      createEvent(2, { type: "thinking", message: "world\n\n- item 1", data: { field: "text", message_id: "msg-1" } })
+    ]);
+
+    expect(aggregation.text).toBe("# Summary\n\nHello world\n\n- item 1");
+  });
+
   it("keeps a stable assistant message id across streaming deltas and final result", () => {
     const aggregation = collectAssistantResponseAggregation([
       createEvent(1, { type: "thinking", message: "# 标题", data: { field: "text", message_id: "msg-1" } }),
@@ -318,6 +358,22 @@ describe("reasoning timeline view-model", () => {
 
     expect(liveItems.map((item) => item.kind)).toEqual(historyItems.map((item) => item.kind));
     expect(liveItems.at(-1)?.summary).toBe(historyItems.at(-1)?.summary);
+  });
+
+  it("does not render assistant chat items when a run has only process logs and no assistant text yet", () => {
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, { type: "thinking", message: "我先整理当前页面上下文，再判断风险点。" })
+      ],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    expect(items.map((item) => item.kind)).toEqual([
+      "user_prompt"
+    ]);
   });
 
   it("adds hover action metadata for assistant result items", () => {

@@ -234,7 +234,7 @@ async function buildRunRecord(options: {
 /** @ArchitectureID: ELM-APP-EXT-RUN-ORCHESTRATION */
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 /** @ArchitectureID: ELM-APP-008B */
-async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?: string; retryFromMessageId?: string; capturePageData?: boolean }) {
+async function startRunFromActiveTab(options: { prompt: string; sessionId?: string; retryFromRunId?: string; retryFromMessageId?: string; capturePageData?: boolean }) {
   const { prompt } = options;
   const activeTab = await getActiveTab();
   const rules = await getRules();
@@ -257,7 +257,8 @@ async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?:
         ...toCanonicalCapturedFields(capturedFields)
       }
     : null;
-  const runResponse = await startRun(prompt, runCapture, usernameContext, existingState.activeSessionId);
+  const targetSessionId = options.sessionId ?? existingState.activeSessionId;
+  const runResponse = await startRun(prompt, runCapture, usernameContext, targetSessionId);
 
   if (!runResponse.ok) {
     const domainError = normalizeDomainError(runResponse.error, createDomainError("ANALYSIS_ERROR", runResponse.error.message));
@@ -267,7 +268,7 @@ async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?:
 
   const { currentRun } = await buildRunRecord({
     runId: runResponse.data.runId,
-    sessionId: runResponse.data.sessionId ?? existingState.activeSessionId,
+    sessionId: runResponse.data.sessionId ?? targetSessionId,
     prompt,
     usernameContext,
     capturedFields
@@ -279,7 +280,7 @@ async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?:
     error: null,
     errorMessage: "",
     lastCapturedUrl: capturedFields ? activeTab.url ?? null : (await getState()).lastCapturedUrl,
-    activeSessionId: runResponse.data.sessionId ?? existingState.activeSessionId,
+    activeSessionId: runResponse.data.sessionId ?? targetSessionId,
     currentRun,
     usernameContext,
     runPrompt: prompt,

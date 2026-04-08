@@ -277,15 +277,6 @@ function createReasoningSummary(items: TimelineCardModel[]) {
   return `已记录 ${parts.length} 条推理过程`;
 }
 
-function createProgressSummary(items: TimelineCardModel[]) {
-  const visibleThinkingCount = items.filter((item) => item.type === "thinking" && getVisibleThinkingSummary(item)).length;
-  if (visibleThinkingCount > 0) {
-    return visibleThinkingCount === 1 ? "已记录 1 条推理过程" : `已记录 ${visibleThinkingCount} 条推理过程`;
-  }
-
-  return "正在生成回答…";
-}
-
 function createQuestionSummary(item: TimelineCardModel) {
   return item.question?.message?.trim() || item.summary || item.title || DEFAULT_EVENT_TITLES.question;
 }
@@ -350,43 +341,53 @@ function getTextOverlapLength(left: string, right: string) {
   return 0;
 }
 
-function mergeAssistantResponseDelta(current: string, delta: string) {
-  if (!delta) {
-    return current;
+function getCommonPrefixLength(left: string, right: string) {
+  const maxPrefix = Math.min(left.length, right.length);
+
+  for (let index = 0; index < maxPrefix; index += 1) {
+    if (left[index] !== right[index]) {
+      return index;
+    }
   }
 
-  if (!current) {
-    return delta;
-  }
-
-  if (current.endsWith(delta)) {
-    return current;
-  }
-
-  const overlap = getTextOverlapLength(current, delta);
-  return `${current}${delta.slice(overlap)}`;
+  return maxPrefix;
 }
 
-function mergeAssistantResponseSnapshot(current: string, snapshot: string) {
-  const next = snapshot.trim();
-  if (!next) {
+function mergeAssistantResponseDelta(current: string, delta: string) {
+  const next = delta;
+  if (!next.trim()) {
     return current;
   }
 
-  const existing = current.trim();
-  if (!existing) {
+  if (!current.trim()) {
     return next;
   }
+
+  const existing = current;
+  const existingComparable = existing.trimEnd();
+  const nextComparable = next.trimEnd();
 
   if (existing === next || existing.endsWith(next)) {
     return existing;
   }
 
-  if (next.includes(existing)) {
+  if (next.startsWith(existing)) {
     return next;
   }
 
-  if (existing.includes(next)) {
+  if (existing.startsWith(next)) {
+    return existing;
+  }
+
+  if (existingComparable === nextComparable || existingComparable.endsWith(nextComparable)) {
+    return existing;
+  }
+
+  if (nextComparable.startsWith(existingComparable)) {
+    return next;
+  }
+
+  if (existingComparable.startsWith(nextComparable)) {
     return existing;
   }
 
@@ -395,7 +396,47 @@ function mergeAssistantResponseSnapshot(current: string, snapshot: string) {
     return `${existing}${next.slice(overlap)}`;
   }
 
-  return joinUniqueParagraphs([existing, next]);
+  const commonPrefixLength = getCommonPrefixLength(existingComparable, nextComparable);
+  const shorterLength = Math.min(existingComparable.length, nextComparable.length);
+  if (shorterLength > 0 && commonPrefixLength / shorterLength >= 0.75) {
+    return existing.length >= next.length ? existing : next;
+  }
+
+  return `${existing}${next}`;
+}
+
+function mergeAssistantResponseSnapshot(current: string, snapshot: string) {
+  const next = snapshot;
+  if (!next.trim()) {
+    return current;
+  }
+
+  if (!current.trim()) {
+    return next;
+  }
+
+  const existing = current;
+  const existingComparable = existing.trimEnd();
+  const nextComparable = next.trimEnd();
+
+  if (existing === next || existing.endsWith(next)) {
+    return existing;
+  }
+
+  if (next.includes(existing) || nextComparable.includes(existingComparable)) {
+    return next;
+  }
+
+  if (existing.includes(next) || existingComparable.includes(nextComparable)) {
+    return existing;
+  }
+
+  const overlap = getTextOverlapLength(existing, next);
+  if (overlap > 0) {
+    return `${existing}${next.slice(overlap)}`;
+  }
+
+  return joinUniqueParagraphs([existingComparable, nextComparable]);
 }
 
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
@@ -633,24 +674,6 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
         : undefined
     });
     pendingProcessItems = [];
-  } else if (pendingProcessItems.length) {
-    streamItems.push({
-      id: `assistant-progress-${options.runId ?? "standalone"}-${pendingProcessItems[pendingProcessItems.length - 1]?.id ?? "tail"}`,
-      runId: options.runId ?? pendingProcessItems[0]?.runId ?? "standalone-run",
-      kind: "assistant_progress",
-      title: "Assistant",
-      summary: createProgressSummary(pendingProcessItems),
-      createdAt: pendingProcessItems[0]?.createdAt ?? options.updatedAt ?? new Date().toISOString(),
-      updatedAt: pendingProcessItems[pendingProcessItems.length - 1]?.updatedAt ?? options.updatedAt ?? new Date().toISOString(),
-      primaryType: pendingProcessItems[pendingProcessItems.length - 1]?.type ?? "thinking",
-      processItems: pendingProcessItems,
-      processSummary: createReasoningSummary(pendingProcessItems),
-      sourceQuestionPrompt: prompt,
-      supportsCopy: false,
-      supportsRetry: false,
-      supportsFeedback: false
-    });
-    pendingProcessItems = [];
   }
 
   if (!hasErrorItem && presentationState.runStatus === "error" && errorMessage) {
@@ -670,32 +693,6 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
       supportsRetry: true,
       supportsFeedback: false
     });
-  }
-
-  const lastItem = streamItems[streamItems.length - 1] ?? null;
-  if (!assistantResponse.text && !hasErrorItem && (presentationState.runStatus === "streaming" || presentationState.runStatus === "waiting_for_answer")) {
-    const alreadyHasPendingQuestion = lastItem?.kind === "assistant_question" && lastItem.pendingQuestion;
-    if (!alreadyHasPendingQuestion) {
-      const statusSummary = presentationState.runStatus === "waiting_for_answer"
-        ? "助手正在等待你的补充信息。"
-        : "正在生成回答…";
-      streamItems.push({
-        id: `synthetic-progress-${options.runId ?? "standalone"}`,
-        runId: options.runId ?? lastItem?.runId ?? "standalone-run",
-        kind: "assistant_progress",
-        title: "Assistant",
-        summary: statusSummary,
-        createdAt: lastItem?.updatedAt ?? fallbackTimestamp,
-        updatedAt: lastItem?.updatedAt ?? fallbackTimestamp,
-        primaryType: "thinking",
-        processItems: [],
-        processSummary: "",
-        sourceQuestionPrompt: prompt,
-        supportsCopy: false,
-        supportsRetry: false,
-        supportsFeedback: false
-      });
-    }
   }
 
   return streamItems;

@@ -24,27 +24,27 @@
       "designSummary": "",
       "designDecisions": [],
       "runtime": {
-        "activeGoal": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。",
+        "activeGoal": "修复 sidepanel 中同一 session 继续追问时发送按钮可能保持禁用的问题；保持修改局部、非结构性，仅调整前端发送按钮可用性判定并补充回归测试。",
         "validations": {
           "qa": {
             "status": "passed",
-            "summary": "Validated TASK-104 on commit 7cf68e050f3809610207d44cb62a9f669c38a4df. Reviewed sidepanel/background changes and targeted tests covering send-button re-enable after completion, waiting_for_answer not treated as composer-busy, stable assistant message identity across deltas/final result, same-bubble progressive rendering, Markdown rendering via ReactMarkdown, and SYNC_RUN_STATE persistence. Verification executed in extension workspace: npx vitest run src/sidepanel/App.test.tsx src/sidepanel/reasoningTimeline.test.ts src/background/index.test.ts (64 passed), npm test (102 passed), npm run typecheck, npm run build. No defects found. Note: TASK-104 lacks architectureElementId traceability in project graph, but automated coverage exists for touched modules.",
-            "details": "Validated TASK-104 on commit 7cf68e050f3809610207d44cb62a9f669c38a4df. Reviewed sidepanel/background changes and targeted tests covering send-button re-enable after completion, waiting_for_answer not treated as composer-busy, stable assistant message identity across deltas/final result, same-bubble progressive rendering, Markdown rendering via ReactMarkdown, and SYNC_RUN_STATE persistence. Verification executed in extension workspace: npx vitest run src/sidepanel/App.test.tsx src/sidepanel/reasoningTimeline.test.ts src/background/index.test.ts (64 passed), npm test (102 passed), npm run typecheck, npm run build. No defects found. Note: TASK-104 lacks architectureElementId traceability in project graph, but automated coverage exists for touched modules.",
-            "commitId": "7cf68e050f3809610207d44cb62a9f669c38a4df",
-            "updatedAt": "2026-04-08T11:26:20.631Z"
+            "summary": "QA passed for commit 90d5be0 (TASK-105-1). Review confirmed the change is localized to extension/src/sidepanel/App.tsx and extension/src/sidepanel/App.test.tsx. Targeted verification passed: npm run test --workspace extension -- src/sidepanel/App.test.tsx (40 tests passed) and npm run typecheck --workspace extension. Behavior covered: send remains disabled during collecting, send re-enables after completed response, and same-session follow-up remains sendable when terminal evidence exists even if outer status is still streaming. Note: TASK-105-1 lacks architectureElementId traceability in the graph.",
+            "details": "QA passed for commit 90d5be0 (TASK-105-1). Review confirmed the change is localized to extension/src/sidepanel/App.tsx and extension/src/sidepanel/App.test.tsx. Targeted verification passed: npm run test --workspace extension -- src/sidepanel/App.test.tsx (40 tests passed) and npm run typecheck --workspace extension. Behavior covered: send remains disabled during collecting, send re-enables after completed response, and same-session follow-up remains sendable when terminal evidence exists even if outer status is still streaming. Note: TASK-105-1 lacks architectureElementId traceability in the graph.",
+            "commitId": "90d5be0",
+            "updatedAt": "2026-04-08T14:50:12.351Z"
           },
           "audit": {
             "status": "not_run",
             "summary": "Audit not run for the current goal.",
-            "updatedAt": "2026-04-08T08:26:28.039Z"
+            "updatedAt": "2026-04-08T14:29:24.826Z"
           }
         },
         "release": {
           "status": "not_started",
           "summary": "Release not prepared for the current goal.",
-          "updatedAt": "2026-04-08T08:26:28.039Z"
+          "updatedAt": "2026-04-08T14:29:24.826Z"
         },
-        "updatedAt": "2026-04-08T08:44:55.043Z"
+        "updatedAt": "2026-04-08T14:44:42.143Z"
       }
     }
   },
@@ -852,34 +852,34 @@
         "type": "WorkPackage",
         "name": [
           {
-            "value": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。"
+            "value": "修复 sidepanel 中同一 session 继续追问时发送按钮可能保持禁用的问题；保持修改局部、非结构性，仅调整前端发送按钮可用性判定并补充回归测试。"
           }
         ],
         "documentation": [
           {
-            "value": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。"
+            "value": "修复 sidepanel 中同一 session 继续追问时发送按钮可能保持禁用的问题；保持修改局部、非结构性，仅调整前端发送按钮可用性判定并补充回归测试。"
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。",
+            "rawRequirement": "修复 sidepanel 中同一 session 继续追问时发送按钮可能保持禁用的问题；保持修改局部、非结构性，仅调整前端发送按钮可用性判定并补充回归测试。",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-104",
+        "identifier": "TASK-105",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。"
+            "value": "修复 sidepanel 中同一 session 继续追问时发送按钮可能保持禁用的问题；保持修改局部、非结构性，仅调整前端发送按钮可用性判定并补充回归测试。"
           }
         ],
         "documentation": [
           {
-            "value": "Fast-track fix completed in existing sidepanel/background modules. Restored follow-up send availability after completed responses, kept active session continuity by syncing live run state back to background storage, stabilized assistant bubble identity for incremental updates, and rendered assistant content as Markdown. Validation: npm test (102/102), npm run typecheck, npm run build in extension workspace."
+            "value": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks."
           }
         ],
         "extensions": {
@@ -887,15 +887,45 @@
             "managedBy": "opencode-runtime",
             "kind": "Task",
             "taskKind": "planning",
-            "status": "Done",
+            "status": "ToDo",
             "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Fast-track fix completed in existing sidepanel/background modules. Restored follow-up send availability after completed responses, kept active session continuity by syncing live run state back to background storage, stabilized assistant bubble identity for incremental updates, and rendered assistant content as Markdown. Validation: npm test (102/102), npm run typecheck, npm run build in extension workspace.",
-            "commitId": "7cf68e050f3809610207d44cb62a9f669c38a4df",
+            "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
+            "commitId": "",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-08T08:44:55.042Z"
+            "updatedAt": "2026-04-08T14:29:24.826Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-105-1",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "修复 same-session 继续追问时发送按钮保持禁用的问题"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Fast-track 实现任务：调整 sidepanel 发送按钮禁用判定，并补充回归测试。"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 0,
+            "assignee": "Implementation",
+            "summary": "Fast-track 实现任务：调整 sidepanel 发送按钮禁用判定，并补充回归测试。",
+            "commitId": "90d5be0",
+            "softwareUnitId": "",
+            "softwareUnitTitle": "",
+            "architectureElementId": "",
+            "updatedAt": "2026-04-08T14:44:42.140Z"
           }
         }
       }
@@ -1552,15 +1582,37 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-104",
+        "identifier": "REL-PROJECT-TASK-105",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-104"
+            "value": "Project aggregates TASK-105"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-104",
+        "target": "TASK-105",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-105-1",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-105-1"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-105-1",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."

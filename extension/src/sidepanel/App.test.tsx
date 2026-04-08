@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialAssistantState } from "../shared/state";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
-import type { NormalizedRunEvent, RunRecord } from "../shared/protocol";
+import type { NormalizedRunEvent, RunHistoryDetail, RunRecord } from "../shared/protocol";
 
 const {
   mockCreateRunEventStream,
@@ -13,26 +13,35 @@ const {
   mockSaveRun,
   mockSaveEvent,
   mockSaveAnswer,
+  mockLoadRunDetail,
   mockSelectRun,
   mockClearSelectedRun,
   mockRunHistoryState,
   mockStreamClose
-} = vi.hoisted(() => ({
-  mockCreateRunEventStream: vi.fn(() => ({ close: mockStreamClose })),
-  mockSubmitQuestionAnswer: vi.fn(),
-  mockSubmitMessageFeedback: vi.fn(),
-  mockRefreshHistory: vi.fn(async () => undefined),
-  mockSaveRun: vi.fn(async () => undefined),
-  mockSaveEvent: vi.fn(async () => undefined),
-  mockSaveAnswer: vi.fn(async () => undefined),
-  mockSelectRun: vi.fn(async () => undefined),
-  mockClearSelectedRun: vi.fn(async () => undefined),
-  mockStreamClose: vi.fn(),
-  mockRunHistoryState: {
+} = vi.hoisted(() => {
+  const mockRunHistoryState = {
     history: [] as RunRecord[],
-    selectedHistoryDetail: null as AssistantState["selectedHistoryDetail"]
-  }
-}));
+    selectedHistoryDetail: null as AssistantState["selectedHistoryDetail"],
+    runDetails: {} as Record<string, RunHistoryDetail | null>
+  };
+
+  const mockStreamClose = vi.fn();
+
+  return {
+    mockCreateRunEventStream: vi.fn(() => ({ close: mockStreamClose })),
+    mockSubmitQuestionAnswer: vi.fn(),
+    mockSubmitMessageFeedback: vi.fn(),
+    mockRefreshHistory: vi.fn(async () => undefined),
+    mockSaveRun: vi.fn(async () => undefined),
+    mockSaveEvent: vi.fn(async () => undefined),
+    mockSaveAnswer: vi.fn(async () => undefined),
+    mockLoadRunDetail: vi.fn(async (runId: string) => mockRunHistoryState.runDetails[runId] ?? null),
+    mockSelectRun: vi.fn(async () => undefined),
+    mockClearSelectedRun: vi.fn(async () => undefined),
+    mockStreamClose,
+    mockRunHistoryState
+  };
+});
 
 const mockExtensionConfig = vi.hoisted(() => ({
   extensionEnv: "production",
@@ -62,6 +71,7 @@ vi.mock("./useRunHistory", () => ({
     saveRun: mockSaveRun,
     saveEvent: mockSaveEvent,
     saveAnswer: mockSaveAnswer,
+    loadRunDetail: mockLoadRunDetail,
     selectRun: mockSelectRun,
     clearSelectedRun: mockClearSelectedRun,
     refresh: mockRefreshHistory,
@@ -226,6 +236,7 @@ describe("side panel host permission request flow", () => {
     });
     mockRunHistoryState.history = [];
     mockRunHistoryState.selectedHistoryDetail = null;
+    mockRunHistoryState.runDetails = {};
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     container = document.createElement("div");
     document.body.innerHTML = "";
@@ -430,6 +441,56 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("Run：run-2");
+  });
+
+  it("keeps earlier same-session turns visible after a follow-up run starts", async () => {
+    const previousRun = {
+      ...createCurrentRun(),
+      runId: "run-previous",
+      prompt: "前一轮问题",
+      status: "done" as const,
+      updatedAt: "2026-04-02T00:00:02.000Z",
+      finalOutput: "前一轮回答"
+    };
+
+    mockRunHistoryState.history = [previousRun];
+    mockRunHistoryState.runDetails = {
+      "run-previous": {
+        run: previousRun,
+        events: [createRunEvent(1, { runId: "run-previous", type: "result", message: "前一轮回答" })],
+        answers: []
+      }
+    };
+
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        currentRun: {
+          ...createCurrentRun(),
+          runId: "run-current",
+          prompt: "继续追问当前问题",
+          status: "streaming",
+          updatedAt: "2026-04-02T00:00:04.000Z",
+          finalOutput: ""
+        },
+        runEvents: [createRunEvent(1, { runId: "run-current", type: "thinking", message: "正在补充分析" })],
+        stream: {
+          runId: "run-current",
+          status: "streaming",
+          pendingQuestionId: null
+        }
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(mockLoadRunDetail).toHaveBeenCalledWith("run-previous");
+    expect(container.textContent).toContain("前一轮问题");
+    expect(container.textContent).toContain("前一轮回答");
+    expect(container.textContent).toContain("继续追问当前问题");
   });
 
   it("keeps independent page capture entry working", async () => {
@@ -954,7 +1015,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("正在生成回答");
+    expect(container.textContent).toContain("助手正在继续生成回答，完成后会显示最终结果。");
     expect(container.textContent).not.toContain("正在整理上下文并准备分析");
     expect(container.textContent).not.toContain("prepare_context");
     expect(container.textContent).not.toContain("secret");
@@ -1007,7 +1068,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("正在生成回答");
+    expect(container.textContent).toContain("助手正在继续生成回答，完成后会显示最终结果。");
     expect(container.textContent).not.toContain("读取页面上下文");
     expect(container.textContent).not.toContain("整理可用字段");
     expect(container.textContent).not.toContain("展开推理过程");
@@ -1149,12 +1210,12 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("对话");
     expect(container.textContent).toContain("发送消息");
-    expect(container.textContent).toContain("底部输入区始终可用");
-    expect(container.textContent).toContain("历史详情沿用同一对话流呈现。");
+    expect(container.textContent).toContain("左侧选中的会话会成为当前续聊目标");
+    expect(container.textContent).toContain("个会话");
     expect(container.textContent).toContain("持续输出中");
   });
 
-  it("renders light IDE header toolbar and composer placeholder chips", async () => {
+  it("renders Copilot-like header toolbar, new session action, and composer placeholder chips", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: initialAssistantState
@@ -1165,8 +1226,10 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("Light IDE");
+    expect(container.textContent).toContain("Copilot Session");
     expect(container.textContent).toContain("Live / History");
+    expect(container.textContent).toContain("新会话");
+    expect(container.textContent).toContain("点击左侧会话后可在主窗口继续对话");
     expect(container.textContent).toContain("附件");
     expect(container.textContent).toContain("页面上下文");
     expect(container.textContent).toContain("选中内容");
@@ -1544,6 +1607,7 @@ describe("side panel host permission request flow", () => {
     await flushAllTimers();
 
     expect(container.querySelectorAll(".turn-assistant")).toHaveLength(1);
+    expect(container.querySelector(".turn-assistant .conversation-message.markdown-body")).toBeTruthy();
     expect(container.querySelectorAll(".turn-assistant h1")).toHaveLength(1);
     expect(container.textContent).toContain("标题");
   });
