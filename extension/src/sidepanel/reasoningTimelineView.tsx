@@ -6,6 +6,7 @@ import {
   buildChatStreamItems,
   getTimelineCardStatus,
   getTimelineStatusCopy,
+  resolveTimelinePresentationState,
   type ChatStreamItemModel
 } from "./reasoningTimeline";
 
@@ -183,6 +184,7 @@ function ChatStreamTurn({
   const roleLabel = isUser ? "You" : item.kind === "assistant_error" ? "Assistant failed" : "Assistant";
   const avatarLabel = item.kind === "assistant_question" ? "?" : item.kind === "assistant_error" ? "!" : isUser ? "你" : "AI";
   const messageText = displayedSummary || (item.kind === "assistant_progress" && live ? "正在生成回答…" : "");
+  const processPreview = !isUser && item.processSummary && item.kind !== "assistant_progress" ? item.processSummary : "";
   const messageClassName = [
     "conversation-message",
     item.kind === "assistant_progress" ? "conversation-message-muted" : ""
@@ -202,6 +204,7 @@ function ChatStreamTurn({
         </div>
 
         {messageText ? <p className={messageClassName}>{messageText}</p> : null}
+        {processPreview ? <p className="conversation-process-summary">{processPreview}</p> : null}
 
         {item.kind === "assistant_question" && item.question && item.pendingQuestion && onQuestionSubmit ? (
           <InlineQuestionComposer question={item.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
@@ -250,6 +253,13 @@ export function ReasoningTimeline({
   const [autoFollow, setAutoFollow] = useState(live);
   const [unreadCount, setUnreadCount] = useState(0);
   const previousSignatureRef = useRef<string>("");
+  const presentationState = useMemo(() => resolveTimelinePresentationState({
+    events,
+    runStatus,
+    streamStatus,
+    finalOutput,
+    errorMessage
+  }), [errorMessage, events, finalOutput, runStatus, streamStatus]);
   const items = useMemo(() => buildChatStreamItems({
     runId,
     prompt,
@@ -314,18 +324,18 @@ export function ReasoningTimeline({
           <ChatStreamTurn
             key={`${item.id}:${item.updatedAt}`}
             item={item}
-            status={getTimelineCardStatus({
-              type: item.primaryType === "user_prompt" || item.primaryType === "user_answer" ? "result" : item.primaryType,
-              isLast: index === items.length - 1,
-              live,
-              streamStatus,
-              runStatus
-            })}
-            animate={live
-              && (streamStatus === "connecting" || streamStatus === "streaming" || streamStatus === "reconnecting")
-              && index === items.length - 1
-              && (item.kind === "assistant_progress" || item.kind === "assistant_result")}
-            live={live}
+              status={getTimelineCardStatus({
+                type: item.primaryType === "user_prompt" || item.primaryType === "user_answer" ? "result" : item.primaryType,
+                isLast: index === items.length - 1,
+                live,
+                streamStatus: presentationState.streamStatus,
+                runStatus: presentationState.runStatus
+              })}
+              animate={live
+                && (presentationState.streamStatus === "connecting" || presentationState.streamStatus === "streaming" || presentationState.streamStatus === "reconnecting")
+                && index === items.length - 1
+                && (item.kind === "assistant_progress" || item.kind === "assistant_result")}
+              live={live}
             onQuestionSubmit={item.kind === "assistant_question" ? onQuestionSubmit : undefined}
             questionSubmitDisabled={questionSubmitDisabled}
           />
@@ -334,7 +344,18 @@ export function ReasoningTimeline({
 
       {live ? (
         <div className="timeline-toolbar chat-stream-toolbar">
-          <small className="detail-muted">{getTimelineStatusCopy(runStatus)}</small>
+          <div className="chat-stream-statusline">
+            <small className="detail-muted">{getTimelineStatusCopy({ events, runStatus, finalOutput, errorMessage })}</small>
+            <small className="detail-muted">
+              {presentationState.runStatus === "waiting_for_answer"
+                ? "等待补充信息"
+                : presentationState.runStatus === "done"
+                  ? "已拿到最终结果"
+                  : presentationState.runStatus === "error"
+                    ? "已拿到失败结果"
+                    : "持续输出中"}
+            </small>
+          </div>
           {!autoFollow || unreadCount ? (
             <button className="secondary unread-indicator" type="button" onClick={scrollToLatest}>
               {unreadCount ? `有 ${unreadCount} 条新进展，跳转到底部` : "已暂停自动跟随，返回最新"}

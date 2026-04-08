@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedRunEvent } from "../shared/protocol";
-import { buildConversationTurns, buildReasoningTimelineItems, getTimelineCardStatus } from "./reasoningTimeline";
+import {
+  buildChatStreamItems,
+  buildConversationTurns,
+  buildReasoningTimelineItems,
+  getTimelineCardStatus,
+  getTimelineStatusCopy,
+  resolveTimelinePresentationState
+} from "./reasoningTimeline";
 
 function createEvent(sequence: number, overrides: Partial<NormalizedRunEvent> = {}): NormalizedRunEvent {
   return {
@@ -158,5 +165,94 @@ describe("reasoning timeline view-model", () => {
       streamStatus: "streaming",
       runStatus: "streaming"
     })).toBe("complete");
+  });
+
+  it("does not expose done copy without terminal evidence", () => {
+    const events = [createEvent(1, { type: "thinking", message: "读取页面上下文" })];
+
+    expect(resolveTimelinePresentationState({
+      events,
+      runStatus: "done",
+      streamStatus: "done",
+      finalOutput: ""
+    })).toMatchObject({
+      runStatus: "streaming",
+      streamStatus: "streaming",
+      hasTerminalEvidence: false
+    });
+
+    expect(getTimelineStatusCopy({
+      events,
+      runStatus: "done",
+      finalOutput: ""
+    })).toBe("助手正在继续生成回答，完成后会显示最终结果。");
+  });
+
+  it("maps question to answer to streaming to result in one chat stream", () => {
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "请继续",
+      status: "streaming",
+      pendingQuestionId: null,
+      answers: [{
+        id: "answer-1",
+        runId: "run-1",
+        questionId: "q-1",
+        answer: "继续执行",
+        choiceId: "resume",
+        submittedAt: "2026-04-02T00:00:02.500Z"
+      }],
+      events: [
+        createEvent(1, {
+          type: "question",
+          message: "请选择下一步",
+          question: {
+            questionId: "q-1",
+            title: "需要确认",
+            message: "请选择下一步",
+            options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+            allowFreeText: false
+          }
+        }),
+        createEvent(2, { type: "thinking", message: "我会根据你的选择继续处理。" }),
+        createEvent(3, { type: "result", message: "最终完成" })
+      ],
+      finalOutput: "最终完成",
+      updatedAt: "2026-04-02T00:00:03.000Z"
+    });
+
+    expect(items.map((item) => item.kind)).toEqual([
+      "user_prompt",
+      "assistant_question",
+      "user_answer",
+      "assistant_result"
+    ]);
+    expect(items[3]?.summary).toBe("最终完成");
+    expect(items[3]?.processSummary).toContain("已记录 1 条推理过程");
+  });
+
+  it("keeps live and history mapping semantics aligned", () => {
+    const events = [
+      createEvent(1, { type: "thinking", message: "读取页面上下文" }),
+      createEvent(2, { type: "result", message: "一致结果" })
+    ];
+
+    const liveItems = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "同一问题",
+      events,
+      status: "done",
+      finalOutput: "一致结果"
+    });
+    const historyItems = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "同一问题",
+      events,
+      status: "done",
+      finalOutput: "一致结果"
+    });
+
+    expect(liveItems.map((item) => item.kind)).toEqual(historyItems.map((item) => item.kind));
+    expect(liveItems.at(-1)?.summary).toBe(historyItems.at(-1)?.summary);
   });
 });

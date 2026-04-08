@@ -7,6 +7,7 @@ import { initialAssistantState } from "../shared/state";
 import type { NormalizedRunEvent, RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
+import { resolveTimelinePresentationState } from "./reasoningTimeline";
 import { ReasoningTimeline } from "./reasoningTimelineView";
 import { useRunHistory } from "./useRunHistory";
 
@@ -495,6 +496,26 @@ export function App() {
   const errorDescription = state.error ? toDisplayMessage(state.error) : state.errorMessage || streamError;
   const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent);
   const livePrompt = state.currentRun?.prompt ?? prompt;
+  const livePresentationState = useMemo(() => resolveTimelinePresentationState({
+    events: state.runEvents,
+    runStatus: state.currentRun?.status,
+    streamStatus: state.stream.status,
+    finalOutput: state.currentRun?.finalOutput,
+    errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError
+  }), [state.currentRun?.errorMessage, state.currentRun?.finalOutput, state.currentRun?.status, state.runEvents, state.stream.status, state.errorMessage, streamError]);
+  const shellStatusLabel = questionEvent?.question
+    ? "等待补充信息"
+    : livePresentationState.runStatus === "done"
+      ? "已完成"
+      : livePresentationState.runStatus === "error"
+        ? "已失败"
+        : livePresentationState.streamStatus === "connecting"
+          ? "建立连接中"
+          : livePresentationState.streamStatus === "reconnecting"
+            ? "正在重连"
+            : hasLiveConversation
+              ? "持续输出中"
+              : "待开始";
 
   return (
     <main className="app-shell chat-app-shell">
@@ -512,7 +533,10 @@ export function App() {
             <h2>对话</h2>
             <small>用户提问、问题确认与最终回答统一展示</small>
           </div>
-          {(state.stream.runId || state.currentRun?.runId) ? <small className="detail-muted">Run：{state.currentRun?.runId ?? state.stream.runId}</small> : null}
+          <div className="chat-primary-meta">
+            <small className="conversation-live-chip">{shellStatusLabel}</small>
+            {(state.stream.runId || state.currentRun?.runId) ? <small className="detail-muted">Run：{state.currentRun?.runId ?? state.stream.runId}</small> : null}
+          </div>
         </div>
 
         <div className="conversation-mainline chat-primary-mainline">
@@ -523,8 +547,8 @@ export function App() {
               events={state.runEvents}
               answers={state.answers}
               live
-              streamStatus={state.stream.status}
-              runStatus={state.currentRun?.status}
+              streamStatus={livePresentationState.streamStatus}
+              runStatus={livePresentationState.runStatus}
               finalOutput={state.currentRun?.finalOutput}
               errorMessage={state.currentRun?.errorMessage ?? state.errorMessage ?? streamError}
               updatedAt={state.currentRun?.updatedAt ?? state.currentRun?.startedAt}
@@ -544,8 +568,8 @@ export function App() {
             <textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} rows={4} placeholder="输入你的问题，或继续追问…" />
           </label>
           <div className="conversation-composer-actions">
-            <button disabled={isBusy || !prompt.trim()} onClick={() => startStreamingRun()}>{isBusy ? "处理中..." : "采集并开始 SSE Run"}</button>
-            <small className="detail-muted">内联选项回答与自由输入提问可并行保留。</small>
+            <button disabled={isBusy || !prompt.trim()} onClick={() => startStreamingRun()}>{isBusy ? "处理中..." : questionEvent?.question ? "发送补充说明" : "采集并开始 SSE Run"}</button>
+            <small className="detail-muted">底部输入区始终可用；内联选项回答与自由输入追问共享同一条会话主线。</small>
           </div>
         </div>
       </section>

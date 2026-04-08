@@ -572,6 +572,51 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).not.toContain("读取页面上下文");
   });
 
+  it("does not show completion copy when background sends done without terminal evidence", async () => {
+    const { emitRuntimeMessage } = setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        runEvents: [createRunEvent(1, { type: "thinking", message: "读取页面上下文" })],
+        currentRun: {
+          ...createCurrentRun(),
+          status: "streaming",
+          updatedAt: "2026-04-02T00:00:01.000Z"
+        }
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    await act(async () => {
+      emitRuntimeMessage({
+        type: "STATE_UPDATED",
+        payload: createAssistantState({
+          runEvents: [],
+          status: "done",
+          currentRun: {
+            ...createCurrentRun(),
+            status: "done",
+            updatedAt: "2026-04-02T00:00:02.000Z",
+            finalOutput: ""
+          },
+          stream: {
+            runId: "run-1",
+            status: "done",
+            pendingQuestionId: null
+          }
+        })
+      });
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("助手正在继续生成回答，完成后会显示最终结果。");
+    expect(container.textContent).not.toContain("助手已完成本轮回答。");
+    expect(container.textContent).toContain("持续输出中");
+  });
+
   it("does not accept same-run done status without terminal evidence", () => {
     const current = createAssistantState({
       runEvents: [createRunEvent(1)],
@@ -863,6 +908,43 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("已完成");
     expect(container.textContent).toContain("请选择处理方式");
+  });
+
+  it("renders chat-first shell cues in both live and history sections", async () => {
+    mockRunHistoryState.history = [{
+      ...createCurrentRun(),
+      runId: "run-history-1",
+      status: "done",
+      updatedAt: "2026-04-02T00:00:03.000Z",
+      finalOutput: "历史答案"
+    }];
+    mockRunHistoryState.selectedHistoryDetail = {
+      run: mockRunHistoryState.history[0],
+      events: [createRunEvent(1, { runId: "run-history-1", type: "result", message: "历史答案" })],
+      answers: []
+    };
+
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        currentRun: {
+          ...createCurrentRun(),
+          status: "streaming"
+        },
+        runEvents: [createRunEvent(1, { type: "thinking", message: "读取页面上下文" })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("对话");
+    expect(container.textContent).toContain("发送消息");
+    expect(container.textContent).toContain("底部输入区始终可用");
+    expect(container.textContent).toContain("历史详情沿用同一对话流呈现。");
+    expect(container.textContent).toContain("持续输出中");
   });
 
   it("clears the waiting question state immediately after answer submission", async () => {

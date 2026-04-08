@@ -98,10 +98,31 @@ textarea {
   min-height: min(78vh, 980px);
   padding: 0;
   overflow: hidden;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
 }
 
 .chat-primary-header {
   padding: 18px 18px 0;
+}
+
+.chat-primary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.conversation-live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .event-card p,
@@ -340,14 +361,14 @@ textarea {
 .chat-primary-mainline {
   min-height: 0;
   flex: 1;
-  padding: 0 18px 18px;
+  padding: 8px 18px 12px;
 }
 
 .chat-stream-feed {
   flex: 1;
   max-height: none;
   min-height: 320px;
-  padding: 10px 4px 10px 0;
+  padding: 18px 8px 14px 0;
 }
 
 .chat-empty-state {
@@ -361,6 +382,7 @@ textarea {
   grid-template-columns: 40px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+  margin-bottom: 6px;
 }
 
 .turn-user {
@@ -399,7 +421,7 @@ textarea {
   color: #1d4ed8;
   font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
 }
 
 .turn-user .conversation-avatar {
@@ -419,15 +441,22 @@ textarea {
 
 .conversation-bubble {
   border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 18px;
-  padding: 15px;
-  background: #ffffff;
+  border-radius: 20px;
+  padding: 16px 16px 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
   min-width: 0;
   color: #0f172a;
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.06);
 }
 
 .user-bubble {
-  max-width: 92%;
+  max-width: min(92%, 720px);
+}
+
+.turn-assistant .conversation-bubble,
+.turn-question .conversation-bubble,
+.turn-error .conversation-bubble {
+  max-width: min(96%, 760px);
 }
 
 .conversation-turn-heading {
@@ -437,6 +466,8 @@ textarea {
 .conversation-process-summary {
   color: #475569;
   font-size: 13px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.24);
 }
 
 .conversation-message {
@@ -553,7 +584,16 @@ textarea {
 
 .chat-stream-toolbar {
   margin: 0;
-  padding: 10px 18px 18px;
+  padding: 8px 18px 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.chat-stream-statusline {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 12px;
 }
 
 .status-chip {
@@ -588,17 +628,17 @@ textarea {
 
 .conversation-turn.is-active .conversation-bubble,
 .event-card.is-active {
-  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.42);
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.42), 0 20px 40px rgba(37, 99, 235, 0.08);
 }
 
 .conversation-turn.is-waiting .conversation-bubble,
 .event-card.is-waiting {
-  background: rgba(120, 53, 15, 0.32);
+  background: linear-gradient(180deg, rgba(255, 251, 235, 0.98) 0%, rgba(254, 243, 199, 0.72) 100%);
 }
 
 .conversation-turn.is-attention .conversation-bubble,
 .event-card.is-attention {
-  background: rgba(127, 29, 29, 0.32);
+  background: linear-gradient(180deg, rgba(254, 242, 242, 0.98) 0%, rgba(254, 226, 226, 0.76) 100%);
 }
 
 .event-card pre {
@@ -701,6 +741,8 @@ textarea {
 
 .secondary-panel {
   padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border-style: dashed;
 }
 
 .secondary-panel summary {
@@ -739,7 +781,7 @@ textarea {
 
 .utility-panel,
 .history-secondary-panel {
-  opacity: 0.98;
+  opacity: 0.94;
 }
 
 .legacy-summary-card {
@@ -753,13 +795,17 @@ textarea {
 .docked-composer {
   position: sticky;
   bottom: 0;
-  padding: 14px 18px 18px;
+  padding: 16px 18px 18px;
   border-top: 1px solid rgba(148, 163, 184, 0.16);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.88) 0%, rgba(255, 255, 255, 0.98) 24%);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.52) 0%, rgba(255, 255, 255, 0.98) 18%);
+  backdrop-filter: blur(12px);
 }
 
 .docked-composer textarea {
   min-height: 96px;
+  border-radius: 16px;
+  padding: 12px 14px;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 .sr-only {

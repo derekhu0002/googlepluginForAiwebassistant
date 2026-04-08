@@ -278,6 +278,64 @@ export interface BuildChatStreamItemsOptions {
   pendingQuestionId?: string | null;
 }
 
+type TimelineRunStatus = RunRecord["status"];
+type TimelineStreamStatus = "idle" | "connecting" | "streaming" | "reconnecting" | "waiting_for_answer" | "done" | "error";
+
+function trimTerminalText(value?: string | null) {
+  return value?.trim() || "";
+}
+
+export function hasTerminalResultEvidence(options: {
+  events: NormalizedRunEvent[];
+  finalOutput?: string | null;
+}) {
+  return options.events.some((event) => event.type === "result") || Boolean(trimTerminalText(options.finalOutput));
+}
+
+export function hasTerminalErrorEvidence(options: {
+  events: NormalizedRunEvent[];
+  errorMessage?: string | null;
+}) {
+  return options.events.some((event) => event.type === "error") || Boolean(trimTerminalText(options.errorMessage));
+}
+
+function resolveTerminalStatus<TStatus extends TimelineRunStatus | TimelineStreamStatus | undefined>(
+  status: TStatus,
+  options: {
+    hasResultEvidence: boolean;
+    hasErrorEvidence: boolean;
+  }
+): TStatus | "streaming" {
+  if (status === "done") {
+    return options.hasResultEvidence ? status : "streaming";
+  }
+
+  if (status === "error") {
+    return options.hasErrorEvidence ? status : "streaming";
+  }
+
+  return status;
+}
+
+export function resolveTimelinePresentationState(options: {
+  events: NormalizedRunEvent[];
+  runStatus?: TimelineRunStatus;
+  streamStatus?: TimelineStreamStatus;
+  finalOutput?: string | null;
+  errorMessage?: string | null;
+}) {
+  const hasResultEvidence = hasTerminalResultEvidence(options);
+  const hasErrorEvidence = hasTerminalErrorEvidence(options);
+
+  return {
+    hasResultEvidence,
+    hasErrorEvidence,
+    hasTerminalEvidence: hasResultEvidence || hasErrorEvidence,
+    runStatus: resolveTerminalStatus(options.runStatus, { hasResultEvidence, hasErrorEvidence }),
+    streamStatus: resolveTerminalStatus(options.streamStatus, { hasResultEvidence, hasErrorEvidence })
+  };
+}
+
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildChatStreamItems(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
   const streamItems: ChatStreamItemModel[] = [];
@@ -287,6 +345,12 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
   const finalOutput = options.finalOutput?.trim() || "";
   const errorMessage = options.errorMessage?.trim() || "";
   const fallbackTimestamp = options.updatedAt ?? reasoningItems[reasoningItems.length - 1]?.updatedAt ?? "1970-01-01T00:00:00.000Z";
+  const presentationState = resolveTimelinePresentationState({
+    events: options.events,
+    runStatus: options.status,
+    finalOutput,
+    errorMessage
+  });
   let hasResultItem = false;
   let hasErrorItem = false;
   let pendingProcessItems: TimelineCardModel[] = [];
@@ -418,7 +482,7 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
     });
   }
 
-  if (!hasErrorItem && options.status === "error" && errorMessage) {
+  if (!hasErrorItem && presentationState.runStatus === "error" && errorMessage) {
     streamItems.push({
       id: `synthetic-error-${options.runId ?? "standalone"}`,
       runId: options.runId ?? "standalone-run",
@@ -434,10 +498,10 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
   }
 
   const lastItem = streamItems[streamItems.length - 1] ?? null;
-  if (!hasResultItem && !hasErrorItem && (options.status === "streaming" || options.status === "waiting_for_answer")) {
+  if (!hasResultItem && !hasErrorItem && (presentationState.runStatus === "streaming" || presentationState.runStatus === "waiting_for_answer")) {
     const alreadyHasPendingQuestion = lastItem?.kind === "assistant_question" && lastItem.pendingQuestion;
     if (!alreadyHasPendingQuestion) {
-      const statusSummary = options.status === "waiting_for_answer"
+      const statusSummary = presentationState.runStatus === "waiting_for_answer"
         ? "助手正在等待你的补充信息。"
         : "正在生成回答…";
       streamItems.push({
@@ -609,8 +673,8 @@ export function getTimelineCardStatus(options: {
   type: NormalizedEventType;
   isLast: boolean;
   live: boolean;
-  streamStatus?: "idle" | "connecting" | "streaming" | "reconnecting" | "waiting_for_answer" | "done" | "error";
-  runStatus?: "streaming" | "waiting_for_answer" | "done" | "error";
+   streamStatus?: TimelineStreamStatus;
+   runStatus?: TimelineRunStatus;
 }) {
   const { type, isLast, live, streamStatus, runStatus } = options;
   const isWaitingForAnswer = streamStatus === "waiting_for_answer" || runStatus === "waiting_for_answer";
@@ -634,7 +698,14 @@ export function getTimelineCardStatus(options: {
   return "complete";
 }
 
-export function getTimelineStatusCopy(runStatus?: "streaming" | "waiting_for_answer" | "done" | "error") {
+export function getTimelineStatusCopy(options: {
+  events: NormalizedRunEvent[];
+  runStatus?: TimelineRunStatus;
+  finalOutput?: string | null;
+  errorMessage?: string | null;
+}) {
+  const { runStatus } = resolveTimelinePresentationState(options);
+
   switch (runStatus) {
     case "done":
       return "助手已完成本轮回答。";
