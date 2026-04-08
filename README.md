@@ -81,6 +81,7 @@ npm run dev --workspace backend
 ```bash
 . .venv/bin/activate
 uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8000 --reload
+uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8000 --reload --log-level debug
 ```
 
 健康检查：`http://127.0.0.1:8000/health`

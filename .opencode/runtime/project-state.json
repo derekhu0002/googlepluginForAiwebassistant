@@ -1,21 +1,20 @@
 {
   "version": 2,
-  "activeGoal": "排查并修复：最新修复后，测试页面中 sidepanel 仍未显示“授权当前域名”入口，且进入测试页面后右侧没有插件图标/无法按预期打开扩展侧边栏。需要基于当前仓库实现确认是真实功能缺陷、配置/加载步骤问题还是文档与实际不符，并在必要时做最小",
+  "activeGoal": "实现两项产品需求：1) 规则配置中心默认折叠，仅用户点击时展开；2) 保持当前活跃会话以支持用户在同一会话内继续追加提问，而不是每次新建会话。",
   "designSummary": "",
   "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-096",
-      "title": "排查并修复：最新修复后，测试页面中 sidepanel 仍未显示“授权当前域名”入口，且进入测试页面后右侧没有插件图标/无法按预期打开扩展侧边栏。需要基于当前仓库实现确认是真实功能缺陷、配置/加载步骤问题还是文档与实际不符，并在必要时做最小",
-      "status": "done",
+      "id": "TASK-100",
+      "title": "实现两项产品需求：1) 规则配置中心默认折叠，仅用户点击时展开；2) 保持当前活跃会话以支持用户在同一会话内继续追加提问，而不是每次新建会话。",
+      "status": "todo",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
-      "summary": "Completed fast-track issue fix for extension permission-entry visibility and outdated extension build guidance. Added fallback authorization guidance in sidepanel even when current build cannot request permission for the domain, updated README with env/build/reload checks for 127.0.0.1 manifest permissions and missing AI button troubleshooting, and added extension test coverage.",
-      "details": "Completed fast-track issue fix for extension permission-entry visibility and outdated extension build guidance. Added fallback authorization guidance in sidepanel even when current build cannot request permission for the domain, updated README with env/build/reload checks for 127.0.0.1 manifest permissions and missing AI button troubleshooting, and added extension test coverage.",
-      "createdAt": "2026-04-08T05:05:32.860Z",
-      "updatedAt": "2026-04-08T05:11:46.695Z",
-      "commitId": "2c2814c21f3a731a0e56a9701886f37fdf8b06e0"
+      "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
+      "details": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks.",
+      "createdAt": "2026-04-08T07:33:57.130Z",
+      "updatedAt": "2026-04-08T07:33:57.130Z"
     }
   ],
   "issues": [],
@@ -23,22 +22,22 @@
     "qa": {
       "status": "not_run",
       "summary": "QA not run for the current goal.",
-      "updatedAt": "2026-04-08T05:05:32.860Z"
+      "updatedAt": "2026-04-08T07:33:57.130Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-08T05:05:32.860Z"
+      "updatedAt": "2026-04-08T07:33:57.130Z"
     }
   },
   "release": {
     "status": "not_started",
     "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-08T05:05:32.860Z"
+    "updatedAt": "2026-04-08T07:33:57.130Z"
   },
   "counters": {
-    "task": 96,
+    "task": 100,
     "issue": 9
   },
-  "updatedAt": "2026-04-08T05:11:46.696Z"
+  "updatedAt": "2026-04-08T07:33:57.130Z"
 }
