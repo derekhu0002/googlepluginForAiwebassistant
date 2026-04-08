@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 
 NormalizedEventType = Literal["thinking", "tool_call", "question", "result", "error"]
+NormalizedEventChannel = Literal["reasoning", "assistant_text"]
+NormalizedEventEmissionKind = Literal["delta", "snapshot", "final"]
 
 
 class RunContext(BaseModel):
@@ -51,6 +53,15 @@ class QuestionPayload(BaseModel):
     placeholder: str | None = None
 
 
+# @ArchitectureID: ELM-APP-008C
+class NormalizedRunEventSemantic(BaseModel):
+    channel: NormalizedEventChannel
+    emissionKind: NormalizedEventEmissionKind
+    identity: str
+    messageId: str | None = None
+    partId: str | None = None
+
+
 class NormalizedRunEvent(BaseModel):
     id: str
     runId: str
@@ -62,6 +73,7 @@ class NormalizedRunEvent(BaseModel):
     data: dict[str, Any] | None = None
     logData: dict[str, Any] | None = None
     question: QuestionPayload | None = None
+    semantic: NormalizedRunEventSemantic | None = None
 
 
 class RunStartResult(BaseModel):

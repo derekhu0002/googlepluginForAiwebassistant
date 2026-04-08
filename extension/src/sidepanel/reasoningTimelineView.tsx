@@ -165,36 +165,6 @@ function sanitizeThinkingDisplayText(text: string) {
   return uniqueBlocks.join("\n\n").trim();
 }
 
-function getComparableThinkingSummary(text: string) {
-  return text.replace(/\s+/gu, " ").trim();
-}
-
-function getComparablePrefixLength(left: string, right: string) {
-  const maxPrefix = Math.min(left.length, right.length);
-
-  for (let index = 0; index < maxPrefix; index += 1) {
-    if (left[index] !== right[index]) {
-      return index;
-    }
-  }
-
-  return maxPrefix;
-}
-
-function shouldTreatThinkingSummariesAsDuplicate(left: string, right: string) {
-  if (!left || !right) {
-    return false;
-  }
-
-  if (left === right || left.includes(right) || right.includes(left)) {
-    return true;
-  }
-
-  const prefixLength = getComparablePrefixLength(left, right);
-  const shorterLength = Math.min(left.length, right.length);
-  return shorterLength > 0 && prefixLength / shorterLength >= 0.85;
-}
-
 function CopyIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="message-action-icon">
@@ -321,42 +291,7 @@ function ChatStreamTurn({
       ...processItem,
       summary: sanitizeThinkingDisplayText(processItem.summary)
     }))
-    .filter((processItem) => {
-    if (processItem.type !== "thinking") {
-      return false;
-    }
-
-    const summary = processItem.summary.trim();
-    if (!summary) {
-      return false;
-    }
-
-    return !/^(已复用当前\s+opencode\s+session|已连接当前会话|读取页面上下文|整理可用字段|查询历史|调用工具|模型正在推理。?|opencode\s+session\s+状态更新[:：]?.*)$/iu.test(summary);
-  })
-    .reduce<typeof item.processItems>((uniqueItems, processItem) => {
-      const comparableSummary = getComparableThinkingSummary(processItem.summary);
-      if (!comparableSummary) {
-        return uniqueItems;
-      }
-
-      const duplicateIndex = uniqueItems.findIndex((candidate) => shouldTreatThinkingSummariesAsDuplicate(
-        getComparableThinkingSummary(candidate.summary),
-        comparableSummary
-      ));
-
-      if (duplicateIndex < 0) {
-        uniqueItems.push(processItem);
-        return uniqueItems;
-      }
-
-      const existingItem = uniqueItems[duplicateIndex];
-      const existingSummary = getComparableThinkingSummary(existingItem.summary);
-      if (comparableSummary.length > existingSummary.length) {
-        uniqueItems[duplicateIndex] = processItem;
-      }
-
-      return uniqueItems;
-    }, []);
+    .filter((processItem) => processItem.type === "thinking" && Boolean(processItem.summary.trim()));
   const roleLabel = isUser ? "You" : item.kind === "assistant_error" ? "Assistant failed" : "Assistant";
   const avatarLabel = item.kind === "assistant_question" ? "?" : item.kind === "assistant_error" ? "!" : isUser ? "你" : "AI";
   const messageText = isUser ? item.summary : displayedSummary;

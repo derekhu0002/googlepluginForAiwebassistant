@@ -10,7 +10,14 @@ from uuid import uuid4
 import httpx
 
 from .config import Settings
-from .models import NormalizedRunEvent, QuestionAnswerRequest, QuestionOption, QuestionPayload, RunStartRequest
+from .models import (
+    NormalizedRunEvent,
+    NormalizedRunEventSemantic,
+    QuestionAnswerRequest,
+    QuestionOption,
+    QuestionPayload,
+    RunStartRequest,
+)
 
 
 ClientFactory = Callable[[float | None], httpx.AsyncClient]
@@ -37,7 +44,18 @@ class OpencodeAdapter:
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _next_event(self, run: dict[str, Any], event_type: str, message: str, *, title: str | None = None, data: dict[str, Any] | None = None, log_data: dict[str, Any] | None = None, question: QuestionPayload | None = None) -> NormalizedRunEvent:
+    def _next_event(
+        self,
+        run: dict[str, Any],
+        event_type: str,
+        message: str,
+        *,
+        title: str | None = None,
+        data: dict[str, Any] | None = None,
+        log_data: dict[str, Any] | None = None,
+        question: QuestionPayload | None = None,
+        semantic: NormalizedRunEventSemantic | None = None,
+    ) -> NormalizedRunEvent:
         run["sequence"] += 1
         return NormalizedRunEvent(
             id=f"{run['run_id']}-{run['sequence']}",
@@ -50,6 +68,7 @@ class OpencodeAdapter:
             data=data,
             logData=log_data if log_data is not None else data,
             question=question,
+            semantic=semantic,
         )
 
     def _next_tool_event(self, run: dict[str, Any], message: str, *, title: str = "处理中", data: dict[str, Any] | None = None, log_data: dict[str, Any] | None = None) -> NormalizedRunEvent:
@@ -106,6 +125,44 @@ class OpencodeAdapter:
             payload["message_id"] = message_id
         return payload
 
+    def _assistant_text_identity(self, message_id: str | None, part_id: str | None = None) -> str:
+        identity_parts = ["assistant_text", message_id or "unknown-message", part_id or "message-body"]
+        return ":".join(identity_parts)
+
+    def _reasoning_identity(self, message_id: str | None, part_id: str | None = None) -> str:
+        identity_parts = ["reasoning", message_id or "unknown-message", part_id or "message-reasoning"]
+        return ":".join(identity_parts)
+
+    def _assistant_text_semantic(
+        self,
+        message_id: str | None,
+        *,
+        part_id: str | None = None,
+        emission_kind: str,
+    ) -> NormalizedRunEventSemantic:
+        return NormalizedRunEventSemantic(
+            channel="assistant_text",
+            emissionKind=emission_kind,  # type: ignore[arg-type]
+            identity=self._assistant_text_identity(message_id, part_id),
+            messageId=message_id,
+            partId=part_id,
+        )
+
+    def _reasoning_semantic(
+        self,
+        message_id: str | None,
+        *,
+        part_id: str | None = None,
+        emission_kind: str,
+    ) -> NormalizedRunEventSemantic:
+        return NormalizedRunEventSemantic(
+            channel="reasoning",
+            emissionKind=emission_kind,  # type: ignore[arg-type]
+            identity=self._reasoning_identity(message_id, part_id),
+            messageId=message_id,
+            partId=part_id,
+        )
+
     def _part_id_from_properties(self, properties: dict[str, Any], part: dict[str, Any] | None = None) -> str | None:
         direct_part_id = properties.get("partID") or properties.get("partId")
         if isinstance(direct_part_id, str) and direct_part_id.strip():
@@ -119,10 +176,24 @@ class OpencodeAdapter:
 
         return None
 
-    def _emit_assistant_text_event(self, run: dict[str, Any], message: str, message_id: str | None = None) -> NormalizedRunEvent | None:
+    def _emit_assistant_text_event(
+        self,
+        run: dict[str, Any],
+        message: str,
+        message_id: str | None = None,
+        *,
+        part_id: str | None = None,
+        emission_kind: str = "delta",
+    ) -> NormalizedRunEvent | None:
         if not isinstance(message, str) or not message.strip():
             return None
-        return self._next_event(run, "thinking", message, data=self._response_text_data(message_id))
+        return self._next_event(
+            run,
+            "thinking",
+            message,
+            data=self._response_text_data(message_id),
+            semantic=self._assistant_text_semantic(message_id, part_id=part_id, emission_kind=emission_kind),
+        )
 
     def _flush_buffered_part_delta(self, run: dict[str, Any], part_id: str, message_id: str | None = None) -> list[NormalizedRunEvent]:
         buffered_parts = run.get("buffered_part_deltas") or {}
@@ -137,10 +208,17 @@ class OpencodeAdapter:
         resolved_part_type = (run.get("part_types") or {}).get(part_id)
         resolved_message_id = message_id or buffered_entry.get("message_id")
         if resolved_part_type == "text":
-            emitted = self._emit_assistant_text_event(run, delta, resolved_message_id)
+            emitted = self._emit_assistant_text_event(run, delta, resolved_message_id, part_id=part_id, emission_kind="delta")
             return [emitted] if emitted else []
         if resolved_part_type == "reasoning":
-            return [self._next_event(run, "thinking", delta)]
+            return [
+                self._next_event(
+                    run,
+                    "thinking",
+                    delta,
+                    semantic=self._reasoning_semantic(resolved_message_id, part_id=part_id, emission_kind="delta"),
+                )
+            ]
 
         return []
 
@@ -505,11 +583,18 @@ class OpencodeAdapter:
                 part_type = (run.get("part_types") or {}).get(part_id) if part_id else None
 
                 if part_type == "text":
-                    emitted = self._emit_assistant_text_event(run, delta, message_id)
+                    emitted = self._emit_assistant_text_event(run, delta, message_id, part_id=part_id, emission_kind="delta")
                     return [emitted] if emitted else []
 
                 if part_type == "reasoning":
-                    return [self._next_event(run, "thinking", delta)]
+                    return [
+                        self._next_event(
+                            run,
+                            "thinking",
+                            delta,
+                            semantic=self._reasoning_semantic(message_id, part_id=part_id, emission_kind="delta"),
+                        )
+                    ]
 
                 if part_id:
                     run.setdefault("buffered_part_deltas", {})[part_id] = {
@@ -536,13 +621,26 @@ class OpencodeAdapter:
                 flushed_events = self._flush_buffered_part_delta(run, part_id, properties.get("messageID")) if part_id else []
                 if flushed_events:
                     return flushed_events
-                return [self._next_event(run, "thinking", part.get("text") or "模型正在推理。")] 
+                return [
+                    self._next_event(
+                        run,
+                        "thinking",
+                        part.get("text") or "模型正在推理。",
+                        semantic=self._reasoning_semantic(properties.get("messageID"), part_id=part_id, emission_kind="snapshot"),
+                    )
+                ]
             if part_type == "text" and part.get("text"):
                 run["last_output_text"] = part["text"]
                 flushed_events = self._flush_buffered_part_delta(run, part_id, properties.get("messageID")) if part_id else []
                 if flushed_events:
                     return flushed_events
-                emitted = self._emit_assistant_text_event(run, part["text"], properties.get("messageID"))
+                emitted = self._emit_assistant_text_event(
+                    run,
+                    part["text"],
+                    properties.get("messageID"),
+                    part_id=part_id,
+                    emission_kind="snapshot",
+                )
                 return [emitted] if emitted else []
             return []
 
@@ -649,7 +747,13 @@ class OpencodeAdapter:
         if not final_item:
             if run.get("last_output_text"):
                 run["result_emitted"] = True
-                return self._next_event(run, "result", run["last_output_text"], data={"opencode_mode": "real", "session_id": run.get("session_id"), **self._response_text_data(run.get("assistant_message_id"))})
+                return self._next_event(
+                    run,
+                    "result",
+                    run["last_output_text"],
+                    data={"opencode_mode": "real", "session_id": run.get("session_id"), **self._response_text_data(run.get("assistant_message_id"))},
+                    semantic=self._assistant_text_semantic(run.get("assistant_message_id"), emission_kind="final"),
+                )
             return None
 
         parts = final_item.get("parts") or []
@@ -670,6 +774,7 @@ class OpencodeAdapter:
                 "message_id": (final_item.get("info") or {}).get("id"),
                 **self._response_text_data((final_item.get("info") or {}).get("id")),
             },
+            semantic=self._assistant_text_semantic((final_item.get("info") or {}).get("id"), emission_kind="final"),
         )
 
     def _event_matches_session(self, run: dict[str, Any], global_event: dict[str, Any]) -> bool:

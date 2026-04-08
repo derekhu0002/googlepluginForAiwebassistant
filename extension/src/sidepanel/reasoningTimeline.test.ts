@@ -307,11 +307,25 @@ describe("reasoning timeline view-model", () => {
     const items = buildReasoningTimelineItems([
       createEvent(1, {
         type: "thinking",
-        message: "Summarizing project risks in Chinese"
+        message: "Summarizing project risks in Chinese",
+        semantic: {
+          channel: "reasoning",
+          emissionKind: "delta",
+          identity: "reasoning:msg-1:part-1",
+          messageId: "msg-1",
+          partId: "part-1"
+        }
       }),
       createEvent(2, {
         type: "thinking",
-        message: "Summarizing project risks in Chinese\n\nI need to provide an answer in Chinese about the current SR risks."
+        message: "Summarizing project risks in Chinese\n\nI need to provide an answer in Chinese about the current SR risks.",
+        semantic: {
+          channel: "reasoning",
+          emissionKind: "snapshot",
+          identity: "reasoning:msg-1:part-1",
+          messageId: "msg-1",
+          partId: "part-1"
+        }
       })
     ]);
 
@@ -463,6 +477,48 @@ describe("reasoning timeline view-model", () => {
 
     expect(items.filter((item) => item.kind === "assistant_result")).toHaveLength(1);
     expect(items.find((item) => item.kind === "assistant_result")?.id).toBe("msg-1");
+  });
+
+  it("treats assistant_text semantic events as assistant body instead of Thinking", () => {
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: "## 当前风险结论\n\n1. SR 本体缺失。",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "delta",
+            identity: "assistant_text:msg-1:part-1",
+            messageId: "msg-1",
+            partId: "part-1"
+          }
+        })
+      ],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    expect(items.map((item) => item.kind)).toEqual(["user_prompt", "assistant_progress"]);
+    expect(items[1]?.summary).toContain("当前风险结论");
+    expect(items[1]?.processItems).toHaveLength(0);
+  });
+
+  it("falls back to text similarity merging when reasoning semantic identity is absent", () => {
+    const items = buildReasoningTimelineItems([
+      createEvent(1, {
+        type: "thinking",
+        message: "Summarizing SR risks"
+      }),
+      createEvent(2, {
+        type: "thinking",
+        message: "Summarizing SR risks\n\nI should answer in Chinese."
+      })
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.summary).toBe("Summarizing SR risks\n\nI should answer in Chinese.");
   });
 
   it("keeps live and history mapping semantics aligned", () => {

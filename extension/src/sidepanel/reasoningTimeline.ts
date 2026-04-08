@@ -72,6 +72,7 @@ export interface TimelineEventEntry {
   data?: Record<string, unknown>;
   logData?: Record<string, unknown>;
   question?: QuestionPayload;
+  semantic?: NormalizedRunEvent["semantic"];
 }
 
 export interface TimelineCardModel {
@@ -191,6 +192,17 @@ function canMergeThinkingSnapshot(current: TimelineCardModel | null, event: Norm
     return false;
   }
 
+  const currentSemanticIdentity = getTimelineCardSemanticIdentity(current);
+  const nextSemanticIdentity = getEventSemanticIdentity(event);
+  const currentSemanticChannel = getTimelineCardSemanticChannel(current);
+  const nextSemanticChannel = getEventSemanticChannel(event);
+
+  if (currentSemanticIdentity && nextSemanticIdentity) {
+    return currentSemanticChannel === "reasoning"
+      && nextSemanticChannel === "reasoning"
+      && currentSemanticIdentity === nextSemanticIdentity;
+  }
+
   const currentSummary = current.summary.trim();
   const nextSummary = normalizeMessage(event.message);
   if (!currentSummary || !nextSummary) {
@@ -222,7 +234,8 @@ function createTimelineEntry(event: NormalizedRunEvent): TimelineEventEntry {
     title: getEventTitle(event),
     data: event.data,
     logData: event.logData,
-    question: event.question
+    question: event.question,
+    semantic: event.semantic
   };
 }
 
@@ -319,6 +332,7 @@ function normalizeMarkdownStructure(text: string) {
     .replace(/\r\n/gu, "\n")
     .replace(/([^\n])(?=(#{1,6}\s))/gu, "$1\n\n")
     .replace(/([^\n])(?=(\d+\.\s))/gu, "$1\n\n")
+    .replace(/\n(?=\d+\.\s)/gu, "\n\n")
     .replace(/([^\n])(?=(-\s))/gu, "$1\n\n")
     .replace(/\n{3,}/gu, "\n\n");
 }
@@ -393,6 +407,20 @@ function dedupeProcessItems(items: TimelineCardModel[]) {
   const uniqueItems: TimelineCardModel[] = [];
 
   for (const item of items) {
+    const semanticIdentity = getTimelineCardSemanticIdentity(item);
+    if (semanticIdentity) {
+      const semanticMatchIndex = uniqueItems.findIndex((candidate) => getTimelineCardSemanticIdentity(candidate) === semanticIdentity);
+      if (semanticMatchIndex >= 0) {
+        const existingItem = uniqueItems[semanticMatchIndex];
+        const existingSummary = getComparableBlockKey(normalizeMarkdownStructure(existingItem.summary));
+        const comparableSummary = getComparableBlockKey(normalizeMarkdownStructure(item.summary));
+        if (comparableSummary.length >= existingSummary.length) {
+          uniqueItems[semanticMatchIndex] = item;
+        }
+        continue;
+      }
+    }
+
     const comparableSummary = getComparableBlockKey(normalizeMarkdownStructure(item.summary));
     if (!comparableSummary) {
       continue;
@@ -465,7 +493,7 @@ function sanitizeAssistantThinkingText(text: string, answerText?: string | null)
       }
 
       const comparableBlock = getComparableBlockKey(block);
-      return !comparableAnswerBlocks.some((answerBlock) => answerBlock === comparableBlock || answerBlock.includes(comparableBlock) || comparableBlock.includes(answerBlock));
+      return !comparableAnswerBlocks.some((answerBlock) => answerBlock === comparableBlock || answerBlock.includes(comparableBlock));
     });
 
   const cleanedThinking = dedupeMarkdownBlocks(filteredBlocks).join("\n\n").trim();
@@ -576,6 +604,25 @@ function resolveAssistantDisplayText(aggregatedText: string, finalOutput?: strin
   }
 
   return sanitizedAggregatedText;
+}
+
+function deriveAssistantDisplayTextFromReasoning(reasoningText: string) {
+  const normalizedReasoning = normalizeMarkdownStructure(reasoningText).trim();
+  if (!normalizedReasoning) {
+    return "";
+  }
+
+  const derivedText = sanitizeAssistantDisplayText(normalizedReasoning);
+  if (!derivedText) {
+    return "";
+  }
+
+  const inlineAnswerStartIndex = findInlineAnswerStartIndex(normalizedReasoning);
+  if (inlineAnswerStartIndex === 0) {
+    return derivedText;
+  }
+
+  return derivedText !== normalizedReasoning ? derivedText : "";
 }
 
 function collectLatestAssistantResultText(events: NormalizedRunEvent[]) {
@@ -731,12 +778,48 @@ function getEventDataValue(event: Pick<NormalizedRunEvent, "data">, key: string)
   return typeof event.data?.[key] === "string" ? event.data[key] as string : undefined;
 }
 
-function getAssistantResponseMessageId(event: Pick<NormalizedRunEvent, "id" | "data">) {
-  return getEventDataValue(event, "message_id") ?? event.id;
+function getEventSemanticIdentity(event: Pick<NormalizedRunEvent, "semantic">) {
+  return event.semantic?.identity?.trim() || undefined;
+}
+
+function getEventSemanticChannel(event: Pick<NormalizedRunEvent, "semantic">) {
+  return event.semantic?.channel;
+}
+
+function getTimelineCardSemanticIdentity(item: Pick<TimelineCardModel, "entries">) {
+  return item.entries
+    .map((entry) => entry.semantic?.identity?.trim() || undefined)
+    .find(Boolean);
+}
+
+function getTimelineCardSemanticChannel(item: Pick<TimelineCardModel, "entries">) {
+  return item.entries
+    .map((entry) => entry.semantic?.channel)
+    .find(Boolean);
+}
+
+function getAssistantResponseMessageId(event: Pick<NormalizedRunEvent, "id" | "data" | "semantic">) {
+  return event.semantic?.messageId?.trim() || getEventDataValue(event, "message_id") || event.id;
 }
 
 export function isAssistantResponseDeltaEvent(event: NormalizedRunEvent) {
-  return event.type === "thinking" && getEventDataValue(event, "field") === "text";
+  if (event.type !== "thinking") {
+    return false;
+  }
+
+  if (getEventSemanticChannel(event) === "assistant_text") {
+    return true;
+  }
+
+  return getEventDataValue(event, "field") === "text";
+}
+
+function getAssistantResponseThinkingEmissionKind(event: NormalizedRunEvent) {
+  if (!isAssistantResponseDeltaEvent(event)) {
+    return undefined;
+  }
+
+  return event.semantic?.emissionKind === "snapshot" ? "snapshot" : "delta";
 }
 
 export function isAssistantResponseSnapshotEvent(event: NormalizedRunEvent) {
@@ -837,6 +920,10 @@ function mergeAssistantResponseSnapshot(current: string, snapshot: string) {
     return existing;
   }
 
+  if (next.startsWith(existing) || nextComparable.startsWith(existingComparable)) {
+    return next;
+  }
+
   if (next.includes(existing) || nextComparable.includes(existingComparable)) {
     return next;
   }
@@ -868,8 +955,11 @@ export function collectAssistantResponseAggregation(events: NormalizedRunEvent[]
   let hasResponseEvent = false;
 
   for (const event of events) {
-    if (isAssistantResponseDeltaEvent(event)) {
-      aggregatedText = mergeAssistantResponseDelta(aggregatedText, event.message);
+    const thinkingEmissionKind = getAssistantResponseThinkingEmissionKind(event);
+    if (thinkingEmissionKind) {
+      aggregatedText = thinkingEmissionKind === "snapshot"
+        ? mergeAssistantResponseSnapshot(aggregatedText, event.message)
+        : mergeAssistantResponseDelta(aggregatedText, event.message);
       firstResponseAt = firstResponseAt ?? event.createdAt;
       lastResponseAt = event.createdAt;
       preferredMessageId = preferredMessageId ?? getAssistantResponseMessageId(event);
@@ -966,9 +1056,9 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
       .filter((item) => item.type === "thinking")
       .map((item) => item.summary)
   );
-  const assistantDisplayText = latestResultText
-    || resolveAssistantDisplayText(assistantResponse.text, options.finalOutput)
-    || sanitizeAssistantDisplayText(reasoningOnlyText);
+  const assistantDisplayText = resolveAssistantDisplayText(assistantResponse.text, options.finalOutput)
+    || latestResultText
+    || deriveAssistantDisplayTextFromReasoning(reasoningOnlyText);
   const answersByQuestionId = new Map<string, AnswerRecord[]>();
   const prompt = options.prompt?.trim() || "";
   const errorMessage = options.errorMessage?.trim() || "";
@@ -1082,7 +1172,7 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
     pendingProcessItems = [];
   }
 
-  const assistantProcessItems = dedupeProcessItems(pendingProcessItems
+  const normalizedAssistantProcessItems = pendingProcessItems
     .map((item) => {
       if (item.type !== "thinking") {
         return item;
@@ -1102,9 +1192,26 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
         }))
       };
     })
-    .filter((item): item is TimelineCardModel => Boolean(item)));
+    .filter((item): item is TimelineCardModel => Boolean(item));
 
-  if (assistantDisplayText || assistantProcessItems.length) {
+  const syntheticThinkingSummary = sanitizeAssistantThinkingText(assistantResponse.text, assistantDisplayText);
+  if (syntheticThinkingSummary) {
+    normalizedAssistantProcessItems.push(createSyntheticThinkingItem({
+      runId: options.runId,
+      preferredMessageId: assistantResponse.preferredMessageId,
+      createdAt: assistantResponse.firstResponseAt,
+      updatedAt: assistantResponse.lastResponseAt,
+      summary: syntheticThinkingSummary
+    }));
+  }
+
+  const assistantProcessItems = dedupeProcessItems(normalizedAssistantProcessItems);
+
+  const shouldRenderProcessOnlyAssistantItem = !assistantDisplayText
+    && assistantProcessItems.length > 0
+    && assistantProcessItems.every((item) => !hasSubstantialChineseContent(item.summary));
+
+  if (assistantDisplayText || shouldRenderProcessOnlyAssistantItem) {
     const shouldRenderAsFinalResult = hasResultEvent || presentationState.runStatus === "done";
     const assistantMessageSummary = hasConcreteAnswer ? assistantDisplayText : "";
     streamItems.push({
@@ -1159,14 +1266,6 @@ export function buildReasoningTimelineItems(events: NormalizedRunEvent[]): Timel
     const entry = createTimelineEntry(event);
     const current = items[items.length - 1] ?? null;
 
-    if (canAggregate(current, event)) {
-      current.entries.push(entry);
-      current.updatedAt = entry.createdAt;
-      current.summary = summarizeEntries(current.entries);
-      current.title = entry.title;
-      continue;
-    }
-
     if (canMergeThinkingSnapshot(current, event)) {
       current.updatedAt = entry.createdAt;
       current.summary = mergeAssistantResponseSnapshot(current.summary, entry.message);
@@ -1175,6 +1274,14 @@ export function buildReasoningTimelineItems(events: NormalizedRunEvent[]): Timel
         ...entry,
         message: current.summary
       }];
+      continue;
+    }
+
+    if (canAggregate(current, event)) {
+      current.entries.push(entry);
+      current.updatedAt = entry.createdAt;
+      current.summary = summarizeEntries(current.entries);
+      current.title = entry.title;
       continue;
     }
 

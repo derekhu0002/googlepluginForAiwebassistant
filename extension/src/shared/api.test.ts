@@ -196,11 +196,58 @@ describe("streaming api client", () => {
       type: "thinking",
       createdAt: "2026-04-01T00:00:00.000Z",
       sequence: 1,
-      message: "Thinking"
+      message: "Thinking",
+      semantic: {
+        channel: "reasoning",
+        emissionKind: "delta",
+        identity: "reasoning:msg-1:part-1",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
     }));
 
     expect(events).toEqual(["thinking"]);
     expect(stream.url).toBe("http://localhost:8000/api/runs/run-1/events");
+  });
+
+  it("accepts normalized event semantic metadata with nullable fields", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    global.EventSource = FakeEventSource as unknown as typeof EventSource;
+
+    const { createRunEventStream } = await import("./api");
+    const onEvent = vi.fn();
+    const onError = vi.fn();
+    const stream = createRunEventStream("run-semantic", { onEvent, onError }) as unknown as FakeEventSource;
+
+    stream.emit("message", JSON.stringify({
+      id: "event-semantic",
+      runId: "run-semantic",
+      type: "thinking",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      message: "Assistant delta",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-1:part-1",
+        messageId: "msg-1",
+        partId: null
+      }
+    }));
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-1:part-1",
+        messageId: "msg-1",
+        partId: undefined
+      }
+    }));
   });
 
   it("accepts thinking and result events with question null", async () => {

@@ -1,6 +1,11 @@
 export const NORMALIZED_EVENT_TYPES = ["thinking", "tool_call", "question", "result", "error"] as const;
 
 export type NormalizedEventType = typeof NORMALIZED_EVENT_TYPES[number];
+export const NORMALIZED_EVENT_CHANNELS = ["reasoning", "assistant_text"] as const;
+export const NORMALIZED_EVENT_EMISSION_KINDS = ["delta", "snapshot", "final"] as const;
+
+export type NormalizedEventChannel = typeof NORMALIZED_EVENT_CHANNELS[number];
+export type NormalizedEventEmissionKind = typeof NORMALIZED_EVENT_EMISSION_KINDS[number];
 
 export type UsernameSource =
   | "dom_data_attribute"
@@ -36,6 +41,13 @@ export interface NormalizedRunEvent {
   data?: Record<string, unknown>;
   logData?: Record<string, unknown>;
   question?: QuestionPayload;
+  semantic?: {
+    channel: NormalizedEventChannel;
+    emissionKind: NormalizedEventEmissionKind;
+    identity: string;
+    messageId?: string;
+    partId?: string;
+  };
 }
 
 export interface RunStreamLifecycle {

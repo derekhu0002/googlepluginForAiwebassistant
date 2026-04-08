@@ -7,7 +7,7 @@ import { initialAssistantState } from "../shared/state";
 import type { NormalizedRunEvent, RunHistoryDetail, RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
-import { collectRunAssistantResponseText, isAssistantResponseDeltaEvent, resolveTimelinePresentationState, type BuildChatStreamItemsOptions } from "./reasoningTimeline";
+import { isAssistantResponseDeltaEvent, resolveTimelinePresentationState, type BuildChatStreamItemsOptions } from "./reasoningTimeline";
 import { ReasoningTimeline } from "./reasoningTimelineView";
 import { useRunHistory } from "./useRunHistory";
 
@@ -92,6 +92,18 @@ function mergeRunEvent(currentEvents: NormalizedRunEvent[], incomingEvent: Norma
   const nextEvents = [...currentEvents];
   nextEvents[existingIndex] = incomingEvent;
   return nextEvents;
+}
+
+function deriveRunFinalOutput(currentFinalOutput: string, event: NormalizedRunEvent) {
+  if (event.type === "result") {
+    return event.message;
+  }
+
+  if (event.type === "error") {
+    return currentFinalOutput;
+  }
+
+  return currentFinalOutput;
 }
 
 function deriveLifecycleStatus(current: AssistantState, event: NormalizedRunEvent, nextEvents: NormalizedRunEvent[]) {
@@ -667,7 +679,7 @@ export function App() {
                 ...current.currentRun,
                 status: lifecycleStatus.runStatus,
                 updatedAt: event.createdAt,
-                finalOutput: collectRunAssistantResponseText(nextEvents, current.currentRun.finalOutput),
+                finalOutput: deriveRunFinalOutput(current.currentRun.finalOutput, event),
                 errorMessage: event.type === "error" ? event.message : current.currentRun.errorMessage
               }
             : current.currentRun;
@@ -866,9 +878,8 @@ export function App() {
   const selectedRule = draftRule;
   const errorTitle = state.error?.code ? `${state.error.code}` : null;
   const errorDescription = state.error ? toDisplayMessage(state.error) : state.errorMessage || streamError;
-  const liveAssistantText = collectRunAssistantResponseText(state.runEvents, state.currentRun?.finalOutput);
   const liveFinalOutput = state.currentRun?.finalOutput?.trim() || "";
-  const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent || liveAssistantText);
+  const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent || liveFinalOutput);
   const livePrompt = state.currentRun?.prompt ?? prompt;
   const shouldShowPermissionCallout = Boolean(activeContext?.url && !activeContext.permissionGranted && !activeContext.restricted);
   const canShowPermissionButton = shouldShowPermissionCallout && activeContext?.canRequestPermission;
