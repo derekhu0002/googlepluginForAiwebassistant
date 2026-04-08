@@ -557,7 +557,8 @@ export function App() {
   const liveAssistantText = collectRunAssistantResponseText(state.runEvents, state.currentRun?.finalOutput);
   const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent || liveAssistantText);
   const livePrompt = state.currentRun?.prompt ?? prompt;
-  const shouldShowPermissionCallout = !activeContext?.permissionGranted && activeContext?.canRequestPermission;
+  const shouldShowPermissionCallout = Boolean(activeContext?.url && !activeContext.permissionGranted && !activeContext.restricted);
+  const canShowPermissionButton = shouldShowPermissionCallout && activeContext?.canRequestPermission;
   const livePresentationState = useMemo(() => resolveTimelinePresentationState({
     events: state.runEvents,
     runStatus: state.currentRun?.status,
@@ -606,10 +607,17 @@ export function App() {
           <div>
             <strong>当前页面需要先授权域名访问</strong>
             <p>{activeContext?.message || "授权当前域名后，扩展才能继续读取页面上下文并正常工作。"}</p>
+            {!canShowPermissionButton ? (
+              <p>
+                当前构建尚未把这个域名加入可申请授权清单。请先确认已将 <code>extension/.env.example</code> 复制为 <code>extension/.env</code>，重新执行 <code>npm run build --workspace extension</code>，然后在 <code>chrome://extensions</code> 里重新加载 <code>extension/dist</code>。
+              </p>
+            ) : null}
           </div>
-          <button className="secondary" disabled={requestingPermission} onClick={() => requestPermission()}>
-            {requestingPermission ? "授权中..." : "授权当前域名"}
-          </button>
+          {canShowPermissionButton ? (
+            <button className="secondary" disabled={requestingPermission} onClick={() => requestPermission()}>
+              {requestingPermission ? "授权中..." : "授权当前域名"}
+            </button>
+          ) : null}
           {contextError ? <p className="error-text">{contextError}</p> : null}
         </section>
       ) : null}

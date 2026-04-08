@@ -290,6 +290,28 @@ describe("side panel host permission request flow", () => {
     expect(detailsButton).toBeNull();
   });
 
+  it("keeps the permission callout visible with rebuild guidance when the current build cannot request this host", async () => {
+    setupChromeStub({
+      contexts: [createContext({
+        canRequestPermission: false,
+        message: "当前页面域名不在受控授权清单内。请先在扩展配置中登记该域名，再由用户在 Side Panel 中申请当前域名权限。"
+      })]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const callout = container.querySelector(".host-permission-callout");
+    expect(callout).toBeTruthy();
+    expect(callout?.textContent).toContain("当前页面需要先授权域名访问");
+    expect(callout?.textContent).toContain("extension/.env");
+    expect(callout?.textContent).toContain("npm run build --workspace extension");
+    expect(callout?.textContent).toContain("chrome://extensions");
+    expect(callout?.textContent).not.toContain("授权当前域名");
+  });
+
   it("shows explicit error when user rejects the permission prompt", async () => {
     const { permissionsRequest } = setupChromeStub({
       contexts: [createContext()],

@@ -47,6 +47,8 @@ cp python_adapter/.env.example python_adapter/.env
 cp backend/.env.example backend/.env
 ```
 
+> 重要：extension 的构建只会读取 `extension/.env`（如果存在）或构建时的环境变量；**不会自动读取 `.env.example`**。如果你直接构建而没有先创建 `extension/.env`，产物里的 `manifest.json` 仍会保留生产默认值（如 `https://example.com/*`），此时在 `http://127.0.0.1:4173` 上既看不到正确的授权入口，也可能因为不是最新构建而看不到页面右侧蓝色 `AI` 按钮。
+
 默认值与当前仓库实现一致：
 
 - extension 默认请求 `http://localhost:8000`
@@ -95,6 +97,11 @@ python3 test_site/server.py
 npm run build --workspace extension
 ```
 
+构建后建议先检查 `extension/dist/manifest.json`，确认至少包含以下开发期配置：
+
+- `optional_host_permissions` 中包含 `http://127.0.0.1/*`
+- `content_scripts[].matches` 中包含 `http://127.0.0.1/*`
+
 如需边改边构建，可使用：
 
 ```bash
@@ -107,14 +114,16 @@ npm run dev --workspace extension
 2. 开启开发者模式
 3. 选择“加载已解压的扩展程序”
 4. 选择 `extension/dist`
+5. 如果你刚修改了 `.env`、重新构建了 extension，记得点击一次 **重新加载**，避免 Chrome 继续运行旧 manifest / 旧 content script
 
 ### 7. 打开测试页面并完成授权 / 规则配置
 
 1. 打开 `http://127.0.0.1:4173`
-2. 点击扩展图标打开 side panel
-3. 在规则配置中心新增或确认规则
-4. 测试站建议使用 `Hostname 模式 = 127.0.0.1`
-5. 若 side panel 显示域名未授权，点击 **“授权当前域名”**
+2. 确认页面右侧中部出现蓝色圆形 **AI** 按钮；如果没有，通常说明当前页面没有加载到最新的 `content.js`，请先重新加载扩展并刷新页面
+3. 点击扩展图标打开 side panel
+4. 在规则配置中心新增或确认规则
+5. 测试站建议使用 `Hostname 模式 = 127.0.0.1`
+6. 若 side panel 显示域名未授权，点击 **“授权当前域名”**；若只看到“当前页面需要先授权域名访问”但没有按钮，请回头检查是否遗漏了 `cp extension/.env.example extension/.env`、重新构建、重新加载扩展这三步
 
 ### 8. 进行联调
 
