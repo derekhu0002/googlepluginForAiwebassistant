@@ -63,6 +63,16 @@ describe("streaming api client", () => {
       "http://localhost:8000/api/runs",
       expect.objectContaining({ method: "POST" })
     );
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      capture: expect.objectContaining({
+        pageTitle: "Example",
+        selected_sr: "SR-1"
+      }),
+      context: expect.objectContaining({
+        pageTitle: "Example",
+        pageUrl: "https://example.com"
+      })
+    });
   });
 
   it("submits question answers", async () => {
@@ -78,6 +88,31 @@ describe("streaming api client", () => {
     const result = await submitQuestionAnswer("run-1", { questionId: "q1", answer: "yes" });
 
     expect(result.ok).toBe(true);
+  });
+
+  it("starts run without capture payload when send is decoupled", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { runId: "run-no-capture" } })
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    const { startRun } = await import("./api");
+    const result = await startRun("hello", null, { username: "unknown", usernameSource: "unresolved_login_state" });
+
+    expect(result).toEqual({ ok: true, data: { runId: "run-no-capture" } });
+    const requestBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+    expect(requestBody).toMatchObject({
+      prompt: "hello",
+      context: {
+        username: "unknown",
+        usernameSource: "unresolved_login_state"
+      }
+    });
+    expect(requestBody).not.toHaveProperty("capture");
   });
 
   it("submits message feedback", async () => {
@@ -345,7 +380,7 @@ describe("streaming api client", () => {
     expect(onStatusChange).toHaveBeenLastCalledWith("reconnecting");
   });
 
-  it("silences close and later error after terminal event", async () => {
+  it("keeps stream open after terminal-looking event so later valid messages still arrive", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
     vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
     vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
@@ -365,11 +400,46 @@ describe("streaming api client", () => {
       sequence: 2,
       message: "Done"
     }));
+    stream.emit("message", JSON.stringify({
+      id: "event-3",
+      runId: "run-5",
+      type: "thinking",
+      createdAt: "2026-04-01T00:00:01.000Z",
+      sequence: 3,
+      message: "Later delta",
+      data: { field: "text" }
+    }));
     stream.emit("error");
 
-    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "result" }));
-    expect(stream.originalClose).toHaveBeenCalledTimes(1);
+    expect(onEvent).toHaveBeenNthCalledWith(1, expect.objectContaining({ type: "result" }));
+    expect(onEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({ type: "thinking", message: "Later delta" }));
+    expect(stream.originalClose).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("still allows explicit client close override", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    global.EventSource = FakeEventSource as unknown as typeof EventSource;
+    const { createRunEventStream } = await import("./api");
+    const stream = createRunEventStream("run-close", {
+      onEvent() {},
+      onError() {},
+      shouldClose: (event) => event.type === "error"
+    }) as unknown as FakeEventSource;
+
+    stream.emit("message", JSON.stringify({
+      id: "event-close",
+      runId: "run-close",
+      type: "error",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      message: "stop"
+    }));
+
+    expect(stream.originalClose).toHaveBeenCalledTimes(1);
   });
 
   it("returns to streaming after reconnect open event", async () => {

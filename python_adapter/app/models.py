@@ -13,13 +13,13 @@ class RunContext(BaseModel):
     capturedAt: str
     username: str
     usernameSource: str
-    pageTitle: str
-    pageUrl: str
+    pageTitle: str | None = None
+    pageUrl: str | None = None
 
 
 class RunStartRequest(BaseModel):
     prompt: str = Field(min_length=1)
-    capture: dict[str, str]
+    capture: dict[str, str] = Field(default_factory=dict)
     context: RunContext
 
 

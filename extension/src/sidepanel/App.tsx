@@ -7,7 +7,7 @@ import { initialAssistantState } from "../shared/state";
 import type { NormalizedRunEvent, RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
-import { resolveTimelinePresentationState } from "./reasoningTimeline";
+import { collectRunAssistantResponseText, resolveTimelinePresentationState } from "./reasoningTimeline";
 import { ReasoningTimeline } from "./reasoningTimelineView";
 import { useRunHistory } from "./useRunHistory";
 
@@ -185,6 +185,14 @@ function createFieldRule(): FieldRuleDefinition {
 
 async function sendMessage<T>(message: RuntimeMessage): Promise<T> {
   return chrome.runtime.sendMessage(message) as Promise<T>;
+}
+
+function SendIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="send-icon">
+      <path d="M3.4 20.4 21 12 3.4 3.6l2.2 6.7 8.4 1.7-8.4 1.7-2.2 6.7Z" fill="currentColor" />
+    </svg>
+  );
 }
 
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL */
@@ -369,7 +377,7 @@ export function App() {
     }
   }
 
-  async function startStreamingRun(retryPayload?: { prompt: string; retryFromRunId?: string; retryFromMessageId?: string }) {
+  async function startStreamingRun(retryPayload?: { prompt?: string; retryFromRunId?: string; retryFromMessageId?: string; capturePageData?: boolean }) {
     setStreamError("");
     eventSourceRef.current?.close();
     clearSelectedRun().catch(() => undefined);
@@ -385,6 +393,7 @@ export function App() {
       type: "START_RUN",
       payload: {
         prompt: nextPrompt,
+        capturePageData: retryPayload?.capturePageData,
         retryFromRunId: retryPayload?.retryFromRunId,
         retryFromMessageId: retryPayload?.retryFromMessageId
       }
@@ -423,7 +432,7 @@ export function App() {
                 ...current.currentRun,
                 status: event.type === "question" ? "waiting_for_answer" : event.type === "result" ? "done" : event.type === "error" ? "error" : current.currentRun.status,
                 updatedAt: event.createdAt,
-                finalOutput: event.type === "result" ? event.message : current.currentRun.finalOutput,
+                finalOutput: collectRunAssistantResponseText(nextEvents, current.currentRun.finalOutput),
                 errorMessage: event.type === "error" ? event.message : current.currentRun.errorMessage
               }
             : current.currentRun;
@@ -511,15 +520,41 @@ export function App() {
   async function handleRetry(payload: { prompt: string; runId: string; messageId: string }) {
     await startStreamingRun({
       prompt: payload.prompt,
+      capturePageData: false,
       retryFromRunId: payload.runId,
       retryFromMessageId: payload.messageId
     });
   }
 
+  async function handleCaptureOnly() {
+    if (isBusy) {
+      return;
+    }
+    setStreamError("");
+    setState((current) => ({
+      ...current,
+      status: "collecting",
+      errorMessage: ""
+    }));
+    await sendMessage<{ ok: boolean; error?: { message: string } }>({ type: "RECAPTURE" })
+      .then((response) => {
+        if (!response?.ok) {
+          setStreamError(response?.error?.message ?? "页面采集失败");
+        }
+      })
+      .catch((error: unknown) => {
+        setStreamError(error instanceof Error ? error.message : "页面采集失败");
+      })
+      .finally(() => {
+        loadBaseState().catch(() => undefined);
+      });
+  }
+
   const selectedRule = draftRule;
   const errorTitle = state.error?.code ? `${state.error.code}` : null;
   const errorDescription = state.error ? toDisplayMessage(state.error) : state.errorMessage || streamError;
-  const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent);
+  const liveAssistantText = collectRunAssistantResponseText(state.runEvents, state.currentRun?.finalOutput);
+  const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent || liveAssistantText);
   const livePrompt = state.currentRun?.prompt ?? prompt;
   const livePresentationState = useMemo(() => resolveTimelinePresentationState({
     events: state.runEvents,
@@ -586,7 +621,7 @@ export function App() {
               live
               streamStatus={livePresentationState.streamStatus}
               runStatus={livePresentationState.runStatus}
-              finalOutput={state.currentRun?.finalOutput}
+              finalOutput={liveAssistantText}
               errorMessage={state.currentRun?.errorMessage ?? state.errorMessage ?? streamError}
               updatedAt={state.currentRun?.updatedAt ?? state.currentRun?.startedAt}
               pendingQuestionId={state.stream.pendingQuestionId}
@@ -609,12 +644,26 @@ export function App() {
               </span>
             ))}
           </div>
-          <label>
+          <div className="composer-toolbar">
+            <button className="secondary capture-button" disabled={isBusy} onClick={() => handleCaptureOnly()}>
+              {state.status === "collecting" ? "采集中..." : "采集页面"}
+            </button>
+            <small className="detail-muted">发送默认不会触发页面采集；如需更新上下文，请先使用独立采集入口。</small>
+          </div>
+          <label className="composer-input-shell">
             <span>{questionEvent?.question ? "继续回答或追问" : "发送消息"}</span>
             <textarea value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} rows={4} placeholder="输入你的问题，或继续追问…" />
+            <button
+              className="send-button"
+              aria-label={questionEvent?.question ? "发送补充说明" : "发送消息"}
+              title={questionEvent?.question ? "发送补充说明" : "发送消息"}
+              disabled={isBusy || !prompt.trim()}
+              onClick={() => startStreamingRun({ capturePageData: false })}
+            >
+              <SendIcon />
+            </button>
           </label>
           <div className="conversation-composer-actions">
-            <button disabled={isBusy || !prompt.trim()} onClick={() => startStreamingRun()}>{isBusy ? "处理中..." : questionEvent?.question ? "发送补充说明" : "采集并开始 SSE Run"}</button>
             <small className="detail-muted">底部输入区始终可用；内联选项回答与自由输入追问共享同一条会话主线。</small>
           </div>
         </div>
@@ -704,7 +753,7 @@ export function App() {
                   events={selectedHistoryDetail.events}
                   answers={selectedHistoryDetail.answers}
                   runStatus={selectedHistoryDetail.run.status}
-                  finalOutput={selectedHistoryDetail.run.finalOutput}
+                  finalOutput={collectRunAssistantResponseText(selectedHistoryDetail.events, selectedHistoryDetail.run.finalOutput)}
                   errorMessage={selectedHistoryDetail.run.errorMessage}
                   updatedAt={selectedHistoryDetail.run.updatedAt ?? selectedHistoryDetail.run.startedAt}
                   emptyText="尚未完成"

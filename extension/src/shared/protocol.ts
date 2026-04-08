@@ -38,16 +38,24 @@ export interface NormalizedRunEvent {
   question?: QuestionPayload;
 }
 
+export interface RunStreamLifecycle {
+  terminalEventsDoNotGuaranteeStreamEnd: true;
+}
+
+export const RUN_STREAM_LIFECYCLE: RunStreamLifecycle = {
+  terminalEventsDoNotGuaranteeStreamEnd: true
+};
+
 export interface RunStartRequest {
   prompt: string;
-  capture: Record<string, string>;
+  capture?: Record<string, string>;
   context: {
     source: string;
     capturedAt: string;
     username: string;
     usernameSource: UsernameSource;
-    pageTitle: string;
-    pageUrl: string;
+    pageTitle?: string;
+    pageUrl?: string;
   };
 }
 

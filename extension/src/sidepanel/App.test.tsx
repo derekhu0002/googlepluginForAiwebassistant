@@ -151,6 +151,8 @@ function setupChromeStub(options: ChromeStubOptions) {
         return contextQueue.shift() ?? options.contexts[options.contexts.length - 1] ?? null;
       case "START_RUN":
         return options.startRunResponse ?? { ok: true, data: { runId: "run-1", currentRun: createCurrentRun() } };
+      case "RECAPTURE":
+        return { ok: true };
       default:
         return undefined;
     }
@@ -304,7 +306,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("触发当前域名授权失败：Permission prompt must be triggered by user gesture");
   });
 
-  it("keeps the existing start-run flow working after the permission change", async () => {
+  it("allows sending without triggering page capture", async () => {
     const { runtimeSendMessage } = setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
     });
@@ -314,16 +316,77 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const startButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集并开始 SSE Run"));
+    const startButton = container.querySelector("button[aria-label='发送消息']");
     await act(async () => {
       startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushUi();
 
-    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "START_RUN", payload: { prompt: initialAssistantState.runPrompt } });
+    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "START_RUN", payload: { prompt: initialAssistantState.runPrompt, capturePageData: false } });
+    expect(runtimeSendMessage).not.toHaveBeenCalledWith({ type: "RECAPTURE" });
     expect(mockCreateRunEventStream).toHaveBeenCalledWith("run-1", expect.objectContaining({ onEvent: expect.any(Function), onError: expect.any(Function) }));
     expect(container.textContent).toContain("You");
     expect(container.textContent).toContain(initialAssistantState.runPrompt);
+  });
+
+  it("keeps independent page capture entry working", async () => {
+    const { runtimeSendMessage } = setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const captureButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集页面"));
+    await act(async () => {
+      captureButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "RECAPTURE" });
+  });
+
+  it("shows capture in progress from the independent capture entry", async () => {
+    let resolveRecapture: (() => void) | null = null;
+    const { runtimeSendMessage } = setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
+    });
+    runtimeSendMessage.mockImplementation(async (message: RuntimeMessage) => {
+      switch (message.type) {
+        case "GET_STATE":
+          return initialAssistantState;
+        case "GET_RULES":
+          return [];
+        case "GET_ACTIVE_CONTEXT":
+          return createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" });
+        case "RECAPTURE":
+          return await new Promise((resolve) => {
+            resolveRecapture = () => resolve({ ok: true });
+          });
+        default:
+          return undefined;
+      }
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const captureButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集页面"));
+    await act(async () => {
+      captureButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("采集中...");
+
+    await act(async () => {
+      resolveRecapture?.();
+    });
+    await flushUi();
   });
 
   it("shows reconnecting status without surfacing a terminal error and returns to streaming after reopen", async () => {
@@ -336,7 +399,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const startButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集并开始 SSE Run"));
+    const startButton = container.querySelector("button[aria-label='发送消息']");
     await act(async () => {
       startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -473,7 +536,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const startButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集并开始 SSE Run"));
+    const startButton = container.querySelector("button[aria-label='发送消息']");
     await act(async () => {
       startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -580,6 +643,39 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).not.toContain("读取页面上下文");
   });
 
+  it("renders complete assistant text when same run emits delayed response after result", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          updatedAt: "2026-04-02T00:00:04.000Z",
+          finalOutput: "第一段第二段"
+        },
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        runEvents: [
+          createRunEvent(1, { type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-1" } }),
+          createRunEvent(2, { type: "result", message: "第一段" }),
+          createRunEvent(3, { type: "thinking", message: "第二段", data: { field: "text", message_id: "msg-1" } })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("第一段第二段");
+    expect(container.textContent).not.toContain("第一段Assistant第一段");
+  });
+
   it("does not show completion copy when background sends done without terminal evidence", async () => {
     const { emitRuntimeMessage } = setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
@@ -675,7 +771,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const startButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集并开始 SSE Run"));
+    const startButton = container.querySelector("button[aria-label='发送消息']");
     await act(async () => {
       startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -772,7 +868,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const startButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集并开始 SSE Run"));
+    const startButton = container.querySelector("button[aria-label='发送消息']");
     await act(async () => {
       startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -973,6 +1069,22 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("选中内容");
   });
 
+  it("renders send affordance as bottom-right paper-plane button", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const sendButton = container.querySelector("button.send-button[aria-label='发送消息']");
+    expect(sendButton).toBeTruthy();
+    expect(sendButton?.querySelector("svg.send-icon")).toBeTruthy();
+  });
+
   it("shows hover action buttons for assistant messages", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
@@ -1041,6 +1153,7 @@ describe("side panel host permission request flow", () => {
       type: "START_RUN",
       payload: {
         prompt: "原始用户问题",
+        capturePageData: false,
         retryFromRunId: "run-1",
         retryFromMessageId: "event-1"
       }

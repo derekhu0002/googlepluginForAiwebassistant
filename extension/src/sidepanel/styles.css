@@ -82,7 +82,8 @@ textarea {
 .ide-toolbar,
 .ide-toolbar-group,
 .composer-chip-zone,
-.conversation-hover-actions {
+.conversation-hover-actions,
+.composer-toolbar {
   display: flex;
   gap: 10px;
 }
@@ -918,8 +919,41 @@ textarea {
 .docked-composer textarea {
   min-height: 96px;
   border-radius: 16px;
-  padding: 12px 14px;
+  padding: 12px 60px 12px 14px;
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.composer-toolbar {
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.composer-input-shell {
+  position: relative;
+}
+
+.send-button {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.24);
+}
+
+.send-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.capture-button {
+  align-self: flex-start;
 }
 
 .sr-only {

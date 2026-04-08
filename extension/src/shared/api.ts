@@ -88,17 +88,18 @@ async function parseJsonOrFailure(response: Response) {
   return json;
 }
 
-export async function startRun(prompt: string, capture: CapturedFields, usernameContext: UsernameContext): Promise<StartRunApiResponse> {
+export async function startRun(prompt: string, capture: CapturedFields | null, usernameContext: UsernameContext): Promise<StartRunApiResponse> {
+  const normalizedCapture = capture && Object.keys(capture).length > 0 ? capture : null;
   const payload: RunStartRequest = {
     prompt,
-    capture,
+    ...(normalizedCapture ? { capture: normalizedCapture } : {}),
     context: {
       source: "chrome-extension",
       capturedAt: new Date().toISOString(),
       username: usernameContext.username,
       usernameSource: usernameContext.usernameSource,
-      pageTitle: capture.pageTitle,
-      pageUrl: capture.pageUrl
+      ...(normalizedCapture?.pageTitle ? { pageTitle: normalizedCapture.pageTitle } : {}),
+      ...(normalizedCapture?.pageUrl ? { pageUrl: normalizedCapture.pageUrl } : {})
     }
   };
 
@@ -121,6 +122,7 @@ export function createRunEventStream(runId: string, handlers: {
   onEvent: (event: NormalizedRunEvent) => void;
   onError: (error: Error) => void;
   onStatusChange?: (status: "connecting" | "streaming" | "reconnecting") => void;
+  shouldClose?: (event: NormalizedRunEvent) => boolean;
 }): EventSource {
   const streamUrl = new URL(`${extensionConfig.apiBaseUrl}/api/runs/${runId}/events`);
   if (extensionConfig.apiKey) {
@@ -131,7 +133,6 @@ export function createRunEventStream(runId: string, handlers: {
   const close = eventSource.close.bind(eventSource);
   let hasConnected = false;
   let hasReceivedEvent = false;
-  let terminalEventReceived = false;
   let closedByClient = false;
 
   const closeStream = () => {
@@ -156,11 +157,8 @@ export function createRunEventStream(runId: string, handlers: {
       const parsed = streamEventSchema.parse(JSON.parse((event as MessageEvent<string>).data));
       hasReceivedEvent = true;
       handlers.onStatusChange?.("streaming");
-      if (parsed.type === "result" || parsed.type === "error") {
-        terminalEventReceived = true;
-      }
       handlers.onEvent(parsed);
-      if (terminalEventReceived) {
+      if (handlers.shouldClose?.(parsed)) {
         closeStream();
       }
     } catch (error) {
@@ -169,7 +167,7 @@ export function createRunEventStream(runId: string, handlers: {
   });
 
   eventSource.addEventListener("error", () => {
-    if (terminalEventReceived || closedByClient) {
+    if (closedByClient) {
       return;
     }
 

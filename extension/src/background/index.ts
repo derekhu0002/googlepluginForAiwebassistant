@@ -162,6 +162,14 @@ async function getUsernameContextFromActiveTab(): Promise<UsernameContext> {
   return response ?? { username: "unknown", usernameSource: "unresolved_login_state" };
 }
 
+async function getBestEffortUsernameContext() {
+  try {
+    return await getUsernameContextFromActiveTab();
+  } catch {
+    return { username: "unknown", usernameSource: "unresolved_login_state" as const };
+  }
+}
+
 async function runCaptureOnly() {
   const activeTab = await getActiveTab();
   const rules = await getRules();
@@ -186,31 +194,56 @@ async function runCaptureOnly() {
   });
 }
 
+async function buildRunRecord(options: {
+  runId: string;
+  prompt: string;
+  usernameContext: UsernameContext;
+  capturedFields: CapturedFields | null;
+}) {
+  const canonicalCapture = options.capturedFields ? toCanonicalCapturedFields(options.capturedFields) : null;
+
+  const currentRun: RunRecord = {
+    runId: options.runId,
+    prompt: options.prompt,
+    username: options.usernameContext.username,
+    usernameSource: options.usernameContext.usernameSource,
+    softwareVersion: options.capturedFields?.software_version ?? "",
+    selectedSr: options.capturedFields?.selected_sr ?? "",
+    pageTitle: canonicalCapture?.pageTitle ?? "",
+    pageUrl: canonicalCapture?.pageUrl ?? "",
+    status: "streaming",
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    finalOutput: ""
+  };
+
+  return { currentRun, canonicalCapture };
+}
+
 /** @ArchitectureID: ELM-APP-EXT-RUN-ORCHESTRATION */
-async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?: string; retryFromMessageId?: string }) {
+async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?: string; retryFromMessageId?: string; capturePageData?: boolean }) {
   const { prompt } = options;
   const activeTab = await getActiveTab();
   const rules = await getRules();
   const matchedRule = findMatchingRule(activeTab.url, rules);
+  const shouldCapture = options.capturePageData ?? false;
 
   await patchState({
-    status: "collecting",
+    status: shouldCapture ? "collecting" : "streaming",
     error: null,
     errorMessage: "",
     matchedRule: matchedRule ? { id: matchedRule.id, name: matchedRule.name } : null
   });
 
-  const capturedFields = await collectFromActiveTab();
-  const usernameContext = await getUsernameContextFromActiveTab();
-  const canonicalCapture = toCanonicalCapturedFields(capturedFields);
-  const runResponse = await startRun(prompt, {
-    ...capturedFields,
-    pageTitle: canonicalCapture.pageTitle,
-    pageUrl: canonicalCapture.pageUrl,
-    metaDescription: canonicalCapture.metaDescription,
-    h1: canonicalCapture.h1,
-    selectedText: canonicalCapture.selectedText
-  }, usernameContext);
+  const capturedFields = shouldCapture ? await collectFromActiveTab() : null;
+  const usernameContext = shouldCapture ? await getUsernameContextFromActiveTab() : await getBestEffortUsernameContext();
+  const runCapture = capturedFields
+    ? {
+        ...capturedFields,
+        ...toCanonicalCapturedFields(capturedFields)
+      }
+    : null;
+  const runResponse = await startRun(prompt, runCapture, usernameContext);
 
   if (!runResponse.ok) {
     const domainError = normalizeDomainError(runResponse.error, createDomainError("ANALYSIS_ERROR", runResponse.error.message));
@@ -218,27 +251,19 @@ async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?:
     return { ok: false, error: domainError };
   }
 
-  const currentRun: RunRecord = {
+  const { currentRun } = await buildRunRecord({
     runId: runResponse.data.runId,
     prompt,
-    username: usernameContext.username,
-    usernameSource: usernameContext.usernameSource,
-    softwareVersion: capturedFields.software_version ?? "",
-    selectedSr: capturedFields.selected_sr ?? "",
-    pageTitle: canonicalCapture.pageTitle,
-    pageUrl: canonicalCapture.pageUrl,
-    status: "streaming",
-    startedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    finalOutput: ""
-  };
+    usernameContext,
+    capturedFields
+  });
 
   await patchState({
     status: "streaming",
     capturedFields,
     error: null,
     errorMessage: "",
-    lastCapturedUrl: activeTab.url ?? null,
+    lastCapturedUrl: capturedFields ? activeTab.url ?? null : (await getState()).lastCapturedUrl,
     currentRun,
     usernameContext,
     runPrompt: prompt,
@@ -254,10 +279,10 @@ async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?:
   return {
     ok: true,
     data: {
-      runId: currentRun.runId,
-      capturedFields,
-      usernameContext,
-      currentRun
+        runId: currentRun.runId,
+        capturedFields,
+        usernameContext,
+        currentRun
     }
   };
 }

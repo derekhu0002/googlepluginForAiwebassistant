@@ -95,6 +95,12 @@ class OpencodeAdapter:
             "title": title,
         }
 
+    def _response_text_data(self, message_id: str | None = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {"field": "text"}
+        if message_id:
+            payload["message_id"] = message_id
+        return payload
+
     def _extract_message_or_event_agent_name(self, payload: Any) -> str | None:
         if not isinstance(payload, dict):
             return None
@@ -414,7 +420,7 @@ class OpencodeAdapter:
             delta = properties.get("delta") or ""
             if delta:
                 run["last_text"] = f"{run.get('last_text', '')}{delta}"
-                return [self._next_event(run, "thinking", delta, data={"field": properties.get("field"), "message_id": properties.get("messageID")})]
+                return [self._next_event(run, "thinking", delta, data=self._response_text_data(properties.get("messageID")))]
             return []
 
         if event_type == "message.part.updated":
@@ -538,7 +544,7 @@ class OpencodeAdapter:
         if not final_item:
             if run.get("last_text"):
                 run["result_emitted"] = True
-                return self._next_event(run, "result", run["last_text"], data={"opencode_mode": "real", "session_id": run.get("session_id")})
+                return self._next_event(run, "result", run["last_text"], data={"opencode_mode": "real", "session_id": run.get("session_id"), **self._response_text_data(run.get("assistant_message_id"))})
             return None
 
         parts = final_item.get("parts") or []
@@ -554,6 +560,7 @@ class OpencodeAdapter:
                 "opencode_mode": "real",
                 "session_id": run.get("session_id"),
                 "message_id": (final_item.get("info") or {}).get("id"),
+                **self._response_text_data((final_item.get("info") or {}).get("id")),
             },
         )
 

@@ -4,6 +4,7 @@ import {
   buildChatStreamItems,
   buildConversationTurns,
   buildReasoningTimelineItems,
+  collectRunAssistantResponseText,
   getTimelineCardStatus,
   getTimelineStatusCopy,
   resolveTimelinePresentationState
@@ -229,6 +230,44 @@ describe("reasoning timeline view-model", () => {
     ]);
     expect(items[3]?.summary).toBe("最终完成");
     expect(items[3]?.processSummary).toContain("已记录 1 条推理过程");
+  });
+
+  it("merges multiple assistant response sources into one complete rendered answer", () => {
+    const events = [
+      createEvent(1, { type: "thinking", message: "第一段", data: { field: "text" } }),
+      createEvent(2, { type: "result", message: "第一段" }),
+      createEvent(3, { type: "thinking", message: "第二段", data: { field: "text" } }),
+      createEvent(4, { type: "result", message: "第一段第二段\n第三段" })
+    ];
+
+    expect(collectRunAssistantResponseText(events, "第一段第二段\n第三段")).toBe("第一段第二段\n第三段");
+
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "请回答",
+      events,
+      status: "done",
+      finalOutput: "第一段第二段\n第三段"
+    });
+
+    const assistantResult = items.find((item) => item.kind === "assistant_result");
+    expect(assistantResult?.summary).toBe("第一段第二段\n第三段");
+    expect(items.filter((item) => item.kind === "assistant_result")).toHaveLength(1);
+  });
+
+  it("keeps rendering later valid response content that arrives after a result event", () => {
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "请回答",
+      events: [
+        createEvent(1, { type: "result", message: "先到结果" }),
+        createEvent(2, { type: "thinking", message: "后续补充", data: { field: "text" } })
+      ],
+      status: "done",
+      finalOutput: "先到结果后续补充"
+    });
+
+    expect(items.find((item) => item.kind === "assistant_result")?.summary).toBe("先到结果后续补充");
   });
 
   it("keeps live and history mapping semantics aligned", () => {

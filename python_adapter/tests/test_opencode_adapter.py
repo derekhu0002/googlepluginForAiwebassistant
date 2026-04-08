@@ -32,6 +32,18 @@ def create_request() -> RunStartRequest:
     )
 
 
+def create_request_without_capture() -> RunStartRequest:
+    return RunStartRequest(
+        prompt="hello from adapter",
+        context=RunContext(
+            source="chrome-extension",
+            capturedAt="2026-04-01T00:00:00.000Z",
+            username="unknown",
+            usernameSource="unresolved_login_state",
+        ),
+    )
+
+
 class FakeStreamContext:
     def __init__(self, response: httpx.Response) -> None:
         self._response = response
@@ -161,6 +173,41 @@ def test_real_contract_uses_session_prompt_async_and_question_reply() -> None:
         assert clients[2].calls[0][1] == "/global/event"
         assert clients[3].calls[0][1] == "/question/req-1/reply"
         assert clients[4].calls[0][1] == "/session/ses-1/message"
+
+    anyio.run(scenario)
+
+
+def test_request_without_capture_defaults_to_generic_session_title() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+
+    response_sets = [
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [("GET", "/global/event", make_sse_response([]))],
+    ]
+
+    clients: list[FakeAsyncClient] = []
+
+    def factory(_timeout):
+        client = FakeAsyncClient(response_sets.pop(0))
+        clients.append(client)
+        return client
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        await adapter.start_run(create_request_without_capture())
+
+        assert clients[0].calls[0][3] == {
+            "title": "SR analysis",
+        }
 
     anyio.run(scenario)
 

@@ -149,6 +149,7 @@ export type RuntimeMessage =
       type: "START_RUN";
       payload: {
         prompt: string;
+        capturePageData?: boolean;
         retryFromRunId?: string;
         retryFromMessageId?: string;
       };

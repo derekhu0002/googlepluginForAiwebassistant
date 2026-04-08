@@ -307,11 +307,133 @@ export interface BuildChatStreamItemsOptions {
   pendingQuestionId?: string | null;
 }
 
+export interface AssistantResponseAggregation {
+  text: string;
+  firstResponseAt: string | null;
+  lastResponseAt: string | null;
+  preferredMessageId: string | null;
+  hasResponseEvent: boolean;
+}
+
 type TimelineRunStatus = RunRecord["status"];
 type TimelineStreamStatus = "idle" | "connecting" | "streaming" | "reconnecting" | "waiting_for_answer" | "done" | "error";
 
 function trimTerminalText(value?: string | null) {
   return value?.trim() || "";
+}
+
+function getEventDataValue(event: Pick<NormalizedRunEvent, "data">, key: string) {
+  return typeof event.data?.[key] === "string" ? event.data[key] as string : undefined;
+}
+
+export function isAssistantResponseDeltaEvent(event: NormalizedRunEvent) {
+  return event.type === "thinking" && getEventDataValue(event, "field") === "text";
+}
+
+export function isAssistantResponseSnapshotEvent(event: NormalizedRunEvent) {
+  return event.type === "result";
+}
+
+function getTextOverlapLength(left: string, right: string) {
+  const maxOverlap = Math.min(left.length, right.length);
+
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    if (left.slice(-size) === right.slice(0, size)) {
+      return size;
+    }
+  }
+
+  return 0;
+}
+
+function mergeAssistantResponseDelta(current: string, delta: string) {
+  if (!delta) {
+    return current;
+  }
+
+  if (!current) {
+    return delta;
+  }
+
+  if (current.endsWith(delta)) {
+    return current;
+  }
+
+  const overlap = getTextOverlapLength(current, delta);
+  return `${current}${delta.slice(overlap)}`;
+}
+
+function mergeAssistantResponseSnapshot(current: string, snapshot: string) {
+  const next = snapshot.trim();
+  if (!next) {
+    return current;
+  }
+
+  const existing = current.trim();
+  if (!existing) {
+    return next;
+  }
+
+  if (existing === next || existing.endsWith(next)) {
+    return existing;
+  }
+
+  if (next.includes(existing)) {
+    return next;
+  }
+
+  if (existing.includes(next)) {
+    return existing;
+  }
+
+  const overlap = getTextOverlapLength(existing, next);
+  if (overlap > 0) {
+    return `${existing}${next.slice(overlap)}`;
+  }
+
+  return joinUniqueParagraphs([existing, next]);
+}
+
+export function collectAssistantResponseAggregation(events: NormalizedRunEvent[], finalOutput?: string | null): AssistantResponseAggregation {
+  let aggregatedText = "";
+  let firstResponseAt: string | null = null;
+  let lastResponseAt: string | null = null;
+  let preferredMessageId: string | null = null;
+  let hasResponseEvent = false;
+
+  for (const event of events) {
+    if (isAssistantResponseDeltaEvent(event)) {
+      aggregatedText = mergeAssistantResponseDelta(aggregatedText, event.message);
+      firstResponseAt = firstResponseAt ?? event.createdAt;
+      lastResponseAt = event.createdAt;
+      hasResponseEvent = true;
+      continue;
+    }
+
+    if (isAssistantResponseSnapshotEvent(event)) {
+      aggregatedText = mergeAssistantResponseSnapshot(aggregatedText, event.message);
+      firstResponseAt = firstResponseAt ?? event.createdAt;
+      lastResponseAt = event.createdAt;
+      preferredMessageId = event.id;
+      hasResponseEvent = true;
+    }
+  }
+
+  if (finalOutput?.trim()) {
+    aggregatedText = mergeAssistantResponseSnapshot(aggregatedText, finalOutput);
+  }
+
+  return {
+    text: aggregatedText.trim(),
+    firstResponseAt,
+    lastResponseAt,
+    preferredMessageId,
+    hasResponseEvent
+  };
+}
+
+export function collectRunAssistantResponseText(events: NormalizedRunEvent[], finalOutput?: string | null) {
+  return collectAssistantResponseAggregation(events, finalOutput).text;
 }
 
 export function hasTerminalResultEvidence(options: {
@@ -368,19 +490,19 @@ export function resolveTimelinePresentationState(options: {
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildChatStreamItems(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
   const streamItems: ChatStreamItemModel[] = [];
-  const reasoningItems = buildReasoningTimelineItems(options.events);
+  const assistantResponse = collectAssistantResponseAggregation(options.events, options.finalOutput);
+  const reasoningItems = buildReasoningTimelineItems(options.events.filter((event) => !isAssistantResponseDeltaEvent(event)));
   const answersByQuestionId = new Map<string, AnswerRecord[]>();
   const prompt = options.prompt?.trim() || "";
-  const finalOutput = options.finalOutput?.trim() || "";
   const errorMessage = options.errorMessage?.trim() || "";
   const fallbackTimestamp = options.updatedAt ?? reasoningItems[reasoningItems.length - 1]?.updatedAt ?? "1970-01-01T00:00:00.000Z";
   const presentationState = resolveTimelinePresentationState({
     events: options.events,
     runStatus: options.status,
-    finalOutput,
+    finalOutput: assistantResponse.text,
     errorMessage
   });
-  let hasResultItem = false;
+  const hasResultEvent = options.events.some((event) => event.type === "result");
   let hasErrorItem = false;
   let pendingProcessItems: TimelineCardModel[] = [];
 
@@ -459,25 +581,6 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
     }
 
     if (item.type === "result") {
-      hasResultItem = true;
-      streamItems.push({
-        id: item.id,
-        runId: item.runId,
-        kind: "assistant_result",
-        title: "Assistant",
-        summary: item.summary || finalOutput,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-        primaryType: "result",
-        processItems: pendingProcessItems,
-        processSummary: createReasoningSummary(pendingProcessItems),
-        sourceQuestionPrompt: prompt,
-        supportsCopy: true,
-        supportsRetry: true,
-        supportsFeedback: true,
-        feedbackState: options.feedbackByMessageId?.[item.id] ?? createIdleFeedbackState()
-      });
-      pendingProcessItems = [];
       continue;
     }
 
@@ -501,7 +604,29 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
     pendingProcessItems = [];
   }
 
-  if (pendingProcessItems.length) {
+  if (assistantResponse.text) {
+    const shouldRenderAsFinalResult = hasResultEvent || presentationState.runStatus === "done";
+    streamItems.push({
+      id: assistantResponse.preferredMessageId ?? `synthetic-result-${options.runId ?? "standalone"}`,
+      runId: options.runId ?? pendingProcessItems[0]?.runId ?? "standalone-run",
+      kind: shouldRenderAsFinalResult ? "assistant_result" : "assistant_progress",
+      title: "Assistant",
+      summary: assistantResponse.text,
+      createdAt: assistantResponse.firstResponseAt ?? pendingProcessItems[0]?.createdAt ?? options.updatedAt ?? new Date().toISOString(),
+      updatedAt: assistantResponse.lastResponseAt ?? pendingProcessItems[pendingProcessItems.length - 1]?.updatedAt ?? options.updatedAt ?? new Date().toISOString(),
+      primaryType: shouldRenderAsFinalResult ? "result" : pendingProcessItems[pendingProcessItems.length - 1]?.type ?? "thinking",
+      processItems: pendingProcessItems,
+      processSummary: createReasoningSummary(pendingProcessItems),
+      sourceQuestionPrompt: prompt,
+      supportsCopy: true,
+      supportsRetry: shouldRenderAsFinalResult,
+      supportsFeedback: shouldRenderAsFinalResult,
+      feedbackState: shouldRenderAsFinalResult
+        ? options.feedbackByMessageId?.[assistantResponse.preferredMessageId ?? `synthetic-result-${options.runId ?? "standalone"}`] ?? createIdleFeedbackState()
+        : undefined
+    });
+    pendingProcessItems = [];
+  } else if (pendingProcessItems.length) {
     streamItems.push({
       id: `assistant-progress-${options.runId ?? "standalone"}-${pendingProcessItems[pendingProcessItems.length - 1]?.id ?? "tail"}`,
       runId: options.runId ?? pendingProcessItems[0]?.runId ?? "standalone-run",
@@ -519,26 +644,6 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
       supportsFeedback: false
     });
     pendingProcessItems = [];
-  }
-
-  if (!hasResultItem && finalOutput) {
-    streamItems.push({
-      id: `synthetic-result-${options.runId ?? "standalone"}`,
-      runId: options.runId ?? "standalone-run",
-      kind: "assistant_result",
-      title: "Assistant",
-      summary: finalOutput,
-      createdAt: fallbackTimestamp,
-      updatedAt: fallbackTimestamp,
-      primaryType: "result",
-      processItems: [],
-      processSummary: "",
-      sourceQuestionPrompt: prompt,
-      supportsCopy: true,
-      supportsRetry: true,
-      supportsFeedback: true,
-      feedbackState: options.feedbackByMessageId?.[`synthetic-result-${options.runId ?? "standalone"}`] ?? createIdleFeedbackState()
-    });
   }
 
   if (!hasErrorItem && presentationState.runStatus === "error" && errorMessage) {
@@ -561,7 +666,7 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
   }
 
   const lastItem = streamItems[streamItems.length - 1] ?? null;
-  if (!hasResultItem && !hasErrorItem && (presentationState.runStatus === "streaming" || presentationState.runStatus === "waiting_for_answer")) {
+  if (!assistantResponse.text && !hasErrorItem && (presentationState.runStatus === "streaming" || presentationState.runStatus === "waiting_for_answer")) {
     const alreadyHasPendingQuestion = lastItem?.kind === "assistant_question" && lastItem.pendingQuestion;
     if (!alreadyHasPendingQuestion) {
       const statusSummary = presentationState.runStatus === "waiting_for_answer"
