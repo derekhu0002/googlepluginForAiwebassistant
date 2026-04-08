@@ -1496,6 +1496,39 @@ describe("side panel host permission request flow", () => {
     expect(startButton?.disabled).toBe(false);
   });
 
+  it("keeps the send button enabled for same-session follow-up when final output exists but status is still streaming", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        activeSessionId: "ses-1",
+        status: "streaming",
+        stream: {
+          runId: "run-1",
+          status: "streaming",
+          pendingQuestionId: null
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          sessionId: "ses-1",
+          status: "done",
+          updatedAt: "2026-04-02T00:00:03.000Z",
+          finalOutput: "上一轮回答已完成"
+        },
+        runEvents: [
+          createRunEvent(1, { type: "result", message: "上一轮回答已完成" })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = container.querySelector("button[aria-label='发送消息']") as HTMLButtonElement | null;
+    expect(startButton?.disabled).toBe(false);
+  });
+
   it("renders assistant markdown in the same bubble while streaming deltas", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],

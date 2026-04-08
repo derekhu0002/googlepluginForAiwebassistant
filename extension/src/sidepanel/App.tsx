@@ -255,6 +255,9 @@ export function App() {
   const selectedHistoryDetailRef = useRef(selectedHistoryDetail);
 
   const isBusy = state.status === "collecting" || state.status === "streaming";
+  const hasActiveSession = Boolean(state.activeSessionId ?? state.currentRun?.sessionId);
+  const canSendWhileStreaming = state.status === "streaming" && hasActiveSession && hasTerminalRunEvidence(state);
+  const isSendDisabled = state.status === "collecting" || (state.status === "streaming" && !canSendWhileStreaming) || !prompt.trim();
   const isEmbedded = useMemo(() => new URLSearchParams(window.location.search).get("mode") === "embedded", []);
   const questionEvent = useMemo(() => getActiveQuestionEvent(state.runEvents, state.stream.pendingQuestionId), [state.runEvents, state.stream.pendingQuestionId]);
 
@@ -774,7 +777,7 @@ export function App() {
               className="send-button"
               aria-label={questionEvent?.question ? "发送补充说明" : "发送消息"}
               title={questionEvent?.question ? "发送补充说明" : "发送消息"}
-              disabled={isBusy || !prompt.trim()}
+              disabled={isSendDisabled}
               onClick={() => startStreamingRun({ capturePageData: false })}
             >
               <SendIcon />
