@@ -7,7 +7,7 @@ import { initialAssistantState } from "../shared/state";
 import type { NormalizedRunEvent, RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
-import { collectRunAssistantResponseText, resolveTimelinePresentationState } from "./reasoningTimeline";
+import { collectRunAssistantResponseText, isAssistantResponseDeltaEvent, resolveTimelinePresentationState } from "./reasoningTimeline";
 import { ReasoningTimeline } from "./reasoningTimelineView";
 import { useRunHistory } from "./useRunHistory";
 
@@ -76,6 +76,45 @@ function toTimestamp(value: string | null | undefined) {
 
   const timestamp = new Date(value).getTime();
   return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function deriveLifecycleStatus(current: AssistantState, event: NormalizedRunEvent, nextEvents: NormalizedRunEvent[]) {
+  const pendingQuestionId = getNextPendingQuestionId(current.stream.pendingQuestionId, event);
+  const hasResultEvidence = nextEvents.some((item) => item.type === "result");
+
+  if (event.type === "error") {
+    return {
+      assistantStatus: "error" as const,
+      runStatus: "error" as const,
+      streamStatus: "error" as const,
+      pendingQuestionId: null as string | null
+    };
+  }
+
+  if (event.type === "question") {
+    return {
+      assistantStatus: "waiting_for_answer" as const,
+      runStatus: "waiting_for_answer" as const,
+      streamStatus: "waiting_for_answer" as const,
+      pendingQuestionId
+    };
+  }
+
+  if (event.type === "result" || (isAssistantResponseDeltaEvent(event) && hasResultEvidence)) {
+    return {
+      assistantStatus: "done" as const,
+      runStatus: "done" as const,
+      streamStatus: "done" as const,
+      pendingQuestionId
+    };
+  }
+
+  return {
+    assistantStatus: pendingQuestionId ? "waiting_for_answer" as const : "streaming" as const,
+    runStatus: pendingQuestionId ? "waiting_for_answer" as const : "streaming" as const,
+    streamStatus: pendingQuestionId ? "waiting_for_answer" as const : "streaming" as const,
+    pendingQuestionId
+  };
 }
 
 const COMPOSER_PLACEHOLDER_CHIPS = [
@@ -215,9 +254,16 @@ export function App() {
   const historyRef = useRef(history);
   const selectedHistoryDetailRef = useRef(selectedHistoryDetail);
 
-  const isBusy = state.status === "collecting" || state.status === "streaming" || state.status === "waiting_for_answer";
+  const isBusy = state.status === "collecting" || state.status === "streaming";
   const isEmbedded = useMemo(() => new URLSearchParams(window.location.search).get("mode") === "embedded", []);
   const questionEvent = useMemo(() => getActiveQuestionEvent(state.runEvents, state.stream.pendingQuestionId), [state.runEvents, state.stream.pendingQuestionId]);
+
+  async function syncRunStateToBackground(nextState: Pick<AssistantState, "status" | "activeSessionId" | "capturedFields" | "runPrompt" | "runEvents" | "currentRun" | "answers" | "error" | "errorMessage" | "matchedRule" | "lastCapturedUrl" | "usernameContext" | "stream">) {
+    await sendMessage<{ ok: boolean }>({
+      type: "SYNC_RUN_STATE",
+      payload: nextState
+    }).catch(() => ({ ok: false }));
+  }
 
   async function loadBaseState() {
     const [currentState, currentRules, context] = await Promise.all([
@@ -431,32 +477,51 @@ export function App() {
 
         setState((current) => {
           const nextEvents = [...current.runEvents, event];
+          const lifecycleStatus = deriveLifecycleStatus(current, event, nextEvents);
           const nextRun = current.currentRun && current.currentRun.runId === event.runId
             ? {
                 ...current.currentRun,
-                status: event.type === "question" ? "waiting_for_answer" : event.type === "result" ? "done" : event.type === "error" ? "error" : current.currentRun.status,
+                status: lifecycleStatus.runStatus,
                 updatedAt: event.createdAt,
                 finalOutput: collectRunAssistantResponseText(nextEvents, current.currentRun.finalOutput),
                 errorMessage: event.type === "error" ? event.message : current.currentRun.errorMessage
               }
             : current.currentRun;
 
+          const nextState = {
+            ...current,
+            runEvents: nextEvents,
+            currentRun: nextRun,
+            status: lifecycleStatus.assistantStatus,
+            errorMessage: event.type === "error" ? event.message : current.errorMessage,
+            stream: {
+              runId: event.runId,
+              status: lifecycleStatus.streamStatus,
+              pendingQuestionId: lifecycleStatus.pendingQuestionId
+            }
+          };
+
           if (nextRun) {
             saveRun(nextRun).catch(() => undefined);
           }
 
-          return {
-            ...current,
-            runEvents: nextEvents,
-            currentRun: nextRun,
-            status: event.type === "question" ? "waiting_for_answer" : event.type === "result" ? "done" : event.type === "error" ? "error" : "streaming",
-            errorMessage: event.type === "error" ? event.message : current.errorMessage,
-             stream: {
-               runId: event.runId,
-               status: event.type === "question" ? "waiting_for_answer" : event.type === "result" ? "done" : event.type === "error" ? "error" : "streaming",
-               pendingQuestionId: getNextPendingQuestionId(current.stream.pendingQuestionId, event)
-             }
-           };
+          syncRunStateToBackground({
+            status: nextState.status,
+            activeSessionId: nextState.activeSessionId,
+            capturedFields: nextState.capturedFields,
+            runPrompt: nextState.runPrompt,
+            runEvents: nextState.runEvents,
+            currentRun: nextState.currentRun,
+            answers: nextState.answers,
+            error: nextState.error,
+            errorMessage: nextState.errorMessage,
+            matchedRule: nextState.matchedRule,
+            lastCapturedUrl: nextState.lastCapturedUrl,
+            usernameContext: nextState.usernameContext,
+            stream: nextState.stream
+          }).catch(() => undefined);
+
+          return nextState;
          });
 
         refresh().catch(() => undefined);
@@ -466,7 +531,7 @@ export function App() {
           ...current,
           stream: {
             ...current.stream,
-            status
+            status: current.stream.status === "done" || current.stream.status === "error" ? current.stream.status : status
           }
         }));
       },
@@ -503,6 +568,13 @@ export function App() {
       submittedAt
     };
     await saveAnswer(answerRecord);
+    const nextAnswers = [...state.answers, answerRecord];
+    const nextCurrentRun = state.currentRun ? {
+      ...state.currentRun,
+      status: "streaming" as const,
+      updatedAt: submittedAt
+    } : state.currentRun;
+
     setState((current) => ({
       ...current,
       currentRun: current.currentRun ? {
@@ -518,6 +590,25 @@ export function App() {
         pendingQuestionId: null
       }
     }));
+    await syncRunStateToBackground({
+      status: "streaming",
+      activeSessionId: state.activeSessionId,
+      capturedFields: state.capturedFields,
+      runPrompt: state.runPrompt,
+      runEvents: state.runEvents,
+      currentRun: nextCurrentRun,
+      answers: nextAnswers,
+      error: state.error,
+      errorMessage: state.errorMessage,
+      matchedRule: state.matchedRule,
+      lastCapturedUrl: state.lastCapturedUrl,
+      usernameContext: state.usernameContext,
+      stream: {
+        ...state.stream,
+        status: "streaming",
+        pendingQuestionId: null
+      }
+    });
     refresh().catch(() => undefined);
   }
 

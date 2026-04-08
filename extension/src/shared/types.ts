@@ -156,6 +156,10 @@ export type RuntimeMessage =
         retryFromMessageId?: string;
       };
     }
+  | {
+      type: "SYNC_RUN_STATE";
+      payload: Pick<AssistantState, "status" | "activeSessionId" | "capturedFields" | "runPrompt" | "runEvents" | "currentRun" | "answers" | "error" | "errorMessage" | "matchedRule" | "lastCapturedUrl" | "usernameContext" | "stream">;
+    }
   | { type: "SUBMIT_QUESTION_ANSWER"; payload: QuestionAnswerRequest }
   | { type: "RECAPTURE" }
   | { type: "CLEAR_RESULT" }

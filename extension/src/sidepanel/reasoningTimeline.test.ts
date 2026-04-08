@@ -5,6 +5,7 @@ import {
   buildConversationTurns,
   buildReasoningTimelineItems,
   collectRunAssistantResponseText,
+  collectAssistantResponseAggregation,
   getTimelineCardStatus,
   getTimelineStatusCopy,
   resolveTimelinePresentationState
@@ -269,6 +270,29 @@ describe("reasoning timeline view-model", () => {
     });
 
     expect(items.find((item) => item.kind === "assistant_result")?.summary).toBe("先到结果后续补充");
+  });
+
+  it("keeps a stable assistant message id across streaming deltas and final result", () => {
+    const aggregation = collectAssistantResponseAggregation([
+      createEvent(1, { type: "thinking", message: "# 标题", data: { field: "text", message_id: "msg-1" } }),
+      createEvent(2, { type: "result", message: "# 标题\n\n正文", data: { message_id: "msg-1" } })
+    ]);
+
+    expect(aggregation.preferredMessageId).toBe("msg-1");
+
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "请回答",
+      events: [
+        createEvent(1, { type: "thinking", message: "# 标题", data: { field: "text", message_id: "msg-1" } }),
+        createEvent(2, { type: "result", message: "# 标题\n\n正文", data: { message_id: "msg-1" } })
+      ],
+      status: "done",
+      finalOutput: "# 标题\n\n正文"
+    });
+
+    expect(items.filter((item) => item.kind === "assistant_result")).toHaveLength(1);
+    expect(items.find((item) => item.kind === "assistant_result")?.id).toBe("msg-1");
   });
 
   it("keeps live and history mapping semantics aligned", () => {

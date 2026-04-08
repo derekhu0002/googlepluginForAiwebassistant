@@ -1421,6 +1421,100 @@ describe("side panel host permission request flow", () => {
     expect(container.querySelector(".question-card")).toBeNull();
   });
 
+  it("re-enables the send button after an assistant response completes", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = container.querySelector("button[aria-label='发送消息']") as HTMLButtonElement | null;
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(startButton?.disabled).toBe(true);
+
+    const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
+    const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void>; onStatusChange?: (status: "connecting" | "streaming" | "reconnecting") => void };
+
+    await act(async () => {
+      await handlers.onEvent?.(createRunEvent(1, { type: "result", message: "最终回答" }));
+    });
+    await flushUi();
+
+    await act(async () => {
+      handlers.onStatusChange?.("streaming");
+    });
+    await flushUi();
+
+    expect(startButton?.disabled).toBe(false);
+    expect(container.textContent).toContain("最终回答");
+  });
+
+  it("keeps the send button enabled while waiting for a follow-up answer", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "waiting_for_answer",
+        stream: {
+          runId: "run-1",
+          status: "waiting_for_answer",
+          pendingQuestionId: "q-1"
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "waiting_for_answer",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [
+          createRunEvent(1, {
+            type: "question",
+            message: "请选择处理方式",
+            question: {
+              questionId: "q-1",
+              title: "需要确认",
+              message: "请选择处理方式",
+              options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+              allowFreeText: false
+            }
+          })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = container.querySelector("button[aria-label='发送补充说明']") as HTMLButtonElement | null;
+    expect(startButton?.disabled).toBe(false);
+  });
+
+  it("renders assistant markdown in the same bubble while streaming deltas", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        runEvents: [createRunEvent(1, { type: "thinking", message: "# 标题", data: { field: "text", message_id: "msg-1" } })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+    await flushAllTimers();
+
+    expect(container.querySelectorAll(".turn-assistant")).toHaveLength(1);
+    expect(container.querySelectorAll(".turn-assistant h1")).toHaveLength(1);
+    expect(container.textContent).toContain("标题");
+  });
+
   it("renders generic streaming copy without raw tool details", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],

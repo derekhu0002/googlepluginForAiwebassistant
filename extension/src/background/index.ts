@@ -35,6 +35,15 @@ async function patchState(partial: Partial<AssistantState>) {
   });
 }
 
+async function syncRunState(partial: Pick<AssistantState, "status" | "activeSessionId" | "capturedFields" | "runPrompt" | "runEvents" | "currentRun" | "answers" | "error" | "errorMessage" | "matchedRule" | "lastCapturedUrl" | "usernameContext" | "stream">) {
+  const current = await getState();
+  await setState({
+    ...current,
+    ...partial,
+    lastUpdatedAt: new Date().toISOString()
+  });
+}
+
 async function getActiveTabId(): Promise<number> {
   const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   const activeTabId = tabs[0]?.id;
@@ -375,6 +384,10 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
           break;
         case "START_RUN":
           sendResponse(await startRunFromActiveTab(message.payload));
+          break;
+        case "SYNC_RUN_STATE":
+          await syncRunState(message.payload);
+          sendResponse({ ok: true });
           break;
         case "RECAPTURE":
           await runCaptureOnly();

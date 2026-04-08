@@ -573,6 +573,96 @@ describe("background rule-driven capture flow", () => {
     expect(sendMessage).toHaveBeenCalledWith(1, { type: "TOGGLE_EMBEDDED_PANEL" });
   });
 
+  it("persists synced live run state from the sidepanel", async () => {
+    const storageState: Record<string, unknown> = {
+      "ai-web-assistant-state": initialAssistantState
+    };
+    const listenerRegistry: { handler?: (message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean } = {};
+
+    vi.stubGlobal("chrome", {
+      tabs: {
+        query: vi.fn().mockResolvedValue([{ id: 1, url: "https://example.com/page" }]),
+        get: vi.fn().mockResolvedValue({ id: 1, url: "https://example.com/page" }),
+        sendMessage: vi.fn()
+      },
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: storageState[key] })),
+          set: vi.fn(async (payload: Record<string, unknown>) => Object.assign(storageState, payload))
+        }
+      },
+      permissions: {
+        contains: vi.fn().mockResolvedValue(true),
+        request: vi.fn().mockResolvedValue(true)
+      },
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        onMessage: { addListener: vi.fn((handler) => { listenerRegistry.handler = handler; }) },
+        onInstalled: { addListener: vi.fn() }
+      },
+      sidePanel: {
+        setOptions: vi.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
+        setPanelBehavior: vi.fn().mockResolvedValue(undefined)
+      },
+      scripting: {
+        executeScript: vi.fn().mockResolvedValue(undefined)
+      }
+    } as unknown as typeof chrome);
+
+    await import("./index");
+
+    const response = await new Promise<unknown>((resolve) => {
+      listenerRegistry.handler?.({
+        type: "SYNC_RUN_STATE",
+        payload: {
+          status: "done",
+          activeSessionId: "ses-1",
+          capturedFields: null,
+          runPrompt: "hello",
+          runEvents: [{
+            id: "event-1",
+            runId: "run-1",
+            type: "result",
+            createdAt: "2026-04-02T00:00:01.000Z",
+            sequence: 1,
+            message: "最终回答"
+          }],
+          currentRun: {
+            runId: "run-1",
+            sessionId: "ses-1",
+            prompt: "hello",
+            username: "alice",
+            usernameSource: "dom_text",
+            softwareVersion: "",
+            selectedSr: "",
+            pageTitle: "",
+            pageUrl: "",
+            status: "done",
+            startedAt: "2026-04-02T00:00:00.000Z",
+            updatedAt: "2026-04-02T00:00:01.000Z",
+            finalOutput: "最终回答"
+          },
+          answers: [],
+          error: null,
+          errorMessage: "",
+          matchedRule: null,
+          lastCapturedUrl: null,
+          usernameContext: null,
+          stream: {
+            runId: "run-1",
+            status: "done",
+            pendingQuestionId: null
+          }
+        }
+      }, {}, resolve);
+    }) as { ok: boolean };
+
+    expect(response.ok).toBe(true);
+    expect((storageState["ai-web-assistant-state"] as { currentRun: { finalOutput: string }; stream: { status: string } }).currentRun.finalOutput).toBe("最终回答");
+    expect((storageState["ai-web-assistant-state"] as { stream: { status: string } }).stream.status).toBe("done");
+  });
+
   it("returns context with controlled permission request and activeTab fallback hint", async () => {
     const storageState: Record<string, unknown> = {
       "ai-web-assistant-rules": [

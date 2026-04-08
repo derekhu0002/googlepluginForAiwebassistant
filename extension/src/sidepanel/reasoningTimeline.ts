@@ -326,6 +326,10 @@ function getEventDataValue(event: Pick<NormalizedRunEvent, "data">, key: string)
   return typeof event.data?.[key] === "string" ? event.data[key] as string : undefined;
 }
 
+function getAssistantResponseMessageId(event: Pick<NormalizedRunEvent, "id" | "data">) {
+  return getEventDataValue(event, "message_id") ?? event.id;
+}
+
 export function isAssistantResponseDeltaEvent(event: NormalizedRunEvent) {
   return event.type === "thinking" && getEventDataValue(event, "field") === "text";
 }
@@ -407,6 +411,7 @@ export function collectAssistantResponseAggregation(events: NormalizedRunEvent[]
       aggregatedText = mergeAssistantResponseDelta(aggregatedText, event.message);
       firstResponseAt = firstResponseAt ?? event.createdAt;
       lastResponseAt = event.createdAt;
+      preferredMessageId = preferredMessageId ?? getAssistantResponseMessageId(event);
       hasResponseEvent = true;
       continue;
     }
@@ -415,7 +420,7 @@ export function collectAssistantResponseAggregation(events: NormalizedRunEvent[]
       aggregatedText = mergeAssistantResponseSnapshot(aggregatedText, event.message);
       firstResponseAt = firstResponseAt ?? event.createdAt;
       lastResponseAt = event.createdAt;
-      preferredMessageId = event.id;
+      preferredMessageId = preferredMessageId ?? getAssistantResponseMessageId(event);
       hasResponseEvent = true;
     }
   }

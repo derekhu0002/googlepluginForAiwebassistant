@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
+import ReactMarkdown from "react-markdown";
 import { submitMessageFeedback } from "../shared/api";
 import type { AnswerRecord, MessageFeedbackValue, QuestionPayload, RunRecord } from "../shared/protocol";
 import type { MessageFeedbackUiState, StreamConnectionState } from "../shared/types";
@@ -105,6 +106,14 @@ function renderAnswerLabel(answer?: AnswerRecord) {
 
 function normalizeFeedbackFailureMessage(message: string) {
   return message.trim() || "反馈提交失败";
+}
+
+function MarkdownMessage({ text, className }: { text: string; className: string }) {
+  return (
+    <div className={className}>
+      <ReactMarkdown>{text}</ReactMarkdown>
+    </div>
+  );
 }
 
 function InlineQuestionComposer({
@@ -216,7 +225,11 @@ function ChatStreamTurn({
           <small>{formatTimestamp(item.updatedAt)}</small>
         </div>
 
-        {messageText ? <p className={messageClassName}>{messageText}</p> : null}
+        {messageText ? (
+          isUser
+            ? <p className={messageClassName}>{messageText}</p>
+            : <MarkdownMessage text={messageText} className={messageClassName} />
+        ) : null}
         {processPreview ? <p className="conversation-process-summary">{processPreview}</p> : null}
 
         {!isUser ? (
@@ -435,26 +448,26 @@ export function ReasoningTimeline({
       >
         {items.length ? items.map((item, index) => (
           <ChatStreamTurn
-            key={`${item.id}:${item.updatedAt}`}
+            key={item.id}
             item={item}
-              status={getTimelineCardStatus({
-                type: item.primaryType === "user_prompt" || item.primaryType === "user_answer" ? "result" : item.primaryType,
-                isLast: index === items.length - 1,
-                live,
-                streamStatus: presentationState.streamStatus,
-                runStatus: presentationState.runStatus
-              })}
-              animate={live
-                && (presentationState.streamStatus === "connecting" || presentationState.streamStatus === "streaming" || presentationState.streamStatus === "reconnecting")
-                && index === items.length - 1
-                && (item.kind === "assistant_progress" || item.kind === "assistant_result")}
-              live={live}
-              onCopy={handleCopy}
-              onFeedback={handleFeedback}
-              onRetry={handleRetry}
-             onQuestionSubmit={item.kind === "assistant_question" ? onQuestionSubmit : undefined}
-             questionSubmitDisabled={questionSubmitDisabled}
-           />
+            status={getTimelineCardStatus({
+              type: item.primaryType === "user_prompt" || item.primaryType === "user_answer" ? "result" : item.primaryType,
+              isLast: index === items.length - 1,
+              live,
+              streamStatus: presentationState.streamStatus,
+              runStatus: presentationState.runStatus
+            })}
+            animate={live
+              && (presentationState.streamStatus === "connecting" || presentationState.streamStatus === "streaming" || presentationState.streamStatus === "reconnecting")
+              && index === items.length - 1
+              && (item.kind === "assistant_progress" || item.kind === "assistant_result")}
+            live={live}
+            onCopy={handleCopy}
+            onFeedback={handleFeedback}
+            onRetry={handleRetry}
+            onQuestionSubmit={item.kind === "assistant_question" ? onQuestionSubmit : undefined}
+            questionSubmitDisabled={questionSubmitDisabled}
+          />
         )) : <p className="empty-state chat-empty-state">{emptyText}</p>}
       </div>
 
