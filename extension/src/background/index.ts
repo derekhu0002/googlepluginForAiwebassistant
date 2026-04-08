@@ -221,6 +221,7 @@ async function buildRunRecord(options: {
 }
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-ORCHESTRATION */
+/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 async function startRunFromActiveTab(options: { prompt: string; retryFromRunId?: string; retryFromMessageId?: string; capturePageData?: boolean }) {
   const { prompt } = options;
   const activeTab = await getActiveTab();

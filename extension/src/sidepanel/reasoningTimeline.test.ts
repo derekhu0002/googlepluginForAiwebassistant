@@ -22,6 +22,7 @@ function createEvent(sequence: number, overrides: Partial<NormalizedRunEvent> = 
   };
 }
 
+/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 describe("reasoning timeline view-model", () => {
   it("aggregates consecutive compact thinking events into one reading unit", () => {
     const items = buildReasoningTimelineItems([

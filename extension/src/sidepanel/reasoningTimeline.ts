@@ -394,6 +394,7 @@ function mergeAssistantResponseSnapshot(current: string, snapshot: string) {
   return joinUniqueParagraphs([existing, next]);
 }
 
+/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 export function collectAssistantResponseAggregation(events: NormalizedRunEvent[], finalOutput?: string | null): AssistantResponseAggregation {
   let aggregatedText = "";
   let firstResponseAt: string | null = null;
@@ -488,6 +489,7 @@ export function resolveTimelinePresentationState(options: {
 }
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 export function buildChatStreamItems(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
   const streamItems: ChatStreamItemModel[] = [];
   const assistantResponse = collectAssistantResponseAggregation(options.events, options.finalOutput);

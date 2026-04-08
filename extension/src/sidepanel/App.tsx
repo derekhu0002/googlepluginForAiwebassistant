@@ -196,6 +196,7 @@ function SendIcon() {
 }
 
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL */
+/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 export function App() {
   const [state, setState] = useState<AssistantState>(initialAssistantState);
   const [rules, setRules] = useState<PageRule[]>([]);

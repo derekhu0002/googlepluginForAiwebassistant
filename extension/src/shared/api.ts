@@ -88,6 +88,7 @@ async function parseJsonOrFailure(response: Response) {
   return json;
 }
 
+/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 export async function startRun(prompt: string, capture: CapturedFields | null, usernameContext: UsernameContext): Promise<StartRunApiResponse> {
   const normalizedCapture = capture && Object.keys(capture).length > 0 ? capture : null;
   const payload: RunStartRequest = {
@@ -118,6 +119,7 @@ export async function startRun(prompt: string, capture: CapturedFields | null, u
   }
 }
 
+/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 export function createRunEventStream(runId: string, handlers: {
   onEvent: (event: NormalizedRunEvent) => void;
   onError: (error: Error) => void;

@@ -26,6 +26,7 @@ class FakeEventSource {
   }
 }
 
+/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 describe("streaming api client", () => {
   beforeEach(() => {
     vi.resetModules();
