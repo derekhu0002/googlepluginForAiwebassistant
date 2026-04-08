@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "Requirement REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER is decomposed into a brownfield extension refactor across sidepanel composer UX, background run orchestration, shared SSE lifecycle handling, and sidepanel response aggregation. Design direction: decouple page capture from send while reusing the existing START_RUN orchestration path and single AssistantState status model; keep page capture as an explicit independent action; move send affordance into the composer bottom-right with paper-plane semantics; define complete assistant rendering as a multi-source merge where the primary fact source is all valid assistant-visible response content observed for the same run, with finalOutput used only as persistence/fallback supplementation; prevent premature terminal UI or stream shutdown from dropping later valid assistant content; make the conversation mapper the sole source of final rendered assistant text so live and history views stay aligned."
+      "value": "ELM-008 is designed as a brownfield extension of existing sidepanel, extension run orchestration, and python_adapter session flow modules. The rules configuration center will adopt the same collapsed-by-default interaction pattern already used for secondary panels, with expansion only by explicit user action. Active conversation continuity will be preserved by reusing the current opencode session across consecutive follow-up prompts until the user explicitly resets or replaces the conversation, requiring a cross-layer contract update across Extension Sidepanel Conversation Shell, Extension Run Orchestration, and a Python Adapter Session Continuity Bridge aligned to Real Opencode Serve."
     }
   ],
   "metadata": {
@@ -22,29 +22,29 @@
         "ELM": 8
       },
       "designSummary": "",
-      "designDecisions": [
-        "Classified user follow-up as input_type=issue, execution_lane=fast-track. Evidence suggests a localized adapter preflight assumption mismatch: /agent may not enumerate repo-local custom agents even when default_agent is configured, causing false-negative blocking. Escalate only if investigation reveals API redesign or broader contract changes."
-      ],
+      "designDecisions": [],
       "runtime": {
-        "activeGoal": "排查并修复：opencode serve 的 /agent 返回内建 agents，但仓库本地 .opencode/opencode.json 已将 default_agent 设为 TARA_analyst。需要确认是 /agent 语义",
+        "activeGoal": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。",
         "validations": {
           "qa": {
-            "status": "not_run",
-            "summary": "QA not run for the current goal.",
-            "updatedAt": "2026-04-08T06:31:04.458Z"
+            "status": "passed",
+            "summary": "Validated TASK-104 on commit 7cf68e050f3809610207d44cb62a9f669c38a4df. Reviewed sidepanel/background changes and targeted tests covering send-button re-enable after completion, waiting_for_answer not treated as composer-busy, stable assistant message identity across deltas/final result, same-bubble progressive rendering, Markdown rendering via ReactMarkdown, and SYNC_RUN_STATE persistence. Verification executed in extension workspace: npx vitest run src/sidepanel/App.test.tsx src/sidepanel/reasoningTimeline.test.ts src/background/index.test.ts (64 passed), npm test (102 passed), npm run typecheck, npm run build. No defects found. Note: TASK-104 lacks architectureElementId traceability in project graph, but automated coverage exists for touched modules.",
+            "details": "Validated TASK-104 on commit 7cf68e050f3809610207d44cb62a9f669c38a4df. Reviewed sidepanel/background changes and targeted tests covering send-button re-enable after completion, waiting_for_answer not treated as composer-busy, stable assistant message identity across deltas/final result, same-bubble progressive rendering, Markdown rendering via ReactMarkdown, and SYNC_RUN_STATE persistence. Verification executed in extension workspace: npx vitest run src/sidepanel/App.test.tsx src/sidepanel/reasoningTimeline.test.ts src/background/index.test.ts (64 passed), npm test (102 passed), npm run typecheck, npm run build. No defects found. Note: TASK-104 lacks architectureElementId traceability in project graph, but automated coverage exists for touched modules.",
+            "commitId": "7cf68e050f3809610207d44cb62a9f669c38a4df",
+            "updatedAt": "2026-04-08T11:26:20.631Z"
           },
           "audit": {
             "status": "not_run",
             "summary": "Audit not run for the current goal.",
-            "updatedAt": "2026-04-08T06:31:04.458Z"
+            "updatedAt": "2026-04-08T08:26:28.039Z"
           }
         },
         "release": {
           "status": "not_started",
           "summary": "Release not prepared for the current goal.",
-          "updatedAt": "2026-04-08T06:31:04.458Z"
+          "updatedAt": "2026-04-08T08:26:28.039Z"
         },
-        "updatedAt": "2026-04-08T06:38:26.321Z"
+        "updatedAt": "2026-04-08T08:44:55.043Z"
       }
     }
   },
@@ -785,38 +785,101 @@
         ]
       },
       {
-        "identifier": "PROJECT-CURRENT",
-        "type": "WorkPackage",
+        "identifier": "ELM-APP-008A",
+        "type": "ApplicationComponent",
         "name": [
           {
-            "value": "排查并修复：opencode serve 的 /agent 返回内建 agents，但仓库本地 .opencode/opencode.json 已将 default_agent 设为 TARA_analyst。需要确认是 /agent 语义"
+            "value": "Extension Rules Configuration Center"
           }
         ],
         "documentation": [
           {
-            "value": "排查并修复：opencode serve 的 /agent 返回内建 agents，但仓库本地 .opencode/opencode.json 已将 default_agent 设为 TARA_analyst。需要确认是 /agent 语义"
+            "value": "An ApplicationComponent is a modular, deployable, and replaceable part of a software system that encapsulates its behavior and data and exposes them through interfaces. In this architecture, Extension Rules Configuration Center owns the sidepanel rule-definition panel, including its default-collapsed presentation, explicit expand interaction, and rule editing surface for ELM-008."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "requirementId": "ELM-008"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-008B",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Active Session Orchestrator"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationComponent is a modular, deployable, and replaceable part of a software system that encapsulates its behavior and data and exposes them through interfaces. In this architecture, Extension Active Session Orchestrator preserves active conversation identity in extension runtime state, decides when a follow-up prompt should reuse an existing session, and only requests a new conversation when no active session exists or the user explicitly resets the flow for ELM-008."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "requirementId": "ELM-008"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-008C",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Python Adapter Session Continuity Bridge"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationComponent is a modular, deployable, and replaceable part of a software system that encapsulates its behavior and data and exposes them through interfaces. In this architecture, Python Adapter Session Continuity Bridge maps extension follow-up requests onto an existing opencode session, reuses prompt dispatch on the preserved session identifier, and keeps session identity stable across prompt, event, and message retrieval flows for ELM-008."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "requirementId": "ELM-008"
+          }
+        }
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。"
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "排查并修复：opencode serve 的 /agent 返回内建 agents，但仓库本地 .opencode/opencode.json 已将 default_agent 设为 TARA_analyst。需要确认是 /agent 语义",
+            "rawRequirement": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-099",
+        "identifier": "TASK-104",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "排查并修复：opencode serve 的 /agent 返回内建 agents，但仓库本地"
+            "value": "修复两个前端集成问题：1）AI反馈结束后发送按钮仍为灰色，导致无法继续在当前会话中追加提问；2）AI反馈内容显示不流畅，每次增量更新会导致气泡整体刷新，需要改为在同一气泡内逐字流式显示，并支持 Markdown 渲染。"
           }
         ],
         "documentation": [
           {
-            "value": "Removed the adapter's /agent catalog preflight, kept local TARA config validation plus runtime agent evidence enforcement, updated docs, and verified with targeted Python adapter tests."
+            "value": "Fast-track fix completed in existing sidepanel/background modules. Restored follow-up send availability after completed responses, kept active session continuity by syncing live run state back to background storage, stabilized assistant bubble identity for incremental updates, and rendered assistant content as Markdown. Validation: npm test (102/102), npm run typecheck, npm run build in extension workspace."
           }
         ],
         "extensions": {
@@ -827,12 +890,12 @@
             "status": "Done",
             "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Removed the adapter's /agent catalog preflight, kept local TARA config validation plus runtime agent evidence enforcement, updated docs, and verified with targeted Python adapter tests.",
-            "commitId": "ab5f33540ff059028882f501f4beda60760e09d7",
+            "summary": "Fast-track fix completed in existing sidepanel/background modules. Restored follow-up send availability after completed responses, kept active session continuity by syncing live run state back to background storage, stabilized assistant bubble identity for incremental updates, and rendered assistant content as Markdown. Validation: npm test (102/102), npm run typecheck, npm run build in extension workspace.",
+            "commitId": "7cf68e050f3809610207d44cb62a9f669c38a4df",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-08T06:38:26.321Z"
+            "updatedAt": "2026-04-08T08:44:55.042Z"
           }
         }
       }
@@ -1409,15 +1472,95 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-099",
+        "identifier": "REL-008-A",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Rules center realizes collapsed-default requirement"
+          }
+        ],
+        "source": "ELM-APP-008A",
+        "target": "ELM-008",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Extension Rules Configuration Center fulfills the part of ELM-008 that requires the rules configuration center to be collapsed by default and expanded only through explicit user action."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-008-B",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Extension orchestrator realizes active session continuity"
+          }
+        ],
+        "source": "ELM-APP-008B",
+        "target": "ELM-008",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Extension Active Session Orchestrator fulfills the part of ELM-008 that requires consecutive follow-up prompts to remain attached to the current active conversation unless a reset or replacement is explicitly requested."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-008-C",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Adapter bridge realizes backend session continuity"
+          }
+        ],
+        "source": "ELM-APP-008C",
+        "target": "ELM-008",
+        "documentation": [
+          {
+            "value": "A Realization relationship links a concrete implementation element to a more abstract required outcome that it fulfills. In this architecture, Python Adapter Session Continuity Bridge fulfills the part of ELM-008 that requires session continuity to be preserved through the python_adapter and opencode session flow for follow-up usage."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-008-D",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Adapter serves extension continuity orchestration"
+          }
+        ],
+        "source": "ELM-APP-008C",
+        "target": "ELM-APP-008B",
+        "documentation": [
+          {
+            "value": "A Serving relationship models that one element provides functionality used by another. In this architecture, Python Adapter Session Continuity Bridge provides the preserved-session dispatch behavior consumed by Extension Active Session Orchestrator when a user submits a follow-up prompt."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-008-E",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Extension orchestrator serves sidepanel rules and conversation shell"
+          }
+        ],
+        "source": "ELM-APP-008B",
+        "target": "ELM-APP-008A",
+        "documentation": [
+          {
+            "value": "A Serving relationship models that one element provides functionality used by another. In this architecture, Extension Active Session Orchestrator provides the active conversation lifecycle used by the sidepanel-owned interaction surface while the rules configuration center remains an explicit secondary panel."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-104",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-099"
+            "value": "Project aggregates TASK-104"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-099",
+        "target": "TASK-104",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."

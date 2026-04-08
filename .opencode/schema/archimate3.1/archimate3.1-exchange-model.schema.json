@@ -1,0 +1,809 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "./.opencode/schema/archimate3.1/archimate3.1-exchange-model.schema.json",
+  "title": "ArchiMate 3.1 Exchange Model JSON Schema",
+  "description": "A JSON Schema derived from the Open Group ArchiMate 3.1 HTML model at https://www.opengroup.org/xsd/archimate/3.1/html-model/. This is a JSON projection of the XML exchange model, extended to support Multi-Agent System (MAS) workflow modeling.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "identifier",
+    "name"
+  ],
+  "properties": {
+    "identifier": {
+      "$ref": "#/$defs/identifier"
+    },
+    "version": {
+      "type": "string"
+    },
+    "name": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/langString"
+      }
+    },
+    "documentation": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/preservedLangString"
+      }
+    },
+    "properties": {
+      "$ref": "#/$defs/properties"
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "elements": {
+      "$ref": "#/$defs/elements"
+    },
+    "relationships": {
+      "$ref": "#/$defs/relationships"
+    },
+    "organizations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/organization"
+      }
+    },
+    "propertyDefinitions": {
+      "$ref": "#/$defs/propertyDefinitions"
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "description": "JSON equivalent of xs:ID or xs:IDREF values in the exchange model."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "JSON projection of foreign-namespace XML elements or attributes.",
+      "additionalProperties": true
+    },
+    "langString": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "lang": {
+          "type": "string",
+          "description": "JSON projection of xml:lang."
+        }
+      }
+    },
+    "preservedLangString": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/langString"
+        }
+      ],
+      "description": "Multi-language string with preserved whitespace semantics."
+    },
+    "property": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "propertyDefinitionRef",
+        "value"
+      ],
+      "properties": {
+        "propertyDefinitionRef": {
+          "$ref": "#/$defs/identifier"
+        },
+        "value": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/langString"
+          }
+        }
+      }
+    },
+    "properties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "property"
+      ],
+      "properties": {
+        "property": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/property"
+          }
+        }
+      }
+    },
+    "schemaInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "type": "string"
+        },
+        "schemaversion": {
+          "type": "string"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "type": "string"
+        },
+        "schemaversion": {
+          "type": "string"
+        },
+        "schemaInfo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/schemaInfo"
+          }
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "conceptBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identifier",
+        "type",
+        "name"
+      ],
+      "properties": {
+        "identifier": {
+          "$ref": "#/$defs/identifier"
+        },
+        "type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/langString"
+          }
+        },
+        "documentation": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/preservedLangString"
+          }
+        },
+        "properties": {
+          "$ref": "#/$defs/properties"
+        },
+        "extensions": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/masProjectExtension"
+            },
+            {
+              "$ref": "#/$defs/masTaskExtension"
+            },
+            {
+              "$ref": "#/$defs/masIssueExtension"
+            },
+            {
+              "$ref": "#/$defs/masFileExtension"
+            },
+            {
+              "$ref": "#/$defs/masCodeConstructExtension"
+            },
+            {
+              "$ref": "#/$defs/masDependencyExtension"
+            },
+            {
+              "$ref": "#/$defs/masReleaseLogExtension"
+            },
+            {
+              "$ref": "#/$defs/extensions"
+            }
+          ]
+        }
+      }
+    },
+    "element": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/conceptBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "$ref": "#/$defs/elementEnumType"
+            }
+          }
+        }
+      ]
+    },
+    "relationship": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/conceptBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "source",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "$ref": "#/$defs/relationshipTypeEnum"
+            },
+            "source": {
+              "$ref": "#/$defs/identifier"
+            },
+            "target": {
+              "$ref": "#/$defs/identifier"
+            },
+            "accessType": {
+              "$ref": "#/$defs/accessTypeEnum"
+            },
+            "modifier": {
+              "$ref": "#/$defs/influenceModifierType"
+            },
+            "isDirected": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "Access"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "accessType": {
+                    "$ref": "#/$defs/accessTypeEnum"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "Influence"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "modifier": {
+                    "$ref": "#/$defs/influenceModifierType"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "Association"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "isDirected": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "elements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "element"
+      ],
+      "properties": {
+        "element": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/element"
+          }
+        }
+      }
+    },
+    "relationships": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relationship"
+      ],
+      "properties": {
+        "relationship": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/relationship"
+          }
+        }
+      }
+    },
+    "organization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "identifier": {
+          "$ref": "#/$defs/identifier"
+        },
+        "label": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/langString"
+          }
+        },
+        "documentation": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/preservedLangString"
+          }
+        },
+        "item": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/organization"
+          }
+        },
+        "elementRef": {
+          "$ref": "#/$defs/identifier"
+        },
+        "relationshipRef": {
+          "$ref": "#/$defs/identifier"
+        },
+        "conceptRef": {
+          "$ref": "#/$defs/identifier"
+        },
+        "propertyDefinitionRef": {
+          "$ref": "#/$defs/identifier"
+        },
+        "stereotypeRef": {
+          "$ref": "#/$defs/identifier"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "propertyDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identifier",
+        "type",
+        "name"
+      ],
+      "properties": {
+        "identifier": {
+          "$ref": "#/$defs/identifier"
+        },
+        "type": {
+          "$ref": "#/$defs/dataType"
+        },
+        "name": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/langString"
+          }
+        },
+        "documentation": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/preservedLangString"
+          }
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      }
+    },
+    "propertyDefinitions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "propertyDefinition"
+      ],
+      "properties": {
+        "propertyDefinition": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/propertyDefinition"
+          }
+        }
+      }
+    },
+    "dataType": {
+      "type": "string",
+      "enum": [
+        "string",
+        "boolean",
+        "currency",
+        "date",
+        "time",
+        "number"
+      ]
+    },
+    "accessTypeEnum": {
+      "type": "string",
+      "enum": [
+        "Access",
+        "Read",
+        "Write",
+        "ReadWrite"
+      ]
+    },
+    "influenceStrengthEnum": {
+      "type": "string",
+      "enum": [
+        "+",
+        "++",
+        "-",
+        "--",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10"
+      ]
+    },
+    "influenceModifierType": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/influenceStrengthEnum"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "elementTypeEnum": {
+      "type": "string",
+      "enum": [
+        "BusinessActor",
+        "BusinessRole",
+        "BusinessCollaboration",
+        "BusinessInterface",
+        "BusinessProcess",
+        "BusinessFunction",
+        "BusinessInteraction",
+        "BusinessEvent",
+        "BusinessService",
+        "BusinessObject",
+        "Contract",
+        "Representation",
+        "Product",
+        "ApplicationComponent",
+        "ApplicationCollaboration",
+        "ApplicationInterface",
+        "ApplicationFunction",
+        "ApplicationInteraction",
+        "ApplicationProcess",
+        "ApplicationEvent",
+        "ApplicationService",
+        "DataObject",
+        "Node",
+        "Device",
+        "SystemSoftware",
+        "TechnologyCollaboration",
+        "TechnologyInterface",
+        "Path",
+        "CommunicationNetwork",
+        "TechnologyFunction",
+        "TechnologyProcess",
+        "TechnologyInteraction",
+        "TechnologyEvent",
+        "TechnologyService",
+        "Artifact",
+        "Equipment",
+        "Facility",
+        "DistributionNetwork",
+        "Material",
+        "Stakeholder",
+        "Driver",
+        "Assessment",
+        "Goal",
+        "Outcome",
+        "Principle",
+        "Requirement",
+        "Constraint",
+        "Meaning",
+        "Value",
+        "Resource",
+        "Capability",
+        "CourseOfAction",
+        "ValueStream",
+        "WorkPackage",
+        "Deliverable",
+        "ImplementationEvent",
+        "Plateau",
+        "Gap",
+        "Grouping",
+        "Location",
+        "AndJunction",
+        "OrJunction"
+      ]
+    },
+    "compositeTypeEnum": {
+      "type": "string",
+      "enum": [
+        "Grouping",
+        "Location"
+      ]
+    },
+    "relationshipConnectorEnum": {
+      "type": "string",
+      "enum": [
+        "AndJunction",
+        "OrJunction"
+      ]
+    },
+    "elementEnumType": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/elementTypeEnum"
+        },
+        {
+          "$ref": "#/$defs/compositeTypeEnum"
+        },
+        {
+          "$ref": "#/$defs/relationshipConnectorEnum"
+        }
+      ]
+    },
+    "relationshipTypeEnum": {
+      "type": "string",
+      "enum": [
+        "Composition",
+        "Aggregation",
+        "Assignment",
+        "Realization",
+        "Serving",
+        "Access",
+        "Influence",
+        "Triggering",
+        "Flow",
+        "Specialization",
+        "Association"
+      ]
+    },
+    "//": "--- START OF MAS (MULTI-AGENT SYSTEM) SCHEMA EXTENSIONS ---",
+    "masProjectExtension": {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "WorkPackage"
+          },
+          "stereotype": {
+            "const": "<<Project>>"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "rawRequirement": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "InProgress",
+              "Completed",
+              "Failed"
+            ]
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "masTaskExtension": {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "WorkPackage"
+          },
+          "stereotype": {
+            "const": "<<Task>>"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "enum": [
+              "ToDo",
+              "InProgress",
+              "InReview",
+              "Done",
+              "Blocked"
+            ]
+          },
+          "priority": {
+            "type": "string"
+          },
+          "assignee": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "masIssueExtension": {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "BusinessObject"
+          },
+          "stereotype": {
+            "const": "<<Issue>>"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "issueType": {
+            "enum": [
+              "BugReport",
+              "ArchGap",
+              "Query"
+            ]
+          },
+          "status": {
+            "enum": [
+              "Open",
+              "Resolved"
+            ]
+          },
+          "reporter": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "issueType",
+          "status"
+        ]
+      }
+    },
+    "masFileExtension": {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "Artifact"
+          },
+          "stereotype": {
+            "const": "<<File>>"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    "masCodeConstructExtension": {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "Artifact"
+          },
+          "stereotype": {
+            "const": "<<CodeConstruct>>"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "constructType": {
+            "enum": [
+              "Class",
+              "Function"
+            ]
+          },
+          "signature": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "masDependencyExtension": {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "Artifact"
+          },
+          "stereotype": {
+            "const": "<<Dependency>>"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "version": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "masReleaseLogExtension": {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "Artifact"
+          },
+          "stereotype": {
+            "const": "<<ReleaseLog>>"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}

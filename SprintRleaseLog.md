@@ -1,55 +1,50 @@
-# Release Summary: Chat send/capture decoupling and complete response rendering
+# Release Summary: ELM-008 full-model finalization
 
 ## Release Status
 
 - Status: completed
 - Date: 2026-04-08
-- Goal: 完成本轮 sidepanel/chat 发送链路修复，解耦发送与页面采集，修正流式生命周期与最终响应聚合，并补齐 repo-local traceability 后通过最终 QA / Audit。
-- Main implementation commit: `eb1f3d6a380ad1630bfd48cb066daa3e336e4ce1`
-- Traceability rework commit: `7130ab025a4025808aa34e0f313284ad0a2e303d`
-- Final validated commit: `7130ab025a4025808aa34e0f313284ad0a2e303d`
+- Goal: Finalize validated full-model work for ELM-008 covering extension rules configuration UX and follow-up session continuity across the extension orchestration and python adapter.
+- Implementation commit: `440712862096d80e7609f7be30ca1b0b338a7247`
+- Final validated commit: `440712862096d80e7609f7be30ca1b0b338a7247`
 
 ## Release Summary
 
-- TASK-089：重构 sidepanel composer 交互，解耦页面采集与发送动作，并将发送入口固定到输入区右下角。
-- TASK-090：重构后台 run 启动编排，复用既有 `START_RUN` 主链路，并将页面采集改为可选能力而非强制前置。
-- TASK-091：修正共享 SSE 生命周期处理，避免 terminal-looking 事件过早终止 run 事件接收。
-- TASK-092：重做 sidepanel run-output 聚合，确保最终渲染的 assistant 内容反映完整且有效的响应集合。
-- TASK-093：补齐回归覆盖，验证发送/采集解耦行为与完整响应渲染链路。
+- TASK-101: Implemented a collapsed-by-default rules configuration center in the extension sidepanel with targeted UI coverage.
+- TASK-102: Implemented active conversation continuity in extension run orchestration so follow-up runs preserve the active session until explicit reset.
+- TASK-103: Implemented python adapter session reuse for follow-up prompts, updated API contracts, and added targeted adapter/app coverage.
 
 ## Completed Scope
 
-- `TASK-089`: Refactor sidepanel composer UX to decouple page capture from send and move the send affordance to the input bottom-right
-- `TASK-090`: Refactor background run orchestration to reuse START_RUN with optional capture instead of mandatory collectFromActiveTab
-- `TASK-091`: Correct shared SSE lifecycle handling so terminal-looking events do not prematurely stop run event intake
-- `TASK-092`: Redesign sidepanel run-output aggregation so the final rendered assistant content reflects the full valid response set
-- `TASK-093`: Add regression coverage for decoupled send/capture behavior and complete assistant-response rendering
+- `TASK-101`: Implement collapsed-by-default rules configuration center in extension sidepanel
+- `TASK-102`: Implement active conversation continuity in extension run orchestration
+- `TASK-103`: Implement python_adapter session reuse for follow-up prompts
 
 ## Validation Results
 
 - QA: passed
-  - 主实现已通过 QA。
-  - traceability-only rework commit `7130ab025a4025808aa34e0f313284ad0a2e303d` 已通过补充 QA。
-  - 补充 QA 确认 rework 仅增加 `@ArchitectureID` 追踪证据，不引入可执行逻辑变化；定向回归测试与 extension typecheck 全部通过。
+  - Verified the rules configuration center remains collapsed by default and expands only on explicit click.
+  - Verified extension orchestration preserves `activeSessionId` across follow-up runs and clears it on `CLEAR_RESULT`.
+  - Verified python adapter reuses an existing `sessionId` for follow-up `prompt_async` requests and surfaces `sessionId` through the API.
+  - Validation passed via targeted Vitest, targeted pytest, extension typecheck, and extension build.
 - Audit: passed
-  - 主实现已通过 Audit。
-  - traceability re-audit 已通过，确认 rework 仅补足 repo-local requirement-to-code trace evidence，不改变既有批准行为与边界。
+  - Confirmed implementation alignment across ELM-APP-008A, ELM-APP-008B, and ELM-APP-008C.
+  - Confirmed changed files remained within approved owning modules plus minimal shared contracts/tests.
+  - Confirmed explicit ArchitectureID evidence exists in the owning modules and no unauthorized standalone conversation manager was introduced.
 
 ## Commit Traceability
 
-- Main implementation commit: `eb1f3d6a380ad1630bfd48cb066daa3e336e4ce1`
-  - 覆盖发送/采集解耦、`START_RUN` 可选采集、SSE 生命周期修正、响应聚合修复及对应回归能力。
-- Traceability rework commit: `7130ab025a4025808aa34e0f313284ad0a2e303d`
-  - 覆盖 TASK-089 ~ TASK-093 的显式 `@ArchitectureID` repo-local traceability 补强，不改变运行时行为。
+- Implementation commit: `440712862096d80e7609f7be30ca1b0b338a7247`
+  - Covers the rules configuration center default-collapsed behavior, extension active-session continuity, and python adapter session reuse for follow-up prompts.
 
 ## Release Artifacts
 
 - Release log: `SprintRleaseLog.md`
-- Final validated commit: `7130ab025a4025808aa34e0f313284ad0a2e303d`
-- Completed tasks: `TASK-089`, `TASK-090`, `TASK-091`, `TASK-092`, `TASK-093`
+- Final validated commit: `440712862096d80e7609f7be30ca1b0b338a7247`
+- Completed tasks: `TASK-101`, `TASK-102`, `TASK-103`
 - QA status: `passed`
 - Audit status: `passed`
 
 ## Release Conclusion
 
-本轮修复已完成并通过 QA / Audit（含 traceability-only rework QA 与 re-audit）。最终交付修复了发送与采集强耦合、流式事件过早终止以及 assistant 最终内容不完整等问题，并补齐了针对已批准需求的 repo-local traceability，具备完整提交与验证可追溯性。
+ELM-008 is finalized on commit `440712862096d80e7609f7be30ca1b0b338a7247`. The delivered work improves rules configuration UX, preserves active conversation continuity through follow-up extension runs, and reuses python adapter sessions correctly for follow-up prompts, with both QA and Audit passing.
