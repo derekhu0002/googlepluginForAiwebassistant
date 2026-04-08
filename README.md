@@ -1,29 +1,26 @@
 # Chrome AI Web Assistant MVP
 
-当前主链路已切换为：`Chrome Extension MV3 Side Panel -> Python FastAPI adapter -> opencode serve`。
+当前真实主链路：`Chrome Extension MV3 Side Panel -> Python adapter -> opencode serve`。
 
-## 本次实现覆盖
+补充说明：消息点赞 / 点踩会走 `Python adapter -> backend TS service`，因此**完整本地联调**除了 Python adapter 与 extension，还应同时启动 backend。
 
-- Python 3 adapter 作为正式后端，Extension 不再直连 `opencode serve`
-- Extension 与 Python adapter 通过 SSE 流式通信
-- 统一事件：`thinking / tool_call / question / result / error`
-- question 通过独立 `POST /api/runs/{runId}/answers` 提交并继续原 run
-- message feedback 通过 `Python adapter -> backend TS service` 主链路转发到产品级 feedback 边界
-- Side Panel 支持事件流自动滚动、question 卡片交互、历史记录查看
-- 浏览器主存储使用 IndexedDB（runs/events/answers）
-- 用户名从网站登录态提取，支持 `unknown` 降级并记录 `username_source`
-- 采集结果摘要区仅展示 `software_version` 与 `selected_sr`
-- 新增 repo-local test site 用于联调
-- Node mock backend 不再是主链路，仅保留迁移参考
-
-## 目录
+## 仓库结构
 
 ```text
 extension/        Chrome Extension MV3 side panel
-backend/          旧 Node mock backend（迁移参考，不是主链路）
-python_adapter/   Python FastAPI adapter（正式主链路）
+python_adapter/   Python FastAPI adapter（主链路）
+backend/          TS backend service（message feedback HTTP 边界）
 test_site/        本地联调测试站
 ```
+
+## 当前交互方式
+
+- 页面采集与发送消息已解耦
+- 点击 **“采集页面”** 只会刷新当前页面上下文，不会直接发起 run
+- 发送消息使用输入区**右下角发送按钮**
+- 默认发送 **不会** 触发页面采集；如果要更新上下文，请先手动点击“采集页面”
+- 如果当前域名尚未授权，side panel 会显示显式入口：**“授权当前域名”**
+- 问题补充、追问、最终回答都在同一条连续会话流中展示
 
 ## 环境要求
 
@@ -31,7 +28,7 @@ test_site/        本地联调测试站
 - npm 10+
 - Python 3.11+
 - Chrome 114+
-- 可选：本地 `opencode serve`，默认 `http://localhost:8123`
+- 本地 `opencode serve`（默认按 `http://localhost:8123` 探测）
 
 ## 安装依赖
 
@@ -42,126 +39,153 @@ python -m venv .venv
 pip install -r python_adapter/requirements.txt
 ```
 
-## 启动 Python adapter
-
-1. 复制配置：
+## 环境变量准备
 
 ```bash
+cp extension/.env.example extension/.env
 cp python_adapter/.env.example python_adapter/.env
+cp backend/.env.example backend/.env
 ```
 
-2. 启动服务：
+默认值与当前仓库实现一致：
+
+- extension 默认请求 `http://localhost:8000`
+- python adapter 默认监听 `127.0.0.1:8000`
+- python adapter 默认转发 feedback 到 `http://127.0.0.1:8787/api/message-feedback`
+- opencode 默认探测 `http://localhost:8123`
+- backend 默认监听 `8787`
+
+> 提示：`python_adapter/.env.example` 与 `backend/.env.example` 中的 `chrome-extension://dev-extension-id` 只是示例值。实际加载 unpacked extension 后，如需严格校准 allowlist，请替换成你本机扩展的真实 ID。
+
+## 推荐本地调试顺序
+
+### 1. 先探测 opencode serve
+
+```bash
+. .venv/bin/activate
+python python_adapter/scripts/probe_opencode.py
+```
+
+### 2. 启动 backend（完整联调必开，用于 feedback）
+
+```bash
+npm run dev --workspace backend
+```
+
+### 3. 启动 Python adapter
 
 ```bash
 . .venv/bin/activate
 uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8000 --reload
 ```
 
-默认地址：`http://127.0.0.1:8000`
+健康检查：`http://127.0.0.1:8000/health`
 
-### opencode serve 配置
-
-- 默认 `OPENCODE_BASE_URL=http://localhost:8123`
-- 默认直接走真实 `opencode serve`
-- 当前实现提供适配层封装：
-  - `OPENCODE_GLOBAL_EVENT_ENDPOINT`
-  - `OPENCODE_SESSION_ENDPOINT`
-  - `OPENCODE_PROMPT_ASYNC_ENDPOINT`
-  - `OPENCODE_QUESTION_LIST_ENDPOINT`
-  - `OPENCODE_QUESTION_REPLY_ENDPOINT`
-  - `OPENCODE_SESSION_MESSAGES_ENDPOINT`
-- 若真实 opencode API 与预期不同，可通过这些变量调整，或继续扩展 `python_adapter/app/opencode_adapter.py`
-- 仅当显式设置 `PYTHON_ADAPTER_USE_MOCK_OPENCODE=1` 时才走 mock 主路径
-- 仅当显式设置 `PYTHON_ADAPTER_ALLOW_MOCK_FALLBACK=1` 时，真实 serve 失败后才允许回退 mock 结果
-
-### feedback backend 配置
-
-- Python adapter 默认通过 `FEEDBACK_BACKEND_BASE_URL=http://127.0.0.1:8787` 转发 `/api/message-feedback`
-- backend TS service 继续作为点赞 / 点踩的产品级 HTTP 边界
-- extension 默认仍连接 `http://localhost:8000`，由 Python adapter 暴露统一主链路入口
-
-## 启动 test site
+### 4. 启动 test site
 
 ```bash
 python3 test_site/server.py
 ```
 
-访问：`http://127.0.0.1:4173`
+访问地址：`http://127.0.0.1:4173`
 
-测试站提供：
+### 5. 构建 extension
+
+```bash
+npm run build --workspace extension
+```
+
+如需边改边构建，可使用：
+
+```bash
+npm run dev --workspace extension
+```
+
+### 6. 加载 extension
+
+1. 打开 `chrome://extensions`
+2. 开启开发者模式
+3. 选择“加载已解压的扩展程序”
+4. 选择 `extension/dist`
+
+### 7. 打开测试页面并完成授权 / 规则配置
+
+1. 打开 `http://127.0.0.1:4173`
+2. 点击扩展图标打开 side panel
+3. 在规则配置中心新增或确认规则
+4. 测试站建议使用 `Hostname 模式 = 127.0.0.1`
+5. 若 side panel 显示域名未授权，点击 **“授权当前域名”**
+
+### 8. 进行联调
+
+建议按下面顺序验证：
+
+1. 先点 **“采集页面”**，确认采集结果摘要出现 `software_version` 与 `selected_sr`
+2. 在底部输入区输入消息
+3. 点击输入区右下角发送按钮
+4. 观察 SSE 事件流：`thinking / tool_call / question / result / error`
+5. 如出现 question，在卡片中提交答案后继续 run
+6. 在回答消息上测试点赞 / 点踩，确认 Python adapter 与 backend 都有响应
+7. 检查历史记录是否写入 IndexedDB
+8. 检查 `python_adapter/logs/invocations.jsonl` 是否落盘
+
+## 启动与联调要点
+
+- run 主链路仍然是：extension -> Python adapter -> opencode serve
+- feedback 链路是：extension -> Python adapter -> backend TS service
+- 因此：
+  - **只验证对话主链路**时，至少需要 `opencode serve + Python adapter + extension`
+  - **验证完整联调**时，需要 `opencode serve + backend + Python adapter + test_site + extension`
+- backend 现在不是 run 主入口，但对点赞 / 点踩联调仍是必需组件
+
+## 常用命令
+
+### 根目录
+
+```bash
+npm run test
+npm run typecheck
+npm run build
+npm run verify:rework
+npm run test:python-adapter
+```
+
+### extension
+
+```bash
+npm run dev --workspace extension
+npm run build --workspace extension
+npm run typecheck --workspace extension
+npm run test --workspace extension
+```
+
+### backend
+
+```bash
+npm run dev --workspace backend
+npm run build --workspace backend
+npm run typecheck --workspace backend
+npm run test --workspace backend
+```
+
+### python adapter
+
+```bash
+. .venv/bin/activate
+uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8000 --reload
+python -m pytest python_adapter/tests
+python python_adapter/scripts/probe_opencode.py
+```
+
+## test site 提供的调试数据
 
 - `data-username`
 - `window.__CURRENT_USER__`
 - `data-software-version`
 - `data-selected-sr`
 
-## 构建 extension
+## 已知边界
 
-1. 复制配置：
-
-```bash
-cp extension/.env.example extension/.env
-```
-
-2. 构建：
-
-```bash
-npm run build --workspace extension
-```
-
-3. Chrome 打开 `chrome://extensions`
-4. 加载 `extension/dist`
-
-## Extension 运行说明
-
-- 在 test site 或受控业务站点上配置页面规则
-- 推荐字段规则保留：
-  - `software_version` -> `[data-software-version]`
-  - `selected_sr` -> `[data-selected-sr]`
-- 点击“采集并开始 SSE Run”
-- 事件流会自动滚动
-- 若出现 `question`，在卡片中选择或输入答案后提交
-- 历史记录保存在 IndexedDB，可在 Side Panel 内查看详情
-
-## 旧 Node backend 迁移说明
-
-- `backend/` 中原有 `/api/analyze` Node mock 服务不再是主链路
-- 保留该目录仅用于迁移参考、旧测试与对比
-- Extension 默认已改为连接 `http://localhost:8000` 的 Python adapter
-- 迁移切换完成标准：
-  - Extension -> Python adapter 主链路打通
-  - README / `.env.example` 默认值已指向 Python adapter
-  - Node mock backend 不再出现在主流程说明中
-
-## 常用命令
-
-```bash
-npm run test --workspace extension
-npm run typecheck --workspace extension
-npm run build --workspace extension
-npm run test --workspace backend
-python3 -m pytest python_adapter/tests
-```
-
-## 联调建议
-
-1. 启动 Python adapter
-2. 启动 test site
-3. 构建并加载 extension
-4. 打开 `http://127.0.0.1:4173`
-5. 在 Side Panel 中保存规则并授权域名
-在添加规则时，若使用测试网站，务必在Hostname 模式填写`127.0.0.1`：
-![alt text](image.png)
-6. 触发一次 run，观察：
-   - `software_version` / `selected_sr` 摘要
-   - thinking/tool_call/question/result 事件流
-   - question 提交后继续 run
-   - IndexedDB 历史记录
-   - `<repo>/python_adapter/logs/invocations.jsonl` 日志落盘
-   - 可先运行 `python3 python_adapter/scripts/probe_opencode.py` 探测真实 `opencode serve`
-
-## 已知限制
-
-- 当前仓库内未内置真实 opencode serve SDK 文档，Python adapter 对真实 serve 做了可配置适配层；mock 仅保留为显式测试/回退模式
-- 浏览器环境下的真实 SSE / Chrome Side Panel 联调仍需手工验证
-- `backend/` Node mock 仍存在代码与测试，但已不是默认主路径
+- README 当前按仓库现状描述的是 Python adapter 主链路，不再把 extension 直连 `opencode serve` 作为默认说明
+- backend 保留为完整联调中的 feedback 服务边界，不是 run 主入口
+- 浏览器内 side panel / host permission / SSE 仍建议手工完成端到端验证
