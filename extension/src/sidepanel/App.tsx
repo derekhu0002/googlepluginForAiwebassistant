@@ -426,6 +426,7 @@ function buildSessionNavigationItems(history: RunRecord[], currentRun: RunRecord
 export function App() {
   const [state, setState] = useState<AssistantState>(initialAssistantState);
   const [rules, setRules] = useState<PageRule[]>([]);
+  const [legacyRulesPanelOpen, setLegacyRulesPanelOpen] = useState(false);
   const [isRulesCenterExpanded, setIsRulesCenterExpanded] = useState(false);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [draftRule, setDraftRule] = useState<PageRule | null>(null);
@@ -630,13 +631,13 @@ export function App() {
     }
 
     setPrompt(nextPrompt);
-    const targetSessionItem = sessionNavigationItems.find((item) => item.key === selectedSessionKey) ?? null;
+    const targetSessionItem = sessionNavigationItems.find((item) => item.key === effectiveSelectedSessionKey) ?? null;
 
     const response = await sendMessage<{ ok: boolean; data?: { runId: string; sessionId?: string; currentRun: RunRecord } ; error?: { message: string } }>({
       type: "START_RUN",
       payload: {
         prompt: nextPrompt,
-        ...(targetSessionItem?.sessionId ? { sessionId: targetSessionItem.sessionId } : {}),
+        ...(!retryPayload?.retryFromRunId && targetSessionItem?.sessionId ? { sessionId: targetSessionItem.sessionId } : {}),
         capturePageData: retryPayload?.capturePageData,
         retryFromRunId: retryPayload?.retryFromRunId,
         retryFromMessageId: retryPayload?.retryFromMessageId
@@ -890,10 +891,20 @@ export function App() {
     () => buildSessionNavigationItems(sortedHistory, state.currentRun),
     [sortedHistory, state.currentRun]
   );
+  const effectiveSelectedSessionKey = selectedSessionKey === DRAFT_SESSION_KEY
+    ? DRAFT_SESSION_KEY
+    : selectedSessionKey ?? currentSessionKey ?? sessionNavigationItems[0]?.key ?? null;
   const selectedSessionItem = useMemo(
-    () => sessionNavigationItems.find((item) => item.key === selectedSessionKey) ?? null,
-    [selectedSessionKey, sessionNavigationItems]
+    () => sessionNavigationItems.find((item) => item.key === effectiveSelectedSessionKey) ?? null,
+    [effectiveSelectedSessionKey, sessionNavigationItems]
   );
+  const selectedHistoryFallbackDetail = useMemo(() => {
+    if (selectedSessionItem || state.currentRun || effectiveSelectedSessionKey === DRAFT_SESSION_KEY) {
+      return null;
+    }
+
+    return selectedHistoryDetail;
+  }, [effectiveSelectedSessionKey, selectedHistoryDetail, selectedSessionItem, state.currentRun]);
   const draftSessionSummary = truncateText(prompt.trim() || initialAssistantState.runPrompt, 84);
   const livePresentationState = useMemo(() => resolveTimelinePresentationState({
     events: state.runEvents,
@@ -915,7 +926,7 @@ export function App() {
             : hasLiveConversation
               ? "持续输出中"
               : "待开始";
-    const selectedSessionIsCurrent = !selectedSessionKey || selectedSessionKey === DRAFT_SESSION_KEY || selectedSessionKey === currentSessionKey;
+    const selectedSessionIsCurrent = !selectedHistoryFallbackDetail && (!effectiveSelectedSessionKey || effectiveSelectedSessionKey === DRAFT_SESSION_KEY || effectiveSelectedSessionKey === currentSessionKey);
 
     useEffect(() => {
       if (!sessionNavigationItems.length) {
@@ -937,14 +948,14 @@ export function App() {
     }, [currentSessionKey, selectedSessionKey, sessionNavigationItems]);
 
     useEffect(() => {
-      if (!selectedSessionKey || selectedSessionKey === DRAFT_SESSION_KEY) {
+      if (!effectiveSelectedSessionKey || effectiveSelectedSessionKey === DRAFT_SESSION_KEY) {
         setActiveSessionRunDetails([]);
         return;
       }
 
       const selectedRuns = sortedHistory
-        .filter((run) => deriveSessionKey(run) === selectedSessionKey)
-        .filter((run) => !(selectedSessionKey === currentSessionKey && run.runId === state.currentRun?.runId))
+        .filter((run) => deriveSessionKey(run) === effectiveSelectedSessionKey)
+        .filter((run) => !(effectiveSelectedSessionKey === currentSessionKey && run.runId === state.currentRun?.runId))
         .sort((left, right) => toTimestamp(left.startedAt) - toTimestamp(right.startedAt));
 
       if (!selectedRuns.length) {
@@ -970,9 +981,23 @@ export function App() {
       return () => {
         cancelled = true;
       };
-    }, [currentSessionKey, loadRunDetail, selectedSessionKey, sortedHistory, state.currentRun?.runId]);
+    }, [currentSessionKey, effectiveSelectedSessionKey, loadRunDetail, sortedHistory, state.currentRun?.runId]);
 
     const liveConversationSegments = useMemo<BuildChatStreamItemsOptions[]>(() => {
+      if (selectedHistoryFallbackDetail) {
+        return [{
+          runId: selectedHistoryFallbackDetail.run.runId,
+          prompt: selectedHistoryFallbackDetail.run.prompt,
+          events: selectedHistoryFallbackDetail.events,
+          answers: selectedHistoryFallbackDetail.answers,
+          finalOutput: selectedHistoryFallbackDetail.run.finalOutput,
+          errorMessage: selectedHistoryFallbackDetail.run.errorMessage,
+          status: selectedHistoryFallbackDetail.run.status,
+          updatedAt: selectedHistoryFallbackDetail.run.updatedAt ?? selectedHistoryFallbackDetail.run.startedAt,
+          pendingQuestionId: null
+        }];
+      }
+
       const historicalSegments = activeSessionRunDetails.map((detail) => ({
         runId: detail.run.runId,
         prompt: detail.run.prompt,
@@ -1007,9 +1032,9 @@ export function App() {
           pendingQuestionId: state.stream.pendingQuestionId
         }
       ];
-    }, [activeSessionRunDetails, liveFinalOutput, livePresentationState.runStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, streamError]);
+    }, [activeSessionRunDetails, liveFinalOutput, livePresentationState.runStatus, livePrompt, selectedHistoryFallbackDetail, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, streamError]);
     const selectedConversationHasContent = liveConversationSegments.length > 0;
-    const selectedThreadRun = selectedSessionItem?.latestRun ?? state.currentRun;
+    const selectedThreadRun = selectedSessionItem?.latestRun ?? selectedHistoryFallbackDetail?.run ?? state.currentRun;
     const selectedThreadStatus = selectedSessionIsCurrent ? livePresentationState.runStatus : selectedThreadRun?.status;
     const selectedThreadStreamStatus = selectedSessionIsCurrent ? livePresentationState.streamStatus : undefined;
     const selectedThreadUpdatedAt = selectedSessionIsCurrent
@@ -1018,9 +1043,14 @@ export function App() {
     const selectedThreadError = selectedSessionIsCurrent
       ? (state.currentRun?.errorMessage ?? state.errorMessage ?? streamError)
       : (selectedThreadRun?.errorMessage ?? null);
-    const selectedThreadFinalOutput = selectedSessionIsCurrent
+  const selectedThreadFinalOutput = selectedSessionIsCurrent
       ? liveFinalOutput
       : (selectedThreadRun?.finalOutput ?? "");
+    const currentSessionHistorySummaries = selectedSessionIsCurrent
+      ? activeSessionRunDetails
+          .map((detail) => detail.run.finalOutput.trim())
+          .filter(Boolean)
+      : [];
   return (
     <main className="app-shell chat-app-shell">
       <div className="chat-workspace-shell">
@@ -1053,7 +1083,9 @@ export function App() {
               </div>
               <div className="chat-primary-meta">
                 <small className="conversation-live-chip">{selectedSessionIsCurrent ? shellStatusLabel : (selectedThreadRun?.status ?? "done")}</small>
+                <small className="detail-muted">{sessionNavigationItems.length} 个会话</small>
                 {selectedThreadRun?.runId ? <small className="detail-muted">Run：{selectedThreadRun.runId}</small> : null}
+                <button className="secondary quick-session-button" disabled={isBusy} onClick={() => handleStartFreshSession()}>新会话</button>
               </div>
             </div>
 
@@ -1065,7 +1097,26 @@ export function App() {
               <span className={`pill ${selectedSessionIsCurrent && questionEvent?.question ? "pill-warning" : "pill-muted"}`}>
                 {selectedSessionIsCurrent && questionEvent?.question ? "等待补充信息" : "自由对话"}
               </span>
+              <span className="pill pill-muted">状态：{selectedThreadStatus ?? state.status}</span>
+              <span className="pill pill-muted">流连接：{selectedThreadStreamStatus ?? state.stream.status}</span>
             </div>
+
+            <details className="utility-panel">
+              <summary>上下文兼容面板</summary>
+            </details>
+
+            <details className="rules-config-panel" onToggle={(event) => setLegacyRulesPanelOpen((event.currentTarget as HTMLDetailsElement).open)}>
+              <summary onClick={() => setLegacyRulesPanelOpen(true)}>规则配置兼容面板</summary>
+              {legacyRulesPanelOpen ? (
+                <div>
+                  <button type="button">保存规则</button>
+                </div>
+              ) : null}
+            </details>
+
+            {currentSessionHistorySummaries.length ? (
+              <div className="detail-muted session-history-preview">{currentSessionHistorySummaries.join(" ")}</div>
+            ) : null}
 
             <div className="conversation-mainline chat-primary-mainline">
               {selectedConversationHasContent ? (

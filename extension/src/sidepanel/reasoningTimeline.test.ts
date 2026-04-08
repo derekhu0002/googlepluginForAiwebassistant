@@ -231,7 +231,7 @@ describe("reasoning timeline view-model", () => {
       "assistant_result"
     ]);
     expect(items[3]?.summary).toBe("最终完成");
-    expect(items[3]?.processSummary).toContain("已记录 1 条推理过程");
+    expect(items[3]?.processSummary).toContain("已记录推理过程");
   });
 
   it("merges multiple assistant response sources into one complete rendered answer", () => {
@@ -546,7 +546,7 @@ describe("reasoning timeline view-model", () => {
     expect(liveItems.at(-1)?.summary).toBe(historyItems.at(-1)?.summary);
   });
 
-  it("does not render assistant chat items when a run has only process logs and no assistant text yet", () => {
+  it("renders generic streaming progress when a run has only process logs and no assistant text yet", () => {
     const items = buildChatStreamItems({
       runId: "run-1",
       prompt: "继续分析",
@@ -558,8 +558,10 @@ describe("reasoning timeline view-model", () => {
     });
 
     expect(items.map((item) => item.kind)).toEqual([
-      "user_prompt"
+      "user_prompt",
+      "assistant_progress"
     ]);
+    expect(items[1]?.summary).toBe("正在生成回答");
   });
 
   it("renders text-stream deltas as assistant body instead of Thinking when no final result is persisted", () => {

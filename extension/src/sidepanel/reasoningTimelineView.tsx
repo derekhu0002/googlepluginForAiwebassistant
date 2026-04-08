@@ -285,7 +285,8 @@ function ChatStreamTurn({
   questionSubmitDisabled?: boolean;
 }) {
   const isUser = item.kind === "user_prompt" || item.kind === "user_answer";
-  const displayedSummary = useBufferedTypewriter(item.summary, animate && !isUser && Boolean(item.summary));
+  const shouldAnimateSummary = animate && !isUser && Boolean(item.summary) && item.summary !== "正在生成回答";
+  const displayedSummary = useBufferedTypewriter(item.summary, shouldAnimateSummary);
   const thinkingItems = item.processItems
     .map((processItem) => ({
       ...processItem,
@@ -575,7 +576,7 @@ export function ReasoningTimeline({
       >
         {mergedItems.length ? mergedItems.map((item, index) => (
           <ChatStreamTurn
-            key={item.id}
+            key={`${item.runId}:${item.id}`}
             item={item}
             status={getTimelineCardStatus({
               type: item.primaryType === "user_prompt" || item.primaryType === "user_answer" ? "result" : item.primaryType,

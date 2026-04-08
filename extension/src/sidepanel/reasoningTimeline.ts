@@ -136,6 +136,8 @@ export interface ChatStreamItemModel {
   feedbackState?: MessageFeedbackUiState;
 }
 
+const GENERIC_STREAMING_COPY = "正在生成回答";
+
 export function createIdleFeedbackState(): MessageFeedbackUiState {
   return {
     status: "idle"
@@ -1206,25 +1208,58 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
   }
 
   const assistantProcessItems = dedupeProcessItems(normalizedAssistantProcessItems);
+  const allowVisibleThinkingInAssistantBubble = Boolean(assistantDisplayText)
+    && !hasResultEvent
+    && presentationState.runStatus === "streaming";
+
+  const visibleAssistantProcessItems = assistantProcessItems
+    .map((item) => {
+      if (item.type !== "thinking") {
+        return item;
+      }
+
+      const visibleSummary = getVisibleThinkingSummary(item);
+      if (!visibleSummary) {
+        return null;
+      }
+
+      if (hasSubstantialChineseContent(visibleSummary) && !allowVisibleThinkingInAssistantBubble) {
+        return null;
+      }
+
+      return {
+        ...item,
+        summary: visibleSummary,
+        entries: item.entries.map((entry) => ({
+          ...entry,
+          message: visibleSummary
+        }))
+      };
+    })
+    .filter((item): item is TimelineCardModel => Boolean(item));
 
   const shouldRenderProcessOnlyAssistantItem = !assistantDisplayText
-    && assistantProcessItems.length > 0
-    && assistantProcessItems.every((item) => !hasSubstantialChineseContent(item.summary));
+    && visibleAssistantProcessItems.length > 0
+    && visibleAssistantProcessItems.every((item) => !hasSubstantialChineseContent(item.summary));
 
-  if (assistantDisplayText || shouldRenderProcessOnlyAssistantItem) {
+  const shouldRenderGenericStreamingItem = !assistantDisplayText
+    && !hasErrorItem
+    && presentationState.runStatus === "streaming";
+
+  if (assistantDisplayText || shouldRenderProcessOnlyAssistantItem || shouldRenderGenericStreamingItem) {
     const shouldRenderAsFinalResult = hasResultEvent || presentationState.runStatus === "done";
-    const assistantMessageSummary = hasConcreteAnswer ? assistantDisplayText : "";
+    const assistantMessageSummary = hasConcreteAnswer ? assistantDisplayText : GENERIC_STREAMING_COPY;
     streamItems.push({
       id: assistantResponse.preferredMessageId ?? `synthetic-result-${options.runId ?? "standalone"}`,
-      runId: options.runId ?? assistantProcessItems[0]?.runId ?? "standalone-run",
+      runId: options.runId ?? visibleAssistantProcessItems[0]?.runId ?? "standalone-run",
       kind: shouldRenderAsFinalResult ? "assistant_result" : "assistant_progress",
       title: "Assistant",
       summary: assistantMessageSummary,
-      createdAt: assistantResponse.firstResponseAt ?? assistantProcessItems[0]?.createdAt ?? options.updatedAt ?? new Date().toISOString(),
-      updatedAt: assistantResponse.lastResponseAt ?? assistantProcessItems[assistantProcessItems.length - 1]?.updatedAt ?? options.updatedAt ?? new Date().toISOString(),
-      primaryType: shouldRenderAsFinalResult ? "result" : assistantProcessItems[assistantProcessItems.length - 1]?.type ?? "thinking",
-      processItems: assistantProcessItems,
-      processSummary: createReasoningSummary(assistantProcessItems),
+      createdAt: assistantResponse.firstResponseAt ?? visibleAssistantProcessItems[0]?.createdAt ?? options.updatedAt ?? new Date().toISOString(),
+      updatedAt: assistantResponse.lastResponseAt ?? visibleAssistantProcessItems[visibleAssistantProcessItems.length - 1]?.updatedAt ?? options.updatedAt ?? new Date().toISOString(),
+      primaryType: shouldRenderAsFinalResult ? "result" : visibleAssistantProcessItems[visibleAssistantProcessItems.length - 1]?.type ?? "thinking",
+      processItems: visibleAssistantProcessItems,
+      processSummary: createReasoningSummary(visibleAssistantProcessItems),
       sourceQuestionPrompt: prompt,
       supportsCopy: Boolean(assistantMessageSummary),
       supportsRetry: shouldRenderAsFinalResult,
