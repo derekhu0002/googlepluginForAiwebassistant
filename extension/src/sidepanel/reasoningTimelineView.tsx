@@ -8,13 +8,21 @@ import {
   buildChatStreamItems,
   getDefaultFeedbackMessage,
   getTimelineCardStatus,
-  getTimelineStatusCopy,
   resolveTimelinePresentationState,
   type BuildChatStreamItemsOptions,
   type ChatStreamItemModel
 } from "./reasoningTimeline";
 
 const TYPEWRITER_INTERVAL_MS = 24;
+
+const CHAT_ITEM_SORT_RANK: Record<ChatStreamItemModel["kind"], number> = {
+  user_prompt: 0,
+  user_answer: 1,
+  assistant_question: 2,
+  assistant_progress: 3,
+  assistant_result: 4,
+  assistant_error: 5
+};
 
 function isNearBottom(element: HTMLDivElement | null) {
   if (!element) {
@@ -117,6 +125,111 @@ function MarkdownMessage({ text, className }: { text: string; className: string 
   );
 }
 
+function sanitizeThinkingDisplayText(text: string) {
+  const cleaned = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !/^(已复用当前\s+opencode\s+session|已创建\s+opencode\s+session|已连接当前会话|读取页面上下文|整理可用字段|查询历史|调用工具|模型正在推理。?|opencode\s+session\s+状态更新[:：]?.*)$/iu.test(line))
+    .filter((line) => !/\bsoftware_version=\(empty\)|\bselected_sr=\(empty\)|\bbusy\b/iu.test(line))
+    .join("\n")
+    .trim();
+
+  if (!cleaned) {
+    return "";
+  }
+
+  const blocks = cleaned
+    .split(/\n{1,2}/u)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  const uniqueBlocks: string[] = [];
+  const seen = new Set<string>();
+
+  for (const block of blocks) {
+    const key = block.replace(/\s+/gu, " ").trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    if (uniqueBlocks.some((existingBlock) => {
+      const existingKey = existingBlock.replace(/\s+/gu, " ").trim();
+      return existingKey === key || existingKey.includes(key) || key.includes(existingKey);
+    })) {
+      continue;
+    }
+
+    seen.add(key);
+    uniqueBlocks.push(block);
+  }
+
+  return uniqueBlocks.join("\n\n").trim();
+}
+
+function getComparableThinkingSummary(text: string) {
+  return text.replace(/\s+/gu, " ").trim();
+}
+
+function getComparablePrefixLength(left: string, right: string) {
+  const maxPrefix = Math.min(left.length, right.length);
+
+  for (let index = 0; index < maxPrefix; index += 1) {
+    if (left[index] !== right[index]) {
+      return index;
+    }
+  }
+
+  return maxPrefix;
+}
+
+function shouldTreatThinkingSummariesAsDuplicate(left: string, right: string) {
+  if (!left || !right) {
+    return false;
+  }
+
+  if (left === right || left.includes(right) || right.includes(left)) {
+    return true;
+  }
+
+  const prefixLength = getComparablePrefixLength(left, right);
+  const shorterLength = Math.min(left.length, right.length);
+  return shorterLength > 0 && prefixLength / shorterLength >= 0.85;
+}
+
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="message-action-icon">
+      <path d="M9 7.5A2.5 2.5 0 0 1 11.5 5h7A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 9 16.5v-9Z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M15 5V4.5A2.5 2.5 0 0 0 12.5 2h-7A2.5 2.5 0 0 0 3 4.5v9A2.5 2.5 0 0 0 5.5 16H6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function RetryIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="message-action-icon">
+      <path d="M6 8V3.8L2.8 7M4 7h9a7 7 0 1 1-6.1 10.4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function LikeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="message-action-icon">
+      <path d="M10 10V6.8c0-1.8 1.2-3.5 3-4.3l.8-.4v4.4l2.7 3.1c.3.4.5.9.5 1.4v5.6c0 1.1-.9 2-2 2H9.5A2.5 2.5 0 0 1 7 16.1V10h3Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M3 10h4v8H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DislikeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="message-action-icon">
+      <path d="M14 14v3.2c0 1.8-1.2 3.5-3 4.3l-.8.4v-4.4l-2.7-3.1a2.2 2.2 0 0 1-.5-1.4V7.4c0-1.1.9-2 2-2H14.5A2.5 2.5 0 0 1 17 7.9V14h-3Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M21 14h-4V6h2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function InlineQuestionComposer({
   question,
   disabled,
@@ -201,12 +314,53 @@ function ChatStreamTurn({
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
 }) {
-  const displayedSummary = useBufferedTypewriter(item.summary, animate);
   const isUser = item.kind === "user_prompt" || item.kind === "user_answer";
+  const displayedSummary = useBufferedTypewriter(item.summary, animate && !isUser && Boolean(item.summary));
+  const thinkingItems = item.processItems
+    .map((processItem) => ({
+      ...processItem,
+      summary: sanitizeThinkingDisplayText(processItem.summary)
+    }))
+    .filter((processItem) => {
+    if (processItem.type !== "thinking") {
+      return false;
+    }
+
+    const summary = processItem.summary.trim();
+    if (!summary) {
+      return false;
+    }
+
+    return !/^(已复用当前\s+opencode\s+session|已连接当前会话|读取页面上下文|整理可用字段|查询历史|调用工具|模型正在推理。?|opencode\s+session\s+状态更新[:：]?.*)$/iu.test(summary);
+  })
+    .reduce<typeof item.processItems>((uniqueItems, processItem) => {
+      const comparableSummary = getComparableThinkingSummary(processItem.summary);
+      if (!comparableSummary) {
+        return uniqueItems;
+      }
+
+      const duplicateIndex = uniqueItems.findIndex((candidate) => shouldTreatThinkingSummariesAsDuplicate(
+        getComparableThinkingSummary(candidate.summary),
+        comparableSummary
+      ));
+
+      if (duplicateIndex < 0) {
+        uniqueItems.push(processItem);
+        return uniqueItems;
+      }
+
+      const existingItem = uniqueItems[duplicateIndex];
+      const existingSummary = getComparableThinkingSummary(existingItem.summary);
+      if (comparableSummary.length > existingSummary.length) {
+        uniqueItems[duplicateIndex] = processItem;
+      }
+
+      return uniqueItems;
+    }, []);
   const roleLabel = isUser ? "You" : item.kind === "assistant_error" ? "Assistant failed" : "Assistant";
   const avatarLabel = item.kind === "assistant_question" ? "?" : item.kind === "assistant_error" ? "!" : isUser ? "你" : "AI";
-  const messageText = displayedSummary || (item.kind === "assistant_progress" && live ? "正在生成回答…" : "");
-  const processPreview = !isUser && item.processSummary && item.kind !== "assistant_progress" ? item.processSummary : "";
+  const messageText = isUser ? item.summary : displayedSummary;
+  const showStreamingIndicator = live && item.kind === "assistant_progress";
   const feedbackMessage = item.feedbackState?.message || getDefaultFeedbackMessage(item.feedbackState?.status ?? "idle", item.feedbackState?.selected);
   const messageClassName = [
     "conversation-message",
@@ -221,42 +375,68 @@ function ChatStreamTurn({
           <div className="conversation-turn-heading">
             <strong>{roleLabel}</strong>
             {!isUser ? <span className={`status-chip status-${status}`}>{getStatusLabel(status)}</span> : null}
+            {showStreamingIndicator ? <span className="streaming-indicator">生成中</span> : null}
             {item.kind === "user_answer" ? renderAnswerLabel(item.answer) : null}
           </div>
           <small>{formatTimestamp(item.updatedAt)}</small>
         </div>
 
+        {!isUser && thinkingItems.length ? (
+          <section className="assistant-thinking-panel" aria-label="thinking panel">
+            <div className="assistant-thinking-panel-header">
+              <strong>Thinking</strong>
+            </div>
+            <div className="assistant-thinking-feed">
+              {thinkingItems.map((processItem) => (
+                <article key={processItem.id} className="assistant-thinking-item">
+                  <p>{processItem.summary}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {messageText ? (
           isUser
             ? <p className={messageClassName}>{messageText}</p>
             : <MarkdownMessage text={messageText} className={messageClassName} />
         ) : null}
-        {processPreview ? <p className="conversation-process-summary">{processPreview}</p> : null}
 
         {!isUser ? (
           <div className="conversation-hover-actions" aria-label="message actions">
-            {item.supportsCopy ? <button type="button" className="icon-button" onClick={() => onCopy?.(item)}>复制</button> : null}
+            {item.supportsCopy ? (
+              <button type="button" className="icon-button" aria-label="复制" title="复制" onClick={() => onCopy?.(item)}>
+                <CopyIcon />
+              </button>
+            ) : null}
             {item.supportsFeedback ? (
               <>
                 <button
                   type="button"
                   className={`icon-button ${item.feedbackState?.selected === "like" && item.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
+                  aria-label="点赞"
+                  title="点赞"
                   disabled={item.feedbackState?.status === "submitting"}
                   onClick={() => onFeedback?.(item, "like")}
                 >
-                  点赞
+                  <LikeIcon />
                 </button>
                 <button
                   type="button"
                   className={`icon-button ${item.feedbackState?.selected === "dislike" && item.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
+                  aria-label="点踩"
+                  title="点踩"
                   disabled={item.feedbackState?.status === "submitting"}
                   onClick={() => onFeedback?.(item, "dislike")}
                 >
-                  点踩
+                  <DislikeIcon />
                 </button>
               </>
             ) : null}
-            {item.supportsRetry ? <button type="button" className="icon-button" onClick={() => onRetry?.(item)}>重试</button> : null}
+            {item.supportsRetry ? (
+              <button type="button" className="icon-button" aria-label="重试" title="重试" onClick={() => onRetry?.(item)}>
+                <RetryIcon />
+              </button>
+            ) : null}
           </div>
         ) : null}
 
@@ -313,7 +493,6 @@ export function ReasoningTimeline({
 }: ChatStreamViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [autoFollow, setAutoFollow] = useState(live);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, MessageFeedbackUiState>>({});
   const previousSignatureRef = useRef<string>("");
   const presentationState = useMemo(() => resolveTimelinePresentationState({
@@ -351,6 +530,11 @@ export function ReasoningTimeline({
           return timestampDelta;
         }
 
+        const rankDelta = CHAT_ITEM_SORT_RANK[left.kind] - CHAT_ITEM_SORT_RANK[right.kind];
+        if (rankDelta !== 0) {
+          return rankDelta;
+        }
+
         return left.id.localeCompare(right.id);
       });
   }, [feedbackByMessageId, items, runSegments]);
@@ -374,7 +558,6 @@ export function ReasoningTimeline({
 
     const container = containerRef.current;
     if (autoFollow || isNearBottom(container)) {
-      setUnreadCount(0);
       requestAnimationFrame(() => {
         if (containerRef.current) {
           containerRef.current.scrollTop = containerRef.current.scrollHeight;
@@ -382,17 +565,7 @@ export function ReasoningTimeline({
       });
       return;
     }
-
-    setUnreadCount((current) => current + 1);
   }, [autoFollow, live, mergedItems]);
-
-  function scrollToLatest() {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
-    setAutoFollow(true);
-    setUnreadCount(0);
-  }
 
   async function handleCopy(item: ChatStreamItemModel) {
     const text = item.summary.trim();
@@ -463,9 +636,6 @@ export function ReasoningTimeline({
         onScroll={() => {
           const nearBottom = isNearBottom(containerRef.current);
           setAutoFollow(nearBottom);
-          if (nearBottom) {
-            setUnreadCount(0);
-          }
         }}
       >
         {mergedItems.length ? mergedItems.map((item, index) => (
@@ -493,29 +663,6 @@ export function ReasoningTimeline({
         )) : <p className="empty-state chat-empty-state">{emptyText}</p>}
       </div>
 
-      {live ? (
-        <div className="timeline-toolbar chat-stream-toolbar">
-          <div className="chat-stream-statusline">
-            <small className="detail-muted">{getTimelineStatusCopy({ events, runStatus, finalOutput, errorMessage })}</small>
-            <small className="detail-muted">
-              {presentationState.runStatus === "waiting_for_answer"
-                ? "等待补充信息"
-                : presentationState.runStatus === "done"
-                  ? "已拿到最终结果"
-                  : presentationState.runStatus === "error"
-                    ? "已拿到失败结果"
-                    : "持续输出中"}
-            </small>
-          </div>
-          {!autoFollow || unreadCount ? (
-            <button className="secondary unread-indicator" type="button" onClick={scrollToLatest}>
-              {unreadCount ? `有 ${unreadCount} 条新进展，跳转到底部` : "已暂停自动跟随，返回最新"}
-            </button>
-          ) : (
-            <small className="detail-muted">自动跟随最新进展</small>
-          )}
-        </div>
-      ) : null}
     </div>
   );
 }

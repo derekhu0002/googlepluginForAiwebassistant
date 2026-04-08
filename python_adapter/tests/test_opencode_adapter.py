@@ -152,14 +152,14 @@ def test_real_contract_uses_session_prompt_async_and_question_reply() -> None:
         events.append(await stream.__anext__())
         events.append(await stream.__anext__())
         events.append(await stream.__anext__())
-        assert events[-1].type == "thinking"
+        assert events[-1].type == "tool_call"
         events.append(await stream.__anext__())
         assert events[-1].type == "question"
         await adapter.submit_answer(run_id, QuestionAnswerRequest(questionId="req-1", answer="高"))
         remaining = [event async for event in stream]
 
         all_events = events + remaining
-        assert [event.type for event in all_events] == ["thinking", "tool_call", "thinking", "question", "thinking", "thinking", "result"]
+        assert [event.type for event in all_events] == ["tool_call", "tool_call", "tool_call", "question", "tool_call", "result"]
         assert all_events[-1].message == "final answer from session"
         assert clients[0].calls[0][1] == "/session"
         assert clients[0].calls[0][3] == {
@@ -173,6 +173,245 @@ def test_real_contract_uses_session_prompt_async_and_question_reply() -> None:
         assert clients[2].calls[0][1] == "/global/event"
         assert clients[3].calls[0][1] == "/question/req-1/reply"
         assert clients[4].calls[0][1] == "/session/ses-1/message"
+
+    anyio.run(scenario)
+
+
+def test_reasoning_only_session_message_does_not_become_final_result_text() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+    sse_events = [
+        {"directory": "/repo", "payload": {"type": "message.part.delta", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "partID": "part-1", "field": "text", "delta": "reasoning stream"}}},
+        {"directory": "/repo", "payload": {"type": "session.idle", "properties": {"sessionID": "ses-1"}}},
+    ]
+    messages_payload = [
+        {
+            "agent": "TARA_analyst",
+            "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
+            "parts": [{"type": "reasoning", "text": "reasoning stream"}],
+        }
+    ]
+
+    response_sets = [
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [("GET", "/global/event", make_sse_response(sse_events))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=messages_payload))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=messages_payload))],
+    ]
+
+    def factory(_timeout):
+        return FakeAsyncClient(response_sets.pop(0))
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(create_request())
+
+        events = [event async for event in adapter.stream_events(run_id)]
+
+        assert events[-1].type == "result"
+        assert events[-1].message == "opencode serve 已完成但未返回可展示文本。"
+
+    anyio.run(scenario)
+
+
+def test_reasoning_part_delta_is_buffered_and_emitted_as_thinking_after_part_type_is_known() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+    sse_events = [
+        {"directory": "/repo", "payload": {"type": "message.part.delta", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "partID": "part-1", "field": "text", "delta": "reasoning stream"}}},
+        {"directory": "/repo", "payload": {"type": "message.part.updated", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "part": {"id": "part-1", "type": "reasoning", "text": "reasoning stream"}}}},
+        {"directory": "/repo", "payload": {"type": "session.idle", "properties": {"sessionID": "ses-1"}}},
+    ]
+    messages_payload = [
+        {
+            "agent": "TARA_analyst",
+            "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
+            "parts": [{"type": "reasoning", "text": "reasoning stream"}],
+        }
+    ]
+
+    response_sets = [
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [("GET", "/global/event", make_sse_response(sse_events))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=messages_payload))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=messages_payload))],
+    ]
+
+    def factory(_timeout):
+        return FakeAsyncClient(response_sets.pop(0))
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(create_request())
+
+        events = [event async for event in adapter.stream_events(run_id)]
+
+        assert any(event.type == "thinking" and event.message == "reasoning stream" and not event.data for event in events)
+        assert events[-1].message == "opencode serve 已完成但未返回可展示文本。"
+
+    anyio.run(scenario)
+
+
+def test_text_part_delta_is_buffered_and_emitted_as_answer_stream_after_part_type_is_known() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+    sse_events = [
+        {"directory": "/repo", "payload": {"type": "message.part.delta", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "partID": "part-1", "field": "text", "delta": "partial result"}}},
+        {"directory": "/repo", "payload": {"type": "message.part.updated", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "part": {"id": "part-1", "type": "text", "text": "partial result"}}}},
+        {"directory": "/repo", "payload": {"type": "session.idle", "properties": {"sessionID": "ses-1"}}},
+    ]
+    messages_payload = [
+        {
+            "agent": "TARA_analyst",
+            "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
+            "parts": [{"type": "text", "text": "final answer from session"}],
+        }
+    ]
+
+    response_sets = [
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [("GET", "/global/event", make_sse_response(sse_events))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=messages_payload))],
+    ]
+
+    def factory(_timeout):
+        return FakeAsyncClient(response_sets.pop(0))
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(create_request())
+
+        events = [event async for event in adapter.stream_events(run_id)]
+
+        assert any(event.type == "thinking" and event.message == "partial result" and event.data == {"field": "text", "message_id": "msg-1"} for event in events)
+        assert events[-1].message == "final answer from session"
+
+    anyio.run(scenario)
+
+
+def test_message_completed_does_not_emit_result_before_late_text_stream_finishes() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+    sse_events = [
+        {"directory": "/repo", "payload": {"type": "message.updated", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "info": {"id": "msg-1", "role": "assistant", "time": {"completed": 2}}}}},
+        {"directory": "/repo", "payload": {"type": "message.part.delta", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "partID": "part-1", "field": "text", "delta": "late text"}}},
+        {"directory": "/repo", "payload": {"type": "message.part.updated", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "part": {"id": "part-1", "type": "text", "text": "late text"}}}},
+        {"directory": "/repo", "payload": {"type": "session.idle", "properties": {"sessionID": "ses-1"}}},
+    ]
+    first_messages_payload = [
+        {
+            "agent": "TARA_analyst",
+            "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
+            "parts": [{"type": "reasoning", "text": "still syncing"}],
+        }
+    ]
+    response_sets = [
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [("GET", "/global/event", make_sse_response(sse_events))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=first_messages_payload))],
+    ]
+
+    def factory(_timeout):
+        return FakeAsyncClient(response_sets.pop(0))
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(create_request())
+
+        events = [event async for event in adapter.stream_events(run_id)]
+
+        assert [event.type for event in events].count("result") == 1
+        assert any(event.type == "thinking" and event.message == "late text" for event in events)
+        assert events[-1].type == "result"
+        assert events[-1].message == "late text"
+        assert not any(event.type == "result" and event.message == "opencode serve 已完成但未返回可展示文本。" for event in events)
+
+    anyio.run(scenario)
+
+
+def test_session_idle_without_text_defers_placeholder_until_stream_end() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+    sse_events = [
+        {"directory": "/repo", "payload": {"type": "session.idle", "properties": {"sessionID": "ses-1"}}},
+        {"directory": "/repo", "payload": {"type": "message.part.delta", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "partID": "part-1", "field": "text", "delta": "late text"}}},
+        {"directory": "/repo", "payload": {"type": "message.part.updated", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "part": {"id": "part-1", "type": "text", "text": "late text"}}}},
+    ]
+    first_messages_payload = [
+        {
+            "agent": "TARA_analyst",
+            "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
+            "parts": [{"type": "reasoning", "text": "still syncing"}],
+        }
+    ]
+    final_messages_payload = [
+        {
+            "agent": "TARA_analyst",
+            "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
+            "parts": [{"type": "text", "text": "final answer from session"}],
+        }
+    ]
+
+    response_sets = [
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [("GET", "/global/event", make_sse_response(sse_events))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=first_messages_payload))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=final_messages_payload))],
+    ]
+
+    def factory(_timeout):
+        return FakeAsyncClient(response_sets.pop(0))
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(create_request())
+
+        events = [event async for event in adapter.stream_events(run_id)]
+
+        assert any(event.type == "tool_call" and event.title == "会话空闲" for event in events)
+        assert events[-1].type == "result"
+        assert events[-1].message == "final answer from session"
+        assert not any(event.type == "result" and event.message == "opencode serve 已完成但未返回可展示文本。" for event in events)
 
     anyio.run(scenario)
 

@@ -106,6 +106,44 @@ class OpencodeAdapter:
             payload["message_id"] = message_id
         return payload
 
+    def _part_id_from_properties(self, properties: dict[str, Any], part: dict[str, Any] | None = None) -> str | None:
+        direct_part_id = properties.get("partID") or properties.get("partId")
+        if isinstance(direct_part_id, str) and direct_part_id.strip():
+            return direct_part_id.strip()
+
+        nested_part = part if isinstance(part, dict) else properties.get("part")
+        if isinstance(nested_part, dict):
+            nested_part_id = nested_part.get("id") or nested_part.get("partID") or nested_part.get("partId")
+            if isinstance(nested_part_id, str) and nested_part_id.strip():
+                return nested_part_id.strip()
+
+        return None
+
+    def _emit_assistant_text_event(self, run: dict[str, Any], message: str, message_id: str | None = None) -> NormalizedRunEvent | None:
+        if not isinstance(message, str) or not message.strip():
+            return None
+        return self._next_event(run, "thinking", message, data=self._response_text_data(message_id))
+
+    def _flush_buffered_part_delta(self, run: dict[str, Any], part_id: str, message_id: str | None = None) -> list[NormalizedRunEvent]:
+        buffered_parts = run.get("buffered_part_deltas") or {}
+        buffered_entry = buffered_parts.pop(part_id, None)
+        if not isinstance(buffered_entry, dict):
+            return []
+
+        delta = buffered_entry.get("delta") or ""
+        if not isinstance(delta, str) or not delta:
+            return []
+
+        resolved_part_type = (run.get("part_types") or {}).get(part_id)
+        resolved_message_id = message_id or buffered_entry.get("message_id")
+        if resolved_part_type == "text":
+            emitted = self._emit_assistant_text_event(run, delta, resolved_message_id)
+            return [emitted] if emitted else []
+        if resolved_part_type == "reasoning":
+            return [self._next_event(run, "thinking", delta)]
+
+        return []
+
     def _extract_message_or_event_agent_name(self, payload: Any) -> str | None:
         if not isinstance(payload, dict):
             return None
@@ -165,6 +203,9 @@ class OpencodeAdapter:
             "question_requests": {},
             "assistant_message_id": None,
             "last_text": "",
+            "last_output_text": "",
+            "part_types": {},
+            "buffered_part_deltas": {},
             "result_emitted": False,
             "confirmed_primary_agent": None,
             "primary_agent_evidence_source": None,
@@ -182,10 +223,10 @@ class OpencodeAdapter:
                 run["session_id"] = existing_session_id
                 session_id = existing_session_id
                 run["events"] = [
-                    self._next_event(
+                    self._next_tool_event(
                         run,
-                        "thinking",
                         "已复用当前 opencode session，准备继续提交 follow-up prompt。",
+                        title="会话已连接",
                         data={"session_id": session_id, "session_reused": True},
                     ),
                     self._next_tool_event(
@@ -215,10 +256,10 @@ class OpencodeAdapter:
                 run["session_id"] = session["id"]
                 session_id = session["id"]
                 run["events"] = [
-                    self._next_event(
+                    self._next_tool_event(
                         run,
-                        "thinking",
                         f"已创建 opencode session，准备提交 prompt。software_version={request.capture.get('software_version', '') or '(empty)'}；selected_sr={request.capture.get('selected_sr', '') or '(empty)'}。",
+                        title="会话已创建",
                         data={"session_id": session_id},
                     ),
                     self._next_tool_event(
@@ -438,7 +479,7 @@ class OpencodeAdapter:
                             return
 
         if not run["result_emitted"]:
-            final_event = await self._build_result_from_session(run)
+            final_event = await self._build_result_from_session(run, allow_placeholder=True)
             if final_event:
                 yield final_event
 
@@ -454,18 +495,37 @@ class OpencodeAdapter:
             status = properties.get("status") or {}
             status_type = status.get("type", "unknown")
             details = f"（attempt={status.get('attempt')}）" if status_type == "retry" else ""
-            return [self._next_event(run, "thinking", f"opencode session 状态更新：{status_type}{details}", data={"status": status})]
+            return [self._next_tool_event(run, f"opencode session 状态更新：{status_type}{details}", title="会话状态", data={"status": status})]
 
         if event_type == "message.part.delta":
             delta = properties.get("delta") or ""
             if delta:
-                run["last_text"] = f"{run.get('last_text', '')}{delta}"
-                return [self._next_event(run, "thinking", delta, data=self._response_text_data(properties.get("messageID")))]
+                part_id = self._part_id_from_properties(properties)
+                message_id = properties.get("messageID")
+                part_type = (run.get("part_types") or {}).get(part_id) if part_id else None
+
+                if part_type == "text":
+                    emitted = self._emit_assistant_text_event(run, delta, message_id)
+                    return [emitted] if emitted else []
+
+                if part_type == "reasoning":
+                    return [self._next_event(run, "thinking", delta)]
+
+                if part_id:
+                    run.setdefault("buffered_part_deltas", {})[part_id] = {
+                        "delta": delta,
+                        "message_id": message_id,
+                    }
+                return []
             return []
 
         if event_type == "message.part.updated":
             part = properties.get("part") or {}
             part_type = part.get("type")
+            part_id = self._part_id_from_properties(properties, part)
+            if part_id and isinstance(part_type, str) and part_type:
+                run.setdefault("part_types", {})[part_id] = part_type
+
             if part_type == "tool":
                 state = part.get("state") or {}
                 tool_name = str(part.get("tool") or "unknown")
@@ -473,9 +533,17 @@ class OpencodeAdapter:
                 message = self._simplify_tool_call_message(tool_name, state_status, state.get("title"))
                 return [self._next_tool_event(run, message, data={"stage": state_status}, log_data={"tool": part.get("tool"), "state": state, "part": part})]
             if part_type == "reasoning":
-                return [self._next_event(run, "thinking", part.get("text") or "模型正在推理。")]
+                flushed_events = self._flush_buffered_part_delta(run, part_id, properties.get("messageID")) if part_id else []
+                if flushed_events:
+                    return flushed_events
+                return [self._next_event(run, "thinking", part.get("text") or "模型正在推理。")] 
             if part_type == "text" and part.get("text"):
-                run["last_text"] = part["text"]
+                run["last_output_text"] = part["text"]
+                flushed_events = self._flush_buffered_part_delta(run, part_id, properties.get("messageID")) if part_id else []
+                if flushed_events:
+                    return flushed_events
+                emitted = self._emit_assistant_text_event(run, part["text"], properties.get("messageID"))
+                return [emitted] if emitted else []
             return []
 
         if event_type == "message.updated":
@@ -484,9 +552,6 @@ class OpencodeAdapter:
                 run["assistant_message_id"] = info.get("id")
                 if info.get("error"):
                     return [self._next_event(run, "error", f"opencode session 返回错误：{info['error']}", data={"info": info})]
-                if info.get("time", {}).get("completed") and not run["result_emitted"]:
-                    result = await self._build_result_from_session(run)
-                    return [result] if result else []
             return []
 
         if event_type == "question.asked":
@@ -499,14 +564,14 @@ class OpencodeAdapter:
 
         if event_type == "question.replied":
             run["waiting_question_id"] = None
-            return [self._next_event(run, "thinking", "问题已回答，继续等待 opencode 输出。", data=properties)]
+            return [self._next_tool_event(run, "问题已回答，继续等待 opencode 输出。", title="已提交回答", data=properties)]
 
         if event_type == "session.error":
             return [self._next_event(run, "error", f"opencode session 错误：{properties.get('error') or 'unknown'}", data=properties)]
 
         if event_type == "session.idle":
-            result = await self._build_result_from_session(run)
-            return [result] if result else [self._next_event(run, "thinking", "opencode session 已空闲，等待消息同步。", data=properties)]
+            result = await self._build_result_from_session(run, allow_placeholder=False)
+            return [result] if result else [self._next_tool_event(run, "opencode session 已空闲，等待消息同步。", title="会话空闲", data=properties)]
 
         return []
 
@@ -546,7 +611,7 @@ class OpencodeAdapter:
             placeholder="请输入答案",
         )
 
-    async def _build_result_from_session(self, run: dict[str, Any]) -> NormalizedRunEvent | None:
+    async def _build_result_from_session(self, run: dict[str, Any], *, allow_placeholder: bool) -> NormalizedRunEvent | None:
         if run["result_emitted"] or not run.get("session_id"):
             return None
 
@@ -582,15 +647,18 @@ class OpencodeAdapter:
         )
 
         if not final_item:
-            if run.get("last_text"):
+            if run.get("last_output_text"):
                 run["result_emitted"] = True
-                return self._next_event(run, "result", run["last_text"], data={"opencode_mode": "real", "session_id": run.get("session_id"), **self._response_text_data(run.get("assistant_message_id"))})
+                return self._next_event(run, "result", run["last_output_text"], data={"opencode_mode": "real", "session_id": run.get("session_id"), **self._response_text_data(run.get("assistant_message_id"))})
             return None
 
         parts = final_item.get("parts") or []
         text_parts = [part.get("text", "") for part in parts if isinstance(part, dict) and part.get("type") == "text" and part.get("text")]
-        reasoning_parts = [part.get("text", "") for part in parts if isinstance(part, dict) and part.get("type") == "reasoning" and part.get("text")]
-        message = "\n".join(text_parts).strip() or "\n".join(reasoning_parts).strip() or run.get("last_text") or "opencode serve 已完成但未返回可展示文本。"
+        message = "\n".join(text_parts).strip() or str(run.get("last_output_text") or "").strip()
+        if not message and not allow_placeholder:
+            return None
+        if not message:
+            message = "opencode serve 已完成但未返回可展示文本。"
         run["result_emitted"] = True
         return self._next_event(
             run,

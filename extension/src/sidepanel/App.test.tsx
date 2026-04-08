@@ -503,7 +503,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const captureButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集页面"));
+    const captureButton = container.querySelector("button[aria-label='采集页面']");
     await act(async () => {
       captureButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -539,7 +539,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const captureButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("采集页面"));
+    const captureButton = container.querySelector("button[aria-label='采集页面']");
     await act(async () => {
       captureButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -880,9 +880,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("助手正在继续生成回答，完成后会显示最终结果。");
     expect(container.textContent).not.toContain("助手已完成本轮回答。");
-    expect(container.textContent).toContain("持续输出中");
   });
 
   it("does not accept same-run done status without terminal evidence", () => {
@@ -1015,7 +1013,6 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("助手正在继续生成回答，完成后会显示最终结果。");
     expect(container.textContent).not.toContain("正在整理上下文并准备分析");
     expect(container.textContent).not.toContain("prepare_context");
     expect(container.textContent).not.toContain("secret");
@@ -1068,7 +1065,6 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("助手正在继续生成回答，完成后会显示最终结果。");
     expect(container.textContent).not.toContain("读取页面上下文");
     expect(container.textContent).not.toContain("整理可用字段");
     expect(container.textContent).not.toContain("展开推理过程");
@@ -1209,13 +1205,11 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("对话");
-    expect(container.textContent).toContain("发送消息");
-    expect(container.textContent).toContain("左侧选中的会话会成为当前续聊目标");
+    expect(container.querySelector("button[aria-label='会话']")).not.toBeNull();
     expect(container.textContent).toContain("个会话");
-    expect(container.textContent).toContain("持续输出中");
   });
 
-  it("renders Copilot-like header toolbar, new session action, and composer placeholder chips", async () => {
+  it("renders console actions and composer placeholder chips", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: initialAssistantState
@@ -1226,13 +1220,56 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("Copilot Session");
-    expect(container.textContent).toContain("Live / History");
-    expect(container.textContent).toContain("新会话");
-    expect(container.textContent).toContain("点击左侧会话后可在主窗口继续对话");
+    expect(container.textContent).toContain("会话");
+    expect(container.textContent).toContain("上下文");
+    expect(container.textContent).toContain("规则");
     expect(container.textContent).toContain("附件");
     expect(container.textContent).toContain("页面上下文");
     expect(container.textContent).toContain("选中内容");
+  });
+
+  it("stays on a blank draft session after clicking new session even when history exists", async () => {
+    const historyRun = {
+      ...createCurrentRun(),
+      runId: "run-history-1",
+      sessionId: "ses-history-1",
+      status: "done" as const,
+      prompt: "历史问题",
+      finalOutput: "历史答案",
+      updatedAt: "2026-04-02T00:00:03.000Z"
+    };
+
+    mockRunHistoryState.history = [historyRun];
+    mockRunHistoryState.runDetails = {
+      "run-history-1": {
+        run: historyRun,
+        events: [createRunEvent(1, { runId: "run-history-1", type: "result", message: "历史答案" })],
+        answers: []
+      }
+    };
+
+    const { runtimeSendMessage } = setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("历史答案");
+
+    const newSessionButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("新会话"));
+    await act(async () => {
+      newSessionButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "CLEAR_RESULT" });
+    expect(container.textContent).toContain("开始一段新的会话");
+    expect(container.textContent).not.toContain("历史答案");
+    expect(container.textContent).toContain("新会话");
   });
 
   it("renders send affordance as bottom-right paper-plane button", async () => {
@@ -1276,10 +1313,10 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(Array.from(container.querySelectorAll("button")).some((node) => node.textContent === "复制")).toBe(true);
-    expect(Array.from(container.querySelectorAll("button")).some((node) => node.textContent === "点赞")).toBe(true);
-    expect(Array.from(container.querySelectorAll("button")).some((node) => node.textContent === "点踩")).toBe(true);
-    expect(Array.from(container.querySelectorAll("button")).some((node) => node.textContent === "重试")).toBe(true);
+    expect(container.querySelector("button[aria-label='复制']")).not.toBeNull();
+    expect(container.querySelector("button[aria-label='点赞']")).not.toBeNull();
+    expect(container.querySelector("button[aria-label='点踩']")).not.toBeNull();
+    expect(container.querySelector("button[aria-label='重试']")).not.toBeNull();
   });
 
   it("retries by starting a new run with the original user question", async () => {
@@ -1309,7 +1346,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const retryButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent === "重试");
+    const retryButton = container.querySelector("button[aria-label='重试']");
     await act(async () => {
       retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -1363,7 +1400,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const likeButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent === "点赞");
+    const likeButton = container.querySelector("button[aria-label='点赞']");
     await act(async () => {
       likeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -1410,7 +1447,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const dislikeButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent === "点踩");
+    const dislikeButton = container.querySelector("button[aria-label='点踩']");
     await act(async () => {
       dislikeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });

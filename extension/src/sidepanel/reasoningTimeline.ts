@@ -36,6 +36,29 @@ const REASONING_SIGNAL_PATTERNS = [
   /因为|所以|因此|先|再|然后|基于|为了|需要|判断|推断|分析|结论|建议|我会|我先|看起来|可能|可以|接下来/iu
 ];
 const PROCESS_PREFIX_PATTERN = /^(正在|已|当前|读取|整理|查询|检索|调用|连接|创建|收集|准备|同步|进入|更新|完成)/u;
+const LEAKED_REASONING_PREFIX_PATTERNS = [
+  /^assessing task requirements/iu,
+  /^seeking clarity/iu,
+  /^summarizing\s+/iu,
+  /^reviewing\b/iu,
+  /^prioritizing\b/iu,
+  /^i\s+(need|should|could|will|would|can)\b/iu,
+  /^it\s+might\b/iu,
+  /^it looks like\b/iu,
+  /^there(?:'s|\s+is)\b/iu,
+  /^the user\b/iu,
+  /^from the context\b/iu,
+  /^let'?s\b/iu,
+  /^opencode\s+serv(?:e|er)\b/iu,
+  /^with\s+[a-z0-9_\- ]+analysis/iu,
+  /^first[,.:]?/iu,
+  /^second[,.:]?/iu
+];
+const INLINE_ANSWER_START_PATTERNS = [
+  /(?:^|[\s(（\[【])(?:基于当前|对于当前|当前(?!步骤|会话|状态)|当前仓库|综合来看|总结来看|一句话结论|结论是|建议|风险点|下一步|后续建议|可判定为|可以判定为|已具备|前台|后台|测试|发版)/u,
+  /(?:^|\n)\d+\.\s/u,
+  /(?:^|\n)[#>*-]\s/u
+];
 
 export type TimelineCardStatus = "active" | "complete" | "waiting" | "attention";
 export type ConversationTurnKind = "assistant" | "question" | "error";
@@ -163,6 +186,33 @@ function canAggregate(current: TimelineCardModel | null, event: NormalizedRunEve
   return isCompactEvent({ ...event, message: lastEntry.message }) && current.runId === event.runId;
 }
 
+function canMergeThinkingSnapshot(current: TimelineCardModel | null, event: NormalizedRunEvent) {
+  if (!current || current.type !== "thinking" || event.type !== "thinking" || current.runId !== event.runId) {
+    return false;
+  }
+
+  const currentSummary = current.summary.trim();
+  const nextSummary = normalizeMessage(event.message);
+  if (!currentSummary || !nextSummary) {
+    return false;
+  }
+
+  if (currentSummary === nextSummary) {
+    return true;
+  }
+
+  const currentComparable = currentSummary.replace(/\s+/gu, " ").trim();
+  const nextComparable = nextSummary.replace(/\s+/gu, " ").trim();
+
+  if (nextComparable.includes(currentComparable) || currentComparable.includes(nextComparable)) {
+    return true;
+  }
+
+  const commonPrefixLength = getCommonPrefixLength(currentComparable, nextComparable);
+  const shorterLength = Math.min(currentComparable.length, nextComparable.length);
+  return shorterLength > 0 && commonPrefixLength / shorterLength >= 0.75;
+}
+
 function createTimelineEntry(event: NormalizedRunEvent): TimelineEventEntry {
   return {
     id: event.id,
@@ -202,6 +252,370 @@ function joinUniqueParagraphs(parts: string[]) {
   }
 
   return uniqueParts.join("\n\n");
+}
+
+function hasSubstantialChineseContent(text: string) {
+  const matches = text.match(/[\u3400-\u9fff]/gu);
+  return (matches?.length ?? 0) >= 8;
+}
+
+function countLatinLetters(text: string) {
+  return (text.match(/[A-Za-z]/gu)?.length ?? 0);
+}
+
+function findInlineAnswerStartIndex(text: string) {
+  const normalized = normalizeMarkdownStructure(text).trim();
+  if (!normalized || !hasSubstantialChineseContent(normalized)) {
+    return -1;
+  }
+
+  for (const pattern of INLINE_ANSWER_START_PATTERNS) {
+    const match = pattern.exec(normalized);
+    const startIndex = match?.index ?? -1;
+    if (startIndex < 0) {
+      continue;
+    }
+
+    const prefix = normalized.slice(0, startIndex).trim();
+    const suffix = normalized.slice(startIndex).trim();
+    if (!suffix || !hasSubstantialChineseContent(suffix)) {
+      continue;
+    }
+
+    if (!prefix) {
+      return startIndex;
+    }
+
+    if (countLatinLetters(prefix) >= 20 || LEAKED_REASONING_PREFIX_PATTERNS.some((candidate) => candidate.test(prefix.toLowerCase()))) {
+      return startIndex;
+    }
+  }
+
+  const firstChineseIndex = normalized.search(/[\u3400-\u9fff]/u);
+  if (firstChineseIndex <= 0) {
+    return -1;
+  }
+
+  const prefix = normalized.slice(0, firstChineseIndex).trim();
+  const suffix = normalized.slice(firstChineseIndex).trim();
+  if (countLatinLetters(prefix) >= 32 && hasSubstantialChineseContent(suffix)) {
+    return firstChineseIndex;
+  }
+
+  return -1;
+}
+
+function isLikelyLeakedReasoningLine(line: string) {
+  const normalized = line.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  return LEAKED_REASONING_PREFIX_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function normalizeMarkdownStructure(text: string) {
+  return text
+    .replace(/\r\n/gu, "\n")
+    .replace(/([^\n])(?=(#{1,6}\s))/gu, "$1\n\n")
+    .replace(/([^\n])(?=(\d+\.\s))/gu, "$1\n\n")
+    .replace(/([^\n])(?=(-\s))/gu, "$1\n\n")
+    .replace(/\n{3,}/gu, "\n\n");
+}
+
+function splitMarkdownBlocks(text: string) {
+  return text
+    .split(/\n{2,}/gu)
+    .map((block) => block.trim())
+    .filter(Boolean);
+}
+
+function getComparableBlockKey(text: string) {
+  return text.replace(/\s+/gu, " ").trim();
+}
+
+function shouldTreatComparableTextsAsDuplicate(left: string, right: string) {
+  if (!left || !right) {
+    return false;
+  }
+
+  if (left === right || left.includes(right) || right.includes(left)) {
+    return true;
+  }
+
+  const commonPrefixLength = getCommonPrefixLength(left, right);
+  const shorterLength = Math.min(left.length, right.length);
+  return shorterLength > 0 && commonPrefixLength / shorterLength >= 0.75;
+}
+
+function isLikelyLeakedReasoningBlock(block: string) {
+  const lines = block
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) {
+    return false;
+  }
+
+  return lines.every((line) => isLikelyLeakedReasoningLine(line)) || isLikelyLeakedReasoningLine(lines[0]);
+}
+
+function dedupeMarkdownBlocks(blocks: string[]) {
+  const uniqueBlocks: string[] = [];
+
+  for (const block of blocks) {
+    const comparableKey = getComparableBlockKey(block);
+    if (!comparableKey) {
+      continue;
+    }
+
+    const duplicateIndex = uniqueBlocks.findIndex((candidate) => shouldTreatComparableTextsAsDuplicate(
+      getComparableBlockKey(candidate),
+      comparableKey
+    ));
+
+    if (duplicateIndex < 0) {
+      uniqueBlocks.push(block.trim());
+      continue;
+    }
+
+    const existingComparable = getComparableBlockKey(uniqueBlocks[duplicateIndex] ?? "");
+    if (comparableKey.length > existingComparable.length) {
+      uniqueBlocks[duplicateIndex] = block.trim();
+    }
+  }
+
+  return uniqueBlocks;
+}
+
+function dedupeProcessItems(items: TimelineCardModel[]) {
+  const uniqueItems: TimelineCardModel[] = [];
+
+  for (const item of items) {
+    const comparableSummary = getComparableBlockKey(normalizeMarkdownStructure(item.summary));
+    if (!comparableSummary) {
+      continue;
+    }
+
+    const duplicateIndex = uniqueItems.findIndex((candidate) => {
+      if (candidate.type !== item.type) {
+        return false;
+      }
+
+      return shouldTreatComparableTextsAsDuplicate(
+        getComparableBlockKey(normalizeMarkdownStructure(candidate.summary)),
+        comparableSummary
+      );
+    });
+
+    if (duplicateIndex < 0) {
+      uniqueItems.push(item);
+      continue;
+    }
+
+    const existingComparable = getComparableBlockKey(normalizeMarkdownStructure(uniqueItems[duplicateIndex]?.summary ?? ""));
+    if (comparableSummary.length > existingComparable.length) {
+      uniqueItems[duplicateIndex] = item;
+    }
+  }
+
+  return uniqueItems;
+}
+
+function isLikelyOrchestrationNoiseLine(line: string) {
+  const normalized = normalizeMessage(line).replace(/\s+/gu, " ");
+  if (!normalized) {
+    return false;
+  }
+
+  if (ORCHESTRATION_NOISE_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return true;
+  }
+
+  return /^模型正在推理[。.]?$/u.test(normalized)
+    || /^已连接当前会话/iu.test(normalized)
+    || /^已复用当前\s+opencode\s+session/iu.test(normalized)
+    || /^已创建\s+opencode\s+session/iu.test(normalized)
+    || /^opencode\s+session\s+状态更新[:：]?/iu.test(normalized)
+    || /\bsoftware_version=\(empty\)/iu.test(normalized)
+    || /\bselected_sr=\(empty\)/iu.test(normalized)
+    || /\bbusy\b/iu.test(normalized);
+}
+
+function sanitizeAssistantThinkingText(text: string, answerText?: string | null) {
+  const normalized = normalizeMarkdownStructure(text).trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const answerBlocks = dedupeMarkdownBlocks(splitMarkdownBlocks(normalizeMarkdownStructure(answerText?.trim() || "")));
+  const comparableAnswerBlocks = answerBlocks.map((block) => getComparableBlockKey(block)).filter(Boolean);
+
+  const filteredBlocks = splitMarkdownBlocks(normalized)
+    .map((block) => block
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !isLikelyOrchestrationNoiseLine(line))
+      .join("\n")
+      .trim())
+    .filter((block) => {
+      if (!block) {
+        return false;
+      }
+
+      const comparableBlock = getComparableBlockKey(block);
+      return !comparableAnswerBlocks.some((answerBlock) => answerBlock === comparableBlock || answerBlock.includes(comparableBlock) || comparableBlock.includes(answerBlock));
+    });
+
+  const cleanedThinking = dedupeMarkdownBlocks(filteredBlocks).join("\n\n").trim();
+  return subtractAnswerTextFromThinking(cleanedThinking, answerText);
+}
+
+function subtractAnswerTextFromThinking(thinkingText: string, answerText?: string | null) {
+  const normalizedThinking = normalizeMarkdownStructure(thinkingText).trim();
+  const normalizedAnswer = normalizeMarkdownStructure(answerText?.trim() || "").trim();
+
+  if (!normalizedThinking || !normalizedAnswer) {
+    return normalizedThinking;
+  }
+
+  if (normalizedThinking === normalizedAnswer) {
+    return "";
+  }
+
+  const directIndex = normalizedThinking.indexOf(normalizedAnswer);
+  if (directIndex >= 0) {
+    return normalizedThinking.slice(0, directIndex).trim();
+  }
+
+  const answerLines = normalizedAnswer
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const firstAnswerLine = answerLines[0];
+
+  if (!firstAnswerLine) {
+    return normalizedThinking;
+  }
+
+  const thinkingLines = normalizedThinking.split("\n");
+  const answerStartIndex = thinkingLines.findIndex((line) => line.trim() === firstAnswerLine);
+
+  if (answerStartIndex >= 0) {
+    return thinkingLines.slice(0, answerStartIndex).join("\n").trim();
+  }
+
+  const inlineAnswerStartIndex = findInlineAnswerStartIndex(normalizedThinking);
+  if (inlineAnswerStartIndex > 0) {
+    return normalizedThinking.slice(0, inlineAnswerStartIndex).trim();
+  }
+
+  return normalizedThinking;
+}
+
+function sanitizeAssistantDisplayText(text: string) {
+  const normalized = normalizeMarkdownStructure(text).trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const containsChineseContent = hasSubstantialChineseContent(normalized);
+  const dedupedBlocks = dedupeMarkdownBlocks(
+    splitMarkdownBlocks(normalized).filter((block) => !(containsChineseContent && isLikelyLeakedReasoningBlock(block)))
+  );
+  const cleaned = dedupedBlocks.join("\n\n").trim() || normalized;
+  const inlineAnswerStartIndex = findInlineAnswerStartIndex(cleaned);
+
+  if (inlineAnswerStartIndex > 0) {
+    return cleaned.slice(inlineAnswerStartIndex).trim();
+  }
+
+  if (!containsChineseContent) {
+    return cleaned;
+  }
+
+  const lines = cleaned.split("\n");
+  let firstAnswerLineIndex = 0;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]?.trim() ?? "";
+    if (!line) {
+      continue;
+    }
+
+    if (hasSubstantialChineseContent(line) || /^[#>*-]|^\d+\.\s/u.test(line) || /^(当前|建议|总结|风险|P\d|一句话结论)/u.test(line)) {
+      firstAnswerLineIndex = index;
+      break;
+    }
+
+    if (!isLikelyLeakedReasoningLine(line)) {
+      firstAnswerLineIndex = index;
+      break;
+    }
+  }
+
+  const sanitized = lines.slice(firstAnswerLineIndex).join("\n").trim();
+  return sanitized || cleaned;
+}
+
+function resolveAssistantDisplayText(aggregatedText: string, finalOutput?: string | null) {
+  const sanitizedFinalOutput = sanitizeAssistantDisplayText(trimTerminalText(finalOutput));
+  const sanitizedAggregatedText = sanitizeAssistantDisplayText(aggregatedText);
+
+  if (!sanitizedFinalOutput) {
+    return sanitizedAggregatedText;
+  }
+
+  if (!sanitizedAggregatedText) {
+    return sanitizedFinalOutput;
+  }
+
+  if (sanitizedAggregatedText === sanitizedFinalOutput || sanitizedAggregatedText.includes(sanitizedFinalOutput) || hasSubstantialChineseContent(sanitizedFinalOutput)) {
+    return sanitizedFinalOutput;
+  }
+
+  return sanitizedAggregatedText;
+}
+
+function collectLatestAssistantResultText(events: NormalizedRunEvent[]) {
+  const resultEvents = events.filter((event) => event.type === "result");
+  if (!resultEvents.length) {
+    return "";
+  }
+
+  return sanitizeAssistantDisplayText(resultEvents[resultEvents.length - 1]?.message ?? "");
+}
+
+function createSyntheticThinkingItem(options: {
+  runId?: string | null;
+  preferredMessageId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  summary: string;
+}): TimelineCardModel {
+  const timestamp = options.updatedAt ?? options.createdAt ?? new Date().toISOString();
+  const id = `synthetic-thinking-${options.preferredMessageId ?? options.runId ?? "standalone"}`;
+
+  return {
+    id,
+    runId: options.runId ?? "standalone-run",
+    type: "thinking",
+    title: "Thinking",
+    summary: options.summary,
+    createdAt: options.createdAt ?? timestamp,
+    updatedAt: timestamp,
+    entries: [
+      {
+        id,
+        type: "thinking",
+        createdAt: options.createdAt ?? timestamp,
+        message: options.summary,
+        title: "Thinking"
+      }
+    ],
+    isAggregated: false
+  };
 }
 
 function hasReasoningSignals(message: string) {
@@ -431,6 +845,12 @@ function mergeAssistantResponseSnapshot(current: string, snapshot: string) {
     return existing;
   }
 
+  const commonPrefixLength = getCommonPrefixLength(existingComparable, nextComparable);
+  const shorterLength = Math.min(existingComparable.length, nextComparable.length);
+  if (shorterLength > 0 && commonPrefixLength / shorterLength >= 0.75) {
+    return existing.length >= next.length ? existing : next;
+  }
+
   const overlap = getTextOverlapLength(existing, next);
   if (overlap > 0) {
     return `${existing}${next.slice(overlap)}`;
@@ -480,7 +900,7 @@ export function collectAssistantResponseAggregation(events: NormalizedRunEvent[]
 }
 
 export function collectRunAssistantResponseText(events: NormalizedRunEvent[], finalOutput?: string | null) {
-  return collectAssistantResponseAggregation(events, finalOutput).text;
+  return resolveAssistantDisplayText(collectAssistantResponseAggregation(events, finalOutput).text, finalOutput);
 }
 
 export function hasTerminalResultEvidence(options: {
@@ -539,7 +959,16 @@ export function resolveTimelinePresentationState(options: {
 export function buildChatStreamItems(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
   const streamItems: ChatStreamItemModel[] = [];
   const assistantResponse = collectAssistantResponseAggregation(options.events, options.finalOutput);
+  const latestResultText = collectLatestAssistantResultText(options.events);
   const reasoningItems = buildReasoningTimelineItems(options.events.filter((event) => !isAssistantResponseDeltaEvent(event)));
+  const reasoningOnlyText = joinUniqueParagraphs(
+    reasoningItems
+      .filter((item) => item.type === "thinking")
+      .map((item) => item.summary)
+  );
+  const assistantDisplayText = latestResultText
+    || resolveAssistantDisplayText(assistantResponse.text, options.finalOutput)
+    || sanitizeAssistantDisplayText(reasoningOnlyText);
   const answersByQuestionId = new Map<string, AnswerRecord[]>();
   const prompt = options.prompt?.trim() || "";
   const errorMessage = options.errorMessage?.trim() || "";
@@ -547,10 +976,11 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
   const presentationState = resolveTimelinePresentationState({
     events: options.events,
     runStatus: options.status,
-    finalOutput: assistantResponse.text,
+    finalOutput: assistantDisplayText,
     errorMessage
   });
   const hasResultEvent = options.events.some((event) => event.type === "result");
+  const hasConcreteAnswer = Boolean(assistantDisplayText);
   let hasErrorItem = false;
   let pendingProcessItems: TimelineCardModel[] = [];
 
@@ -652,21 +1082,44 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
     pendingProcessItems = [];
   }
 
-  if (assistantResponse.text) {
+  const assistantProcessItems = dedupeProcessItems(pendingProcessItems
+    .map((item) => {
+      if (item.type !== "thinking") {
+        return item;
+      }
+
+      const trimmedSummary = sanitizeAssistantThinkingText(item.summary, assistantDisplayText);
+      if (!trimmedSummary) {
+        return null;
+      }
+
+      return {
+        ...item,
+        summary: trimmedSummary,
+        entries: item.entries.map((entry) => ({
+          ...entry,
+          message: trimmedSummary
+        }))
+      };
+    })
+    .filter((item): item is TimelineCardModel => Boolean(item)));
+
+  if (assistantDisplayText || assistantProcessItems.length) {
     const shouldRenderAsFinalResult = hasResultEvent || presentationState.runStatus === "done";
+    const assistantMessageSummary = hasConcreteAnswer ? assistantDisplayText : "";
     streamItems.push({
       id: assistantResponse.preferredMessageId ?? `synthetic-result-${options.runId ?? "standalone"}`,
-      runId: options.runId ?? pendingProcessItems[0]?.runId ?? "standalone-run",
+      runId: options.runId ?? assistantProcessItems[0]?.runId ?? "standalone-run",
       kind: shouldRenderAsFinalResult ? "assistant_result" : "assistant_progress",
       title: "Assistant",
-      summary: assistantResponse.text,
-      createdAt: assistantResponse.firstResponseAt ?? pendingProcessItems[0]?.createdAt ?? options.updatedAt ?? new Date().toISOString(),
-      updatedAt: assistantResponse.lastResponseAt ?? pendingProcessItems[pendingProcessItems.length - 1]?.updatedAt ?? options.updatedAt ?? new Date().toISOString(),
-      primaryType: shouldRenderAsFinalResult ? "result" : pendingProcessItems[pendingProcessItems.length - 1]?.type ?? "thinking",
-      processItems: pendingProcessItems,
-      processSummary: createReasoningSummary(pendingProcessItems),
+      summary: assistantMessageSummary,
+      createdAt: assistantResponse.firstResponseAt ?? assistantProcessItems[0]?.createdAt ?? options.updatedAt ?? new Date().toISOString(),
+      updatedAt: assistantResponse.lastResponseAt ?? assistantProcessItems[assistantProcessItems.length - 1]?.updatedAt ?? options.updatedAt ?? new Date().toISOString(),
+      primaryType: shouldRenderAsFinalResult ? "result" : assistantProcessItems[assistantProcessItems.length - 1]?.type ?? "thinking",
+      processItems: assistantProcessItems,
+      processSummary: createReasoningSummary(assistantProcessItems),
       sourceQuestionPrompt: prompt,
-      supportsCopy: true,
+      supportsCopy: Boolean(assistantMessageSummary),
       supportsRetry: shouldRenderAsFinalResult,
       supportsFeedback: shouldRenderAsFinalResult,
       feedbackState: shouldRenderAsFinalResult
@@ -711,6 +1164,17 @@ export function buildReasoningTimelineItems(events: NormalizedRunEvent[]): Timel
       current.updatedAt = entry.createdAt;
       current.summary = summarizeEntries(current.entries);
       current.title = entry.title;
+      continue;
+    }
+
+    if (canMergeThinkingSnapshot(current, event)) {
+      current.updatedAt = entry.createdAt;
+      current.summary = mergeAssistantResponseSnapshot(current.summary, entry.message);
+      current.title = entry.title;
+      current.entries = [{
+        ...entry,
+        message: current.summary
+      }];
       continue;
     }
 

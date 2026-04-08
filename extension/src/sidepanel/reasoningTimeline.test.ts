@@ -303,6 +303,64 @@ describe("reasoning timeline view-model", () => {
     );
   });
 
+  it("merges cumulative reasoning snapshots into a single thinking item", () => {
+    const items = buildReasoningTimelineItems([
+      createEvent(1, {
+        type: "thinking",
+        message: "Summarizing project risks in Chinese"
+      }),
+      createEvent(2, {
+        type: "thinking",
+        message: "Summarizing project risks in Chinese\n\nI need to provide an answer in Chinese about the current SR risks."
+      })
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.type).toBe("thinking");
+    expect(items[0]?.summary).toBe(
+      "Summarizing project risks in Chinese\n\nI need to provide an answer in Chinese about the current SR risks."
+    );
+  });
+
+  it("deduplicates repeated thinking process items after trimming", () => {
+    const repeatedThinking = "Summarizing SR risks and actions\n\nI need to answer the user in Chinese about the current SR's risk and next steps.";
+
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "请总结当前 SR 的风险与建议下一步动作。",
+      events: [
+        createEvent(1, { type: "thinking", message: repeatedThinking }),
+        createEvent(2, { type: "thinking", message: repeatedThinking })
+      ],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    const assistantItem = items.find((item) => item.kind === "assistant_progress");
+    expect(assistantItem?.processItems).toHaveLength(1);
+    expect(assistantItem?.processItems[0]?.summary).toBe(repeatedThinking);
+  });
+
+  it("deduplicates near-duplicate thinking snapshots and keeps the more complete one", () => {
+    const shorterThinking = "**Summarizing SR risks** I need to answer the user who asked for a summary of current and some suggested next steps.";
+    const longerThinking = "**Summarizing SR risks** I need to answer the user who asked for a summary of current and some suggested next steps. I should check the workspace to see if it might be empty, which could explain why there isn't much data available.";
+
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "请总结当前 SR 的风险与建议下一步动作。",
+      events: [
+        createEvent(1, { type: "thinking", message: shorterThinking }),
+        createEvent(2, { type: "thinking", message: longerThinking })
+      ],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    const assistantItem = items.find((item) => item.kind === "assistant_progress");
+    expect(assistantItem?.processItems).toHaveLength(1);
+    expect(assistantItem?.processItems[0]?.summary).toBe(longerThinking);
+  });
+
   it("preserves spaces and paragraph breaks across assistant delta chunks", () => {
     const aggregation = collectAssistantResponseAggregation([
       createEvent(1, { type: "thinking", message: "# Summary\n\nHello ", data: { field: "text", message_id: "msg-1" } }),
@@ -310,6 +368,78 @@ describe("reasoning timeline view-model", () => {
     ]);
 
     expect(aggregation.text).toBe("# Summary\n\nHello world\n\n- item 1");
+  });
+
+  it("strips leaked English reasoning preface when a Chinese final answer is present", () => {
+    const events = [
+      createEvent(1, {
+        type: "thinking",
+        message: "Assessing task requirements\n\nI need to provide a concise Chinese answer.",
+        data: { field: "text", message_id: "msg-1" }
+      }),
+      createEvent(2, {
+        type: "result",
+        message: "当前主要风险\n\n1. SR语义不完整。\n2. 采集链路需要补强。",
+        data: { message_id: "msg-1" }
+      })
+    ];
+
+    expect(collectRunAssistantResponseText(events, "当前主要风险\n\n1. SR语义不完整。\n2. 采集链路需要补强。")).toBe(
+      "当前主要风险\n\n1. SR语义不完整。\n\n2. 采集链路需要补强。"
+    );
+
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "请总结当前 SR 的风险与建议下一步动作。",
+      events,
+      status: "done",
+      finalOutput: "当前主要风险\n\n1. SR语义不完整。\n2. 采集链路需要补强。"
+    });
+
+    expect(items.find((item) => item.kind === "assistant_result")?.summary).toBe(
+      "当前主要风险\n\n1. SR语义不完整。\n\n2. 采集链路需要补强。"
+    );
+  });
+
+  it("prefers final output over duplicated leaked reasoning blocks when both are present", () => {
+    const finalOutput = "当前主要风险\n\n1. 数据最小化风险。\n\n2. 访问边界需要补强。";
+    const events = [
+      createEvent(1, {
+        type: "thinking",
+        message: "there's no detailed text available for it. I should give a caveat about this.基于仓库现有信息，当前页面默认 SR 是 SR-DEMO-001，但没找到该 SR 的正式需求正文/安全目标定义。",
+        data: { field: "text", message_id: "msg-1" }
+      }),
+      createEvent(2, {
+        type: "thinking",
+        message: `${finalOutput}\n\nopencode serve 已完成文本返回可展示文本。 Summarizing SR risks in Chinese\n\nI need to answer the user in Chinese by summarizing current SR risks and recommended next actions.`,
+        data: { field: "text", message_id: "msg-1" }
+      }),
+      createEvent(3, {
+        type: "result",
+        message: finalOutput,
+        data: { message_id: "msg-1" }
+      })
+    ];
+
+    expect(collectRunAssistantResponseText(events, finalOutput)).toBe(finalOutput);
+
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "请总结当前 SR 的风险与建议下一步动作。",
+      events,
+      status: "done",
+      finalOutput
+    });
+
+    expect(items.find((item) => item.kind === "assistant_result")?.summary).toBe(finalOutput);
+  });
+
+  it("removes duplicated markdown blocks from repeated assistant output", () => {
+    const duplicated = "当前主要风险\n\n1. 数据最小化风险。\n\n2. 访问边界需要补强。\n\n当前主要风险\n\n1. 数据最小化风险。\n\n2. 访问边界需要补强。";
+
+    expect(collectRunAssistantResponseText([], duplicated)).toBe(
+      "当前主要风险\n\n1. 数据最小化风险。\n\n2. 访问边界需要补强。"
+    );
   });
 
   it("keeps a stable assistant message id across streaming deltas and final result", () => {
@@ -374,6 +504,103 @@ describe("reasoning timeline view-model", () => {
     expect(items.map((item) => item.kind)).toEqual([
       "user_prompt"
     ]);
+  });
+
+  it("renders text-stream deltas as assistant body instead of Thinking when no final result is persisted", () => {
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, { type: "thinking", message: "## 当前风险结论\n\n1. SR 本体缺失。", data: { field: "text", message_id: "msg-1" } })
+      ],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    expect(items.map((item) => item.kind)).toEqual([
+      "user_prompt",
+      "assistant_progress"
+    ]);
+    expect(items[1]?.summary).toContain("当前风险结论");
+    expect(items[1]?.processItems).toHaveLength(0);
+  });
+
+  it("keeps reasoning in Thinking while rendering text-stream deltas in the assistant body", () => {
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, { type: "thinking", message: "我先核对 SR 标识和需求正文，再给出结论。" }),
+        createEvent(2, { type: "thinking", message: "## 当前风险结论\n\n1. SR 本体缺失。", data: { field: "text", message_id: "msg-1" } })
+      ],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    expect(items.map((item) => item.kind)).toEqual([
+      "user_prompt",
+      "assistant_progress"
+    ]);
+    expect(items[1]?.summary).toContain("当前风险结论");
+    expect(items[1]?.processItems).toHaveLength(1);
+    expect(items[1]?.processItems[0]?.type).toBe("thinking");
+    expect(items[1]?.processItems[0]?.summary).toContain("我先核对 SR 标识");
+  });
+
+  it("falls back to a derived body from reasoning when no text stream exists, while trimming the body out of Thinking", () => {
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: [
+            "I will inspect the current SR evidence and verify whether the repository contains the formal requirement.",
+            "## 当前风险总结",
+            "1. SR 本体缺失。",
+            "2. 资产与攻击面尚未正式定义。"
+          ].join("\n")
+        })
+      ],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    expect(items.map((item) => item.kind)).toEqual([
+      "user_prompt",
+      "assistant_progress"
+    ]);
+    expect(items[1]?.summary).toContain("当前风险总结");
+    expect(items[1]?.summary).toContain("SR 本体缺失");
+    expect(items[1]?.processItems).toHaveLength(1);
+    expect(items[1]?.processItems[0]?.summary).toContain("inspect the current SR evidence");
+    expect(items[1]?.processItems[0]?.summary).not.toContain("当前风险总结");
+  });
+
+  it("moves a derived answer suffix out of Thinking when no final result text is persisted", () => {
+    const mixedStream = [
+      "supplement the architectureElementId traceability in the graph.",
+      "Next, I'll prepare for a targeted release along with regression and manual verification, ensuring it's in a real browser for the same-session follow-up.",
+      "基于当前仓库状态，当前 SR 初验总体可评为：中低，但仍有流程性残余风险。",
+      "1. 当前目标已发版完成，且 QA 已通过。",
+      "2. 后续同一 session 继续追问可发送相同会话上下文。"
+    ].join("\n");
+
+    const items = buildChatStreamItems({
+      runId: "run-1",
+      prompt: "请总结 SR 风险与下一步动作。",
+      events: [
+        createEvent(1, { type: "thinking", message: mixedStream, data: { field: "text", message_id: "msg-1" } })
+      ],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    const assistantItem = items.find((item) => item.kind === "assistant_progress");
+    expect(assistantItem?.summary).toContain("基于当前仓库状态");
+    expect(assistantItem?.summary).toContain("当前 SR 初验总体可评为");
+    expect(assistantItem?.processItems.at(-1)?.summary).not.toContain("基于当前仓库状态");
+    expect(assistantItem?.processItems.at(-1)?.summary).toContain("supplement the architectureElementId");
   });
 
   it("adds hover action metadata for assistant result items", () => {

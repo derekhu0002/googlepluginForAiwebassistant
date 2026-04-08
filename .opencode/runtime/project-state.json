@@ -1,58 +1,43 @@
 {
   "version": 2,
-  "activeGoal": "修复 sidepanel 中同一 session 继续追问时发送按钮可能保持禁用的问题；保持修改局部、非结构性，仅调整前端发送按钮可用性判定并补充回归测试。",
+  "activeGoal": "修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。",
   "designSummary": "",
   "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-105",
-      "title": "修复 sidepanel 中同一 session 继续追问时发送按钮可能保持禁用的问题；保持修改局部、非结构性，仅调整前端发送按钮可用性判定并补充回归测试。",
+      "id": "TASK-001",
+      "title": "修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。",
       "status": "todo",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
       "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
       "details": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks.",
-      "createdAt": "2026-04-08T14:29:24.826Z",
-      "updatedAt": "2026-04-08T14:29:24.826Z"
-    },
-    {
-      "id": "TASK-105-1",
-      "title": "修复 same-session 继续追问时发送按钮保持禁用的问题",
-      "status": "done",
-      "retryCount": 0,
-      "kind": "implementation",
-      "owner": "Implementation",
-      "summary": "Fast-track 实现任务：调整 sidepanel 发送按钮禁用判定，并补充回归测试。",
-      "details": "Fast-track 实现任务：调整 sidepanel 发送按钮禁用判定，并补充回归测试。",
-      "commitId": "90d5be0",
-      "createdAt": "2026-04-08T14:44:42.140Z",
-      "updatedAt": "2026-04-08T14:44:42.140Z"
+      "createdAt": "2026-04-08T20:24:52.462Z",
+      "updatedAt": "2026-04-08T20:24:52.462Z"
     }
   ],
   "issues": [],
   "validations": {
     "qa": {
-      "status": "passed",
-      "summary": "QA passed for commit 90d5be0 (TASK-105-1). Review confirmed the change is localized to extension/src/sidepanel/App.tsx and extension/src/sidepanel/App.test.tsx. Targeted verification passed: npm run test --workspace extension -- src/sidepanel/App.test.tsx (40 tests passed) and npm run typecheck --workspace extension. Behavior covered: send remains disabled during collecting, send re-enables after completed response, and same-session follow-up remains sendable when terminal evidence exists even if outer status is still streaming. Note: TASK-105-1 lacks architectureElementId traceability in the graph.",
-      "details": "QA passed for commit 90d5be0 (TASK-105-1). Review confirmed the change is localized to extension/src/sidepanel/App.tsx and extension/src/sidepanel/App.test.tsx. Targeted verification passed: npm run test --workspace extension -- src/sidepanel/App.test.tsx (40 tests passed) and npm run typecheck --workspace extension. Behavior covered: send remains disabled during collecting, send re-enables after completed response, and same-session follow-up remains sendable when terminal evidence exists even if outer status is still streaming. Note: TASK-105-1 lacks architectureElementId traceability in the graph.",
-      "commitId": "90d5be0",
-      "updatedAt": "2026-04-08T14:50:12.351Z"
+      "status": "not_run",
+      "summary": "QA not run for the current goal.",
+      "updatedAt": "2026-04-08T20:24:52.462Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-08T14:29:24.826Z"
+      "updatedAt": "2026-04-08T20:24:52.462Z"
     }
   },
   "release": {
     "status": "not_started",
     "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-08T14:29:24.826Z"
+    "updatedAt": "2026-04-08T20:24:52.462Z"
   },
   "counters": {
-    "task": 105,
-    "issue": 9
+    "task": 1,
+    "issue": 0
   },
-  "updatedAt": "2026-04-08T14:50:12.352Z"
+  "updatedAt": "2026-04-08T20:24:52.463Z"
 }

@@ -118,9 +118,9 @@ function deriveLifecycleStatus(current: AssistantState, event: NormalizedRunEven
 }
 
 const COMPOSER_PLACEHOLDER_CHIPS = [
-  { label: "附件", description: "UI 占位" },
-  { label: "页面上下文", description: "已采集字段" },
-  { label: "选中内容", description: "可作为上下文" }
+  { key: "attachment", label: "附件", description: "功能占位，暂未启用" },
+  { key: "page_context", label: "页面上下文", description: "查看已采集字段能力占位" },
+  { key: "selection", label: "选中内容", description: "将页面选中内容作为上下文的入口占位" }
 ] as const;
 
 
@@ -234,6 +234,67 @@ function SendIcon() {
   );
 }
 
+function SessionIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="utility-icon">
+      <path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v6A2.5 2.5 0 0 1 16.5 15H11l-4.2 3v-3H7.5A2.5 2.5 0 0 1 5 12.5v-6Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ContextIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="utility-icon">
+      <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 9v3.2l2.2 2.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function RulesIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="utility-icon">
+      <path d="M6 7h12M6 12h8M6 17h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="16" cy="12" r="1.7" fill="currentColor" />
+    </svg>
+  );
+}
+
+function AttachmentIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="utility-icon">
+      <path d="M8.5 12.5 14.8 6.2a3 3 0 1 1 4.2 4.2l-8 8a5 5 0 1 1-7-7l8.7-8.7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PageContextIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="utility-icon">
+      <rect x="5" y="4.5" width="14" height="15" rx="2.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 9h8M8 12.5h8M8 16h5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SelectionIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="utility-icon">
+      <path d="M7.5 6.5h-2v11h11v-2M10 6.5h8.5V15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="m10 14 2.4-6.5L19 10l-6.5 2.4L10 14Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CaptureIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="utility-icon">
+      <path d="M8 7.5 9.5 5h5L16 7.5h2A2.5 2.5 0 0 1 20.5 10v7A2.5 2.5 0 0 1 18 19.5H6A2.5 2.5 0 0 1 3.5 17v-7A2.5 2.5 0 0 1 6 7.5h2Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 function truncateText(value: string, maxLength: number) {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (!normalized) {
@@ -295,6 +356,8 @@ interface SessionNavigationItem {
   runCount: number;
 }
 
+const DRAFT_SESSION_KEY = "draft:new-session";
+
 function deriveSessionKey(run: Pick<RunRecord, "runId" | "sessionId">) {
   return run.sessionId ? `session:${run.sessionId}` : `run:${run.runId}`;
 }
@@ -346,6 +409,7 @@ export function App() {
   const [streamError, setStreamError] = useState<string>("");
   const [activeSessionRunDetails, setActiveSessionRunDetails] = useState<RunHistoryDetail[]>([]);
   const [selectedSessionKey, setSelectedSessionKey] = useState<string | null>(null);
+  const [activeConsole, setActiveConsole] = useState<"sessions" | "context" | "rules" | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const { history, selectedHistoryDetail, saveRun, saveEvent, saveAnswer, loadRunDetail, selectRun, refresh, clearSelectedRun } = useRunHistory();
@@ -733,7 +797,8 @@ export function App() {
     eventSourceRef.current?.close();
     setStreamError("");
     setPrompt(initialAssistantState.runPrompt);
-    setSelectedSessionKey(null);
+    setSelectedSessionKey(DRAFT_SESSION_KEY);
+    setActiveConsole(null);
     await clearSelectedRun().catch(() => undefined);
     await sendMessage<{ ok: boolean }>({ type: "CLEAR_RESULT" }).catch(() => ({ ok: false }));
     await loadBaseState().catch(() => undefined);
@@ -747,10 +812,15 @@ export function App() {
     if (state.currentRun) {
       setSelectedSessionKey(deriveSessionKey(state.currentRun));
     }
+    setActiveConsole(null);
     await clearSelectedRun().catch(() => undefined);
     requestAnimationFrame(() => {
       composerRef.current?.focus();
     });
+  }
+
+  function toggleConsole(panel: "sessions" | "context" | "rules") {
+    setActiveConsole((current) => current === panel ? null : panel);
   }
 
   async function handleCaptureOnly() {
@@ -781,6 +851,7 @@ export function App() {
   const errorTitle = state.error?.code ? `${state.error.code}` : null;
   const errorDescription = state.error ? toDisplayMessage(state.error) : state.errorMessage || streamError;
   const liveAssistantText = collectRunAssistantResponseText(state.runEvents, state.currentRun?.finalOutput);
+  const liveFinalOutput = state.currentRun?.finalOutput?.trim() || "";
   const hasLiveConversation = Boolean(state.currentRun || state.runEvents.length || questionEvent || liveAssistantText);
   const livePrompt = state.currentRun?.prompt ?? prompt;
   const shouldShowPermissionCallout = Boolean(activeContext?.url && !activeContext.permissionGranted && !activeContext.restricted);
@@ -817,13 +888,17 @@ export function App() {
             : hasLiveConversation
               ? "持续输出中"
               : "待开始";
-    const selectedSessionIsCurrent = !selectedSessionKey || selectedSessionKey === currentSessionKey;
+    const selectedSessionIsCurrent = !selectedSessionKey || selectedSessionKey === DRAFT_SESSION_KEY || selectedSessionKey === currentSessionKey;
 
     useEffect(() => {
       if (!sessionNavigationItems.length) {
-        if (selectedSessionKey !== null) {
+        if (selectedSessionKey !== null && selectedSessionKey !== DRAFT_SESSION_KEY) {
           setSelectedSessionKey(null);
         }
+        return;
+      }
+
+      if (selectedSessionKey === DRAFT_SESSION_KEY) {
         return;
       }
 
@@ -835,7 +910,7 @@ export function App() {
     }, [currentSessionKey, selectedSessionKey, sessionNavigationItems]);
 
     useEffect(() => {
-      if (!selectedSessionKey) {
+      if (!selectedSessionKey || selectedSessionKey === DRAFT_SESSION_KEY) {
         setActiveSessionRunDetails([]);
         return;
       }
@@ -876,7 +951,7 @@ export function App() {
         prompt: detail.run.prompt,
         events: detail.events,
         answers: detail.answers,
-        finalOutput: collectRunAssistantResponseText(detail.events, detail.run.finalOutput),
+        finalOutput: detail.run.finalOutput,
         errorMessage: detail.run.errorMessage,
         status: detail.run.status,
         updatedAt: detail.run.updatedAt ?? detail.run.startedAt,
@@ -898,14 +973,14 @@ export function App() {
           prompt: livePrompt,
           events: state.runEvents,
           answers: state.answers,
-          finalOutput: liveAssistantText,
+          finalOutput: liveFinalOutput,
           errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError,
           status: livePresentationState.runStatus,
           updatedAt: state.currentRun?.updatedAt ?? state.currentRun?.startedAt,
           pendingQuestionId: state.stream.pendingQuestionId
         }
       ];
-    }, [activeSessionRunDetails, liveAssistantText, livePresentationState.runStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, streamError]);
+    }, [activeSessionRunDetails, liveFinalOutput, livePresentationState.runStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, streamError]);
     const selectedConversationHasContent = liveConversationSegments.length > 0;
     const selectedThreadRun = selectedSessionItem?.latestRun ?? state.currentRun;
     const selectedThreadStatus = selectedSessionIsCurrent ? livePresentationState.runStatus : selectedThreadRun?.status;
@@ -917,70 +992,12 @@ export function App() {
       ? (state.currentRun?.errorMessage ?? state.errorMessage ?? streamError)
       : (selectedThreadRun?.errorMessage ?? null);
     const selectedThreadFinalOutput = selectedSessionIsCurrent
-      ? liveAssistantText
-      : collectRunAssistantResponseText(
-          activeSessionRunDetails.flatMap((detail) => detail.events),
-          selectedThreadRun?.finalOutput
-        );
-    const composerModeLabel = selectedSessionIsCurrent
-      ? (questionEvent?.question ? "继续回答或追问" : "发送消息")
-      : `继续会话: ${deriveRunTitle(selectedThreadRun ?? { selectedSr: "", prompt: prompt, pageTitle: "", softwareVersion: "" })}`;
-
+      ? liveFinalOutput
+      : (selectedThreadRun?.finalOutput ?? "");
   return (
     <main className="app-shell chat-app-shell">
-      <header className="app-header chat-app-header">
-        <div className="ide-header-titlebar">
-          <div>
-            <h1>AI Web Assistant</h1>
-            <p>Copilot 风格会话工作区 / 单一连续对话流</p>
-          </div>
-          <span className="mode-chip">{isEmbedded || state.uiMode === "embedded" ? "Embedded" : "Side Panel"}</span>
-        </div>
-        <div className="ide-toolbar" aria-label="IDE chat toolbar">
-          <div className="ide-toolbar-group">
-            <span className="ide-toolbar-label">Chat</span>
-            <span className="ide-toolbar-pill">Copilot Session</span>
-            <span className="ide-toolbar-pill">{activeContext?.hostname ?? "No page"}</span>
-          </div>
-          <div className="ide-toolbar-group">
-            <span className="ide-toolbar-pill">Live / History</span>
-            <span className="ide-toolbar-pill">Run {shellStatusLabel}</span>
-          </div>
-        </div>
-      </header>
       <div className="chat-workspace-shell">
-        <aside className="chat-session-sidebar" aria-label="会话侧栏">
-          <section className="secondary-panel session-sidebar-panel" aria-label="会话导航">
-            <div className="section-header compact session-sidebar-header">
-              <div>
-                <h2>会话</h2>
-                <small>点击左侧会话后可在主窗口继续对话</small>
-              </div>
-              <div className="session-sidebar-actions">
-                <button className="secondary" disabled={isBusy} onClick={() => handleStartFreshSession()}>新会话</button>
-                <button className="secondary" onClick={() => refresh()}>刷新</button>
-              </div>
-            </div>
-            <div className="session-sidebar-meta">
-              <span className="pill pill-muted">{sessionNavigationItems.length} 个会话</span>
-              <span className={`pill ${selectedSessionIsCurrent ? "pill-success" : "pill-muted"}`}>{selectedSessionIsCurrent ? "当前会话" : "历史会话"}</span>
-            </div>
-            <div className="history-list copilot-history-list">
-              {sessionNavigationItems.length ? sessionNavigationItems.map((item) => (
-                <button key={item.key} className={`rule-list-item history-nav-item ${selectedSessionKey === item.key ? "active" : ""}`} onClick={() => setSelectedSessionKey(item.key)}>
-                  <div className="history-nav-item-header">
-                    <strong>{deriveRunTitle(item.latestRun)}</strong>
-                    <span className={`status-dot status-${item.latestRun.status}`} aria-hidden="true" />
-                  </div>
-                  <p className="session-summary-text">{deriveRunSummary(item.latestRun)}</p>
-                  <small>{item.runCount} 轮消息 · {item.latestRun.username}</small>
-                </button>
-              )) : <p className="empty-state">暂无历史记录。</p>}
-            </div>
-          </section>
-        </aside>
-
-        <section className="chat-stage-shell">
+        <section className="chat-stage-shell chat-stage-shell-focus">
           {shouldShowPermissionCallout ? (
             <section className="panel-block host-permission-callout" aria-label="当前域名授权提示">
               <div>
@@ -1052,22 +1069,7 @@ export function App() {
             </div>
 
             <div className="conversation-composer docked-composer">
-              <div className="composer-chip-zone" aria-label="composer placeholders">
-                {COMPOSER_PLACEHOLDER_CHIPS.map((chip) => (
-                  <span key={chip.label} className="composer-chip">
-                    <strong>{chip.label}</strong>
-                    <small>{chip.description}</small>
-                  </span>
-                ))}
-              </div>
-              <div className="composer-toolbar">
-                <button className="secondary capture-button" disabled={isBusy} onClick={() => handleCaptureOnly()}>
-                  {state.status === "collecting" ? "采集中..." : "采集页面"}
-                </button>
-                <small className="detail-muted">发送默认不会触发页面采集；如需更新上下文，请先使用独立采集入口。</small>
-              </div>
               <label className="composer-input-shell copilot-composer-shell">
-                <span>{composerModeLabel}</span>
                 <textarea ref={composerRef} value={prompt} onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setPrompt(event.target.value)} rows={4} placeholder="Ask AI Web Assistant anything about the current page…" />
                 <button
                   className="send-button"
@@ -1079,194 +1081,298 @@ export function App() {
                   <SendIcon />
                 </button>
               </label>
-              <div className="conversation-composer-actions">
-                <small className="detail-muted">左侧选中的会话会成为当前续聊目标，发送消息时直接延续该会话。</small>
-                <small className="detail-muted">用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
+              <div className="composer-utility-strip">
+                <div className="chat-console-dock compact-icon-dock" aria-label="chat utilities">
+                  <button
+                    className={`utility-icon-button ${activeConsole === "sessions" ? "active" : ""}`}
+                    aria-label="会话"
+                    title="会话控制台，切换当前续聊目标"
+                    data-tooltip="会话"
+                    onClick={() => toggleConsole("sessions")}
+                  >
+                    <SessionIcon />
+                    <span className="sr-only">会话</span>
+                  </button>
+                  <button
+                    className={`utility-icon-button ${activeConsole === "context" ? "active" : ""}`}
+                    aria-label="上下文"
+                    title="上下文控制台，查看页面状态和采集结果"
+                    data-tooltip="上下文"
+                    onClick={() => toggleConsole("context")}
+                  >
+                    <ContextIcon />
+                    <span className="sr-only">上下文</span>
+                  </button>
+                  <button
+                    className={`utility-icon-button ${activeConsole === "rules" ? "active" : ""}`}
+                    aria-label="规则"
+                    title="规则控制台，管理当前页面规则"
+                    data-tooltip="规则"
+                    onClick={() => toggleConsole("rules")}
+                  >
+                    <RulesIcon />
+                    <span className="sr-only">规则</span>
+                  </button>
+                  {COMPOSER_PLACEHOLDER_CHIPS.map((chip) => (
+                    <button
+                      key={chip.key}
+                      className="utility-icon-button utility-icon-button-muted"
+                      type="button"
+                      aria-label={chip.label}
+                      aria-disabled="true"
+                      title={`${chip.label}：${chip.description}`}
+                      data-tooltip={chip.label}
+                    >
+                      {chip.key === "attachment" ? <AttachmentIcon /> : null}
+                      {chip.key === "page_context" ? <PageContextIcon /> : null}
+                      {chip.key === "selection" ? <SelectionIcon /> : null}
+                      <span className="sr-only">{chip.label}</span>
+                    </button>
+                  ))}
+                  <button
+                    className={`utility-icon-button ${state.status === "collecting" ? "pending" : ""}`}
+                    aria-label={state.status === "collecting" ? "采集中..." : "采集页面"}
+                    title="重新采集页面上下文。发送消息默认不会触发页面采集。"
+                    data-tooltip={state.status === "collecting" ? "采集中" : "采集页面"}
+                    disabled={isBusy}
+                    onClick={() => handleCaptureOnly()}
+                  >
+                    <CaptureIcon />
+                    <span className="sr-only">{state.status === "collecting" ? "采集中..." : "采集页面"}</span>
+                  </button>
+                </div>
+                <div className="conversation-composer-actions compact-composer-actions">
+                  <small className="detail-muted">用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
+                </div>
               </div>
             </div>
           </section>
-        </section>
-
-        <aside className="chat-inspector-rail">
-          <details className="secondary-panel utility-panel" open>
-            <summary>
-              <span>上下文与运行状态</span>
-              <small>会话侧信息</small>
-            </summary>
-            <div className="context-grid demoted-grid inspector-grid">
-              <section className="status-card demoted-card">
-                <strong>当前页面上下文</strong>
-                <small>{activeContext?.url ?? "尚未读取当前标签页"}</small>
-                <small>{activeContext?.message ?? ""}</small>
-                <div className="context-actions">
-                  <span className={`pill ${activeContext?.matchedRule ? "pill-success" : "pill-muted"}`}>
-                    {activeContext?.matchedRule ? `命中规则：${activeContext.matchedRule.name}` : "未命中规则"}
-                  </span>
-                  <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
-                    {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
-                  </span>
-                </div>
-                {!shouldShowPermissionCallout && contextError ? <p className="error-text">{contextError}</p> : null}
-              </section>
-
-              <section className="status-card demoted-card">
-                <strong>状态</strong>
-                <span>{state.status}</span>
-                {state.stream.runId ? <small>流连接：{state.stream.status}</small> : null}
-                {state.lastUpdatedAt ? <small>更新时间：{new Date(state.lastUpdatedAt).toLocaleString()}</small> : null}
-                {state.currentRun ? <small>Run ID：{state.currentRun.runId}</small> : null}
-                {errorTitle ? <small>错误域：{errorTitle}</small> : null}
-                {errorDescription ? <p className="error-text">{errorDescription}</p> : null}
-              </section>
-
-              <section className="panel-block demoted-card legacy-summary-card">
-                <h2>采集结果摘要</h2>
-                {state.capturedFields ? (
-                  <dl className="field-list compact-list">
-                    <div className="field-item">
-                      <dt>software_version</dt>
-                      <dd>{state.capturedFields.software_version || <span className="empty-value">(empty)</span>}</dd>
+          {activeConsole ? (
+            <div className="floating-console-shell">
+              {activeConsole === "sessions" ? (
+                <section className="panel-block floating-console-panel" aria-label="会话控制台">
+                  <div className="section-header compact floating-console-header">
+                    <div>
+                      <h2>会话</h2>
+                      <small>点击会话后切换主窗口续聊目标</small>
                     </div>
-                    <div className="field-item">
-                      <dt>selected_sr</dt>
-                      <dd>{state.capturedFields.selected_sr || <span className="empty-value">(empty)</span>}</dd>
+                    <div className="session-sidebar-actions">
+                      <button className="secondary" disabled={isBusy} onClick={() => handleStartFreshSession()}>新会话</button>
+                      <button className="secondary" onClick={() => refresh()}>刷新</button>
+                      <button className="secondary" onClick={() => setActiveConsole(null)}>关闭</button>
                     </div>
-                  </dl>
-                ) : (
-                  <p className="empty-state">尚未采集任何字段。</p>
-                )}
-              </section>
-            </div>
-          </details>
-
-          <details className="panel-block rules-config-panel" open={isRulesCenterExpanded}>
-        <summary className="section-header" onClick={(event) => {
-          event.preventDefault();
-          setIsRulesCenterExpanded((current) => !current);
-        }}>
-          <h2>规则配置中心</h2>
-          <small>{isRulesCenterExpanded ? "点击折叠" : "默认折叠，点击展开"}</small>
-        </summary>
-
-        {isRulesCenterExpanded ? (
-          <>
-            <div className="inline-actions">
-              <button className="secondary" onClick={() => addRule()}>新增规则</button>
-              <button className="secondary" disabled={!selectedRuleId} onClick={() => deleteCurrentRule()}>删除规则</button>
-              <button disabled={!selectedRule || savingRule} onClick={() => saveCurrentRule()}>{savingRule ? "保存中..." : "保存规则"}</button>
-            </div>
-
-            <div className="rules-layout">
-              <aside className="rule-list">
-                {rules.map((rule) => (
-                  <button
-                    key={rule.id}
-                    className={`rule-list-item ${selectedRuleId === rule.id ? "active" : ""}`}
-                    onClick={() => {
-                      setSelectedRuleId(rule.id);
-                      setDraftRule(cloneRule(rule));
-                    }}
-                  >
-                    <strong>{rule.name}</strong>
-                    <small>{rule.hostnamePattern}{rule.pathPattern !== "*" ? ` · ${rule.pathPattern}` : ""}</small>
-                  </button>
-                ))}
-              </aside>
-
-              {selectedRule ? (
-                <div className="rule-editor">
-                  <label>
-                    <span>规则名称</span>
-                    <input value={selectedRule.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} />
-                  </label>
-                  <div className="two-column">
-                    <label>
-                      <span>Hostname 模式</span>
-                      <input value={selectedRule.hostnamePattern} onChange={(event) => updateDraft((current) => ({ ...current, hostnamePattern: event.target.value }))} placeholder="如 *.example.com" />
-                    </label>
-                    <label>
-                      <span>Path 模式</span>
-                      <input value={selectedRule.pathPattern} onChange={(event) => updateDraft((current) => ({ ...current, pathPattern: event.target.value }))} placeholder="如 /products/*" />
-                    </label>
                   </div>
-                  <label className="checkbox-row">
-                    <input type="checkbox" checked={selectedRule.enabled} onChange={(event) => updateDraft((current) => ({ ...current, enabled: event.target.checked }))} />
-                    <span>启用规则</span>
-                  </label>
-
-                  <div className="section-header compact">
-                    <h3>字段规则</h3>
-                    <button className="secondary" onClick={() => updateDraft((current) => ({ ...current, fields: [...current.fields, createFieldRule()] }))}>新增字段</button>
+                  <div className="session-sidebar-meta">
+                    <span className="pill pill-muted">{sessionNavigationItems.length} 个会话</span>
+                    <span className={`pill ${selectedSessionKey === DRAFT_SESSION_KEY || selectedSessionIsCurrent ? "pill-success" : "pill-muted"}`}>
+                      {selectedSessionKey === DRAFT_SESSION_KEY ? "新会话" : selectedSessionIsCurrent ? "当前会话" : "历史会话"}
+                    </span>
+                    {state.currentRun ? <button className="secondary floating-inline-button" onClick={() => handleReturnToCurrentSession()}>返回当前会话</button> : null}
                   </div>
+                  <div className="history-list copilot-history-list floating-console-scroll">
+                    {sessionNavigationItems.length ? sessionNavigationItems.map((item) => (
+                      <button
+                        key={item.key}
+                        className={`rule-list-item history-nav-item ${selectedSessionKey === item.key ? "active" : ""}`}
+                        onClick={() => {
+                          setSelectedSessionKey(item.key);
+                          setActiveConsole(null);
+                        }}
+                      >
+                        <div className="history-nav-item-header">
+                          <strong>{deriveRunTitle(item.latestRun)}</strong>
+                          <span className={`status-dot status-${item.latestRun.status}`} aria-hidden="true" />
+                        </div>
+                        <p className="session-summary-text">{deriveRunSummary(item.latestRun)}</p>
+                        <small>{item.runCount} 轮消息 · {item.latestRun.username}</small>
+                      </button>
+                    )) : <p className="empty-state">暂无历史记录。</p>}
+                  </div>
+                </section>
+              ) : null}
 
-                  <div className="field-rule-list">
-                    {selectedRule.fields.map((field, index) => (
-                      <div key={field.id} className="field-rule-card">
-                        <div className="field-rule-toolbar">
-                          <strong>{field.label || `字段 ${index + 1}`}</strong>
-                          <button className="secondary" onClick={() => updateDraft((current) => ({ ...current, fields: current.fields.filter((item) => item.id !== field.id) }))}>删除</button>
-                        </div>
-                        <div className="two-column">
-                          <label>
-                            <span>字段 key</span>
-                            <input value={field.key} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, key: event.target.value } : item) }))} />
-                          </label>
-                          <label>
-                            <span>展示名称</span>
-                            <input value={field.label} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, label: event.target.value } : item) }))} />
-                          </label>
-                        </div>
-                        <div className="two-column">
-                          <label>
-                            <span>来源类型</span>
-                            <select value={field.source} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, source: event.target.value as FieldRuleDefinition["source"] } : item) }))}>
-                              <option value="documentTitle">document.title</option>
-                              <option value="pageUrl">window.location.href</option>
-                              <option value="selectedText">window.getSelection()</option>
-                              <option value="meta">meta[name]</option>
-                              <option value="selectorText">selector.textContent</option>
-                              <option value="selectorAttribute">selector.getAttribute</option>
-                            </select>
-                          </label>
-                          <label className="checkbox-row">
-                            <input type="checkbox" checked={field.enabled} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, enabled: event.target.checked } : item) }))} />
-                            <span>启用字段</span>
-                          </label>
-                        </div>
-                        {(field.source === "selectorText" || field.source === "selectorAttribute") ? (
-                          <label>
-                            <span>CSS Selector</span>
-                            <input value={field.selector ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, selector: event.target.value } : item) }))} />
-                          </label>
-                        ) : null}
-                        {field.source === "selectorAttribute" ? (
-                          <label>
-                            <span>属性名</span>
-                            <input value={field.attribute ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, attribute: event.target.value } : item) }))} />
-                          </label>
-                        ) : null}
-                        {field.source === "meta" ? (
-                          <label>
-                            <span>meta name</span>
-                            <input value={field.metaName ?? "description"} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, metaName: event.target.value } : item) }))} />
-                          </label>
-                        ) : null}
-                        <label>
-                          <span>兜底值</span>
-                          <input value={field.fallbackValue ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, fallbackValue: event.target.value } : item) }))} />
-                        </label>
+              {activeConsole === "context" ? (
+                <section className="panel-block floating-console-panel" aria-label="上下文控制台">
+                  <div className="section-header compact floating-console-header">
+                    <div>
+                      <h2>上下文与运行状态</h2>
+                      <small>页面信息、状态和采集摘要</small>
+                    </div>
+                    <button className="secondary" onClick={() => setActiveConsole(null)}>关闭</button>
+                  </div>
+                  <div className="context-grid demoted-grid inspector-grid floating-console-scroll">
+                    <section className="status-card demoted-card">
+                      <strong>当前页面上下文</strong>
+                      <small>{activeContext?.url ?? "尚未读取当前标签页"}</small>
+                      <small>{activeContext?.message ?? ""}</small>
+                      <div className="context-actions">
+                        <span className={`pill ${activeContext?.matchedRule ? "pill-success" : "pill-muted"}`}>
+                          {activeContext?.matchedRule ? `命中规则：${activeContext.matchedRule.name}` : "未命中规则"}
+                        </span>
+                        <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
+                          {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
+                        </span>
                       </div>
-                    ))}
+                      {!shouldShowPermissionCallout && contextError ? <p className="error-text">{contextError}</p> : null}
+                    </section>
+
+                    <section className="status-card demoted-card">
+                      <strong>状态</strong>
+                      <span>{state.status}</span>
+                      {state.stream.runId ? <small>流连接：{state.stream.status}</small> : null}
+                      {state.lastUpdatedAt ? <small>更新时间：{new Date(state.lastUpdatedAt).toLocaleString()}</small> : null}
+                      {state.currentRun ? <small>Run ID：{state.currentRun.runId}</small> : null}
+                      {errorTitle ? <small>错误域：{errorTitle}</small> : null}
+                      {errorDescription ? <p className="error-text">{errorDescription}</p> : null}
+                    </section>
+
+                    <section className="panel-block demoted-card legacy-summary-card">
+                      <h2>采集结果摘要</h2>
+                      {state.capturedFields ? (
+                        <dl className="field-list compact-list">
+                          <div className="field-item">
+                            <dt>software_version</dt>
+                            <dd>{state.capturedFields.software_version || <span className="empty-value">(empty)</span>}</dd>
+                          </div>
+                          <div className="field-item">
+                            <dt>selected_sr</dt>
+                            <dd>{state.capturedFields.selected_sr || <span className="empty-value">(empty)</span>}</dd>
+                          </div>
+                        </dl>
+                      ) : (
+                        <p className="empty-state">尚未采集任何字段。</p>
+                      )}
+                    </section>
                   </div>
-                </div>
-              ) : (
-                <p className="empty-state">暂无规则，点击“新增规则”开始配置。</p>
-              )}
+                </section>
+              ) : null}
+
+              {activeConsole === "rules" ? (
+                <section className="panel-block floating-console-panel" aria-label="规则控制台">
+                  <div className="section-header compact floating-console-header">
+                    <div>
+                      <h2>规则配置中心</h2>
+                      <small>悬浮控制台内编辑规则</small>
+                    </div>
+                    <button className="secondary" onClick={() => setActiveConsole(null)}>关闭</button>
+                  </div>
+                  <div className="inline-actions">
+                    <button className="secondary" onClick={() => addRule()}>新增规则</button>
+                    <button className="secondary" disabled={!selectedRuleId} onClick={() => deleteCurrentRule()}>删除规则</button>
+                    <button disabled={!selectedRule || savingRule} onClick={() => saveCurrentRule()}>{savingRule ? "保存中..." : "保存规则"}</button>
+                  </div>
+                  <div className="rules-layout floating-console-scroll">
+                    <aside className="rule-list">
+                      {rules.map((rule) => (
+                        <button
+                          key={rule.id}
+                          className={`rule-list-item ${selectedRuleId === rule.id ? "active" : ""}`}
+                          onClick={() => {
+                            setSelectedRuleId(rule.id);
+                            setDraftRule(cloneRule(rule));
+                          }}
+                        >
+                          <strong>{rule.name}</strong>
+                          <small>{rule.hostnamePattern}{rule.pathPattern !== "*" ? ` · ${rule.pathPattern}` : ""}</small>
+                        </button>
+                      ))}
+                    </aside>
+
+                    {selectedRule ? (
+                      <div className="rule-editor">
+                        <label>
+                          <span>规则名称</span>
+                          <input value={selectedRule.name} onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))} />
+                        </label>
+                        <div className="two-column">
+                          <label>
+                            <span>Hostname 模式</span>
+                            <input value={selectedRule.hostnamePattern} onChange={(event) => updateDraft((current) => ({ ...current, hostnamePattern: event.target.value }))} placeholder="如 *.example.com" />
+                          </label>
+                          <label>
+                            <span>Path 模式</span>
+                            <input value={selectedRule.pathPattern} onChange={(event) => updateDraft((current) => ({ ...current, pathPattern: event.target.value }))} placeholder="如 /products/*" />
+                          </label>
+                        </div>
+                        <label className="checkbox-row">
+                          <input type="checkbox" checked={selectedRule.enabled} onChange={(event) => updateDraft((current) => ({ ...current, enabled: event.target.checked }))} />
+                          <span>启用规则</span>
+                        </label>
+
+                        <div className="section-header compact">
+                          <h3>字段规则</h3>
+                          <button className="secondary" onClick={() => updateDraft((current) => ({ ...current, fields: [...current.fields, createFieldRule()] }))}>新增字段</button>
+                        </div>
+
+                        <div className="field-rule-list">
+                          {selectedRule.fields.map((field, index) => (
+                            <div key={field.id} className="field-rule-card">
+                              <div className="field-rule-toolbar">
+                                <strong>{field.label || `字段 ${index + 1}`}</strong>
+                                <button className="secondary" onClick={() => updateDraft((current) => ({ ...current, fields: current.fields.filter((item) => item.id !== field.id) }))}>删除</button>
+                              </div>
+                              <div className="two-column">
+                                <label>
+                                  <span>字段 key</span>
+                                  <input value={field.key} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, key: event.target.value } : item) }))} />
+                                </label>
+                                <label>
+                                  <span>展示名称</span>
+                                  <input value={field.label} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, label: event.target.value } : item) }))} />
+                                </label>
+                              </div>
+                              <div className="two-column">
+                                <label>
+                                  <span>来源类型</span>
+                                  <select value={field.source} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, source: event.target.value as FieldRuleDefinition["source"] } : item) }))}>
+                                    <option value="documentTitle">document.title</option>
+                                    <option value="pageUrl">window.location.href</option>
+                                    <option value="selectedText">window.getSelection()</option>
+                                    <option value="meta">meta[name]</option>
+                                    <option value="selectorText">selector.textContent</option>
+                                    <option value="selectorAttribute">selector.getAttribute</option>
+                                  </select>
+                                </label>
+                                <label className="checkbox-row">
+                                  <input type="checkbox" checked={field.enabled} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, enabled: event.target.checked } : item) }))} />
+                                  <span>启用字段</span>
+                                </label>
+                              </div>
+                              {(field.source === "selectorText" || field.source === "selectorAttribute") ? (
+                                <label>
+                                  <span>CSS Selector</span>
+                                  <input value={field.selector ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, selector: event.target.value } : item) }))} />
+                                </label>
+                              ) : null}
+                              {field.source === "selectorAttribute" ? (
+                                <label>
+                                  <span>属性名</span>
+                                  <input value={field.attribute ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, attribute: event.target.value } : item) }))} />
+                                </label>
+                              ) : null}
+                              {field.source === "meta" ? (
+                                <label>
+                                  <span>meta name</span>
+                                  <input value={field.metaName ?? "description"} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, metaName: event.target.value } : item) }))} />
+                                </label>
+                              ) : null}
+                              <label>
+                                <span>兜底值</span>
+                                <input value={field.fallbackValue ?? ""} onChange={(event) => updateDraft((current) => ({ ...current, fields: current.fields.map((item) => item.id === field.id ? { ...item, fallbackValue: event.target.value } : item) }))} />
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="empty-state">暂无规则，点击“新增规则”开始配置。</p>
+                    )}
+                  </div>
+                </section>
+              ) : null}
             </div>
-          </>
-        ) : null}
-          </details>
-        </aside>
+          ) : null}
+        </section>
       </div>
     </main>
   );
