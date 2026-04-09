@@ -296,6 +296,9 @@ describe("side panel host permission request flow", () => {
     const calloutButton = callout?.querySelector("button");
     expect(calloutButton?.textContent).toContain("授权当前域名");
 
+    const headerButtons = Array.from(container.querySelectorAll("[data-component='header'] button"));
+    expect(headerButtons.some((element) => element.textContent?.includes("授权当前域名"))).toBe(true);
+
     expect(container.querySelector("details.utility-panel")).toBeNull();
   });
 

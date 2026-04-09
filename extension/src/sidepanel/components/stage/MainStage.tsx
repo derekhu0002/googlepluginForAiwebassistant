@@ -83,6 +83,16 @@ export function MainStage({
         </div>
         <div className="chat-primary-meta">
           {selectedThreadRun?.runId ? <small className="detail-muted">Run：{selectedThreadRun.runId}</small> : null}
+          {canShowPermissionButton ? (
+            <button
+              aria-label="授权当前域名"
+              className="secondary"
+              disabled={requestingPermission}
+              onClick={() => onRequestPermission()}
+            >
+              {requestingPermission ? "授权中..." : "授权当前域名"}
+            </button>
+          ) : null}
           <button className="secondary quick-session-button" disabled={isBusy} onClick={() => onStartFreshSession()}>新会话</button>
         </div>
       </div>

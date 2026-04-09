@@ -17,9 +17,9 @@ type RawEnv = Record<string, string | undefined>;
 
 const DEFAULT_TIMEOUT_MS = 10000;
 const DEFAULT_PROD_API_BASE_URL = "https://api.example.com";
-const DEFAULT_DEV_API_BASE_URL = "http://localhost:8000";
+const DEFAULT_DEV_API_BASE_URL = "http://localhost:8124";
 const DEFAULT_PROD_API_ORIGINS = ["https://api.example.com"];
-const DEFAULT_DEV_API_ORIGINS = ["http://localhost:8000"];
+const DEFAULT_DEV_API_ORIGINS = ["http://localhost:8124"];
 const DEFAULT_OPTIONAL_HOST_PERMISSIONS = ["https://example.com/*", "https://*.example.com/*"];
 const DEFAULT_DEV_OPTIONAL_HOST_PERMISSIONS = [
   ...DEFAULT_OPTIONAL_HOST_PERMISSIONS,
