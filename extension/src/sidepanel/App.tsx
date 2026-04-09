@@ -188,12 +188,7 @@ function BottomDrawerHost({
           </div>
           <div className="bottom-drawer-content">{drawerContent}</div>
         </div>
-      ) : (
-        <div className="bottom-drawer-placeholder" aria-hidden="true">
-          <span>抽屉默认收起</span>
-          <small>{activeDrawer ? latestRunSummary : "点击下方图标，在 composer 上方打开补充工作区。"}</small>
-        </div>
-      )}
+      ) : null}
     </section>
   );
 }
