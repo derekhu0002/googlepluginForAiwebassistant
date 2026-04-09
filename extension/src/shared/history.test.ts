@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createIndexedDbHistoryStore } from "./history";
+import { DEFAULT_MAIN_AGENT } from "./protocol";
 import type { RunRecord } from "./protocol";
 
 describe("indexedDB history store", () => {
@@ -20,6 +21,7 @@ describe("indexedDB history store", () => {
   it("persists run, events and answers", async () => {
     const run: RunRecord = {
       runId: "run-1",
+      selectedAgent: DEFAULT_MAIN_AGENT,
       prompt: "prompt",
       username: "alice",
       usernameSource: "dom_text",

@@ -43,7 +43,7 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
     submit_answer = AsyncMock(return_value=None)
 
     async def fake_start_run(_request):
-        main.adapter._runs["run-1"] = {"session_id": "ses-1"}
+        main.adapter._runs["run-1"] = {"session_id": "ses-1", "selected_agent": "TARA_analyst"}
         return "run-1"
 
     monkeypatch.setattr(main.adapter, "start_run", fake_start_run)
@@ -54,6 +54,7 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
         "/api/runs",
         json={
             "prompt": "hello",
+            "selectedAgent": "TARA_analyst",
             "sessionId": "ses-1",
             "capture": {
                 "pageTitle": "Example",
@@ -74,6 +75,7 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
     assert response.status_code == 200
     run_id = response.json()["data"]["runId"]
     assert response.json()["data"]["sessionId"] == "ses-1"
+    assert response.json()["data"]["selectedAgent"] == "TARA_analyst"
 
     with client.stream("GET", f"/api/runs/{run_id}/events") as stream_response:
         body = "".join(chunk.decode() if isinstance(chunk, bytes) else chunk for chunk in stream_response.iter_text())
@@ -91,7 +93,7 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
 
 def test_start_run_returns_active_session_id(monkeypatch) -> None:
     async def fake_start_run(request):
-        main.adapter._runs["run-1"] = {"session_id": request.sessionId}
+        main.adapter._runs["run-1"] = {"session_id": request.sessionId, "selected_agent": request.selectedAgent}
         return "run-1"
 
     monkeypatch.setattr(main.adapter, "start_run", fake_start_run)
@@ -100,6 +102,7 @@ def test_start_run_returns_active_session_id(monkeypatch) -> None:
         "/api/runs",
         json={
             "prompt": "hello",
+            "selectedAgent": "TARA_analyst",
             "sessionId": "ses-active",
             "capture": {},
             "context": {
@@ -112,7 +115,7 @@ def test_start_run_returns_active_session_id(monkeypatch) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["data"] == {"runId": "run-1", "sessionId": "ses-active"}
+    assert response.json()["data"] == {"runId": "run-1", "sessionId": "ses-active", "selectedAgent": "TARA_analyst"}
 
 
 def test_start_run_surfaces_session_agent_enforcement_error(monkeypatch) -> None:
@@ -122,6 +125,7 @@ def test_start_run_surfaces_session_agent_enforcement_error(monkeypatch) -> None
         "/api/runs",
         json={
             "prompt": "hello",
+            "selectedAgent": "TARA_analyst",
             "capture": {
                 "pageTitle": "Example",
                 "pageUrl": "https://example.com",
@@ -172,6 +176,7 @@ def test_start_run_returns_explicit_error_when_remote_agent_discovery_fails(monk
         "/api/runs",
         json={
             "prompt": "hello",
+            "selectedAgent": "TARA_analyst",
             "capture": {
                 "pageTitle": "Example",
                 "pageUrl": "https://example.com",
@@ -204,6 +209,7 @@ def test_start_run_keeps_unexpected_runtime_errors_as_internal_server_error(monk
         "/api/runs",
         json={
             "prompt": "hello",
+            "selectedAgent": "TARA_analyst",
             "capture": {
                 "pageTitle": "Example",
                 "pageUrl": "https://example.com",
@@ -229,6 +235,51 @@ def test_start_run_keeps_unexpected_runtime_errors_as_internal_server_error(monk
             "message": "unexpected session bootstrap failure",
         },
     }
+
+
+def test_start_run_rejects_disallowed_selected_agent(monkeypatch) -> None:
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Requested main agent is not allowed: 'OtherAgent'; allowed=['TARA_analyst', 'ThreatIntelliganceCommander']")))
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "prompt": "hello",
+            "selectedAgent": "OtherAgent",
+            "capture": {},
+            "context": {
+                "source": "chrome-extension",
+                "capturedAt": "2026-04-01T00:00:00.000Z",
+                "username": "alice",
+                "usernameSource": "dom_text",
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_start_run_rejects_when_requested_agent_missing_from_remote_catalog(monkeypatch) -> None:
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote /agent discovery failed: requested agent is unavailable in remote catalog; requested='ThreatIntelliganceCommander'; got ['TARA_analyst']")))
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "prompt": "hello",
+            "selectedAgent": "ThreatIntelliganceCommander",
+            "capture": {},
+            "context": {
+                "source": "chrome-extension",
+                "capturedAt": "2026-04-01T00:00:00.000Z",
+                "username": "alice",
+                "usernameSource": "dom_text",
+            },
+        },
+    )
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "ANALYSIS_ERROR"
+    assert "用户所选主 AGENT" in response.json()["error"]["message"]
 
 
 def test_message_feedback_proxies_to_backend_boundary(monkeypatch) -> None:

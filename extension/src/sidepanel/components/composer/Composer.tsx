@@ -1,4 +1,5 @@
-import type { ReactNode, RefObject } from "react";
+import { useState, type ReactNode, type RefObject } from "react";
+import type { MainAgent } from "../../../shared/protocol";
 import type { AssistantState } from "../../../shared/types";
 import type { DrawerBarItem, DrawerKey } from "../../useSidepanelController";
 import { CaptureIcon, ContextIcon, RulesIcon, SendIcon, SessionIcon } from "../shared/icons";
@@ -9,8 +10,11 @@ export function Composer({
   drawerItems,
   isBusy,
   isSendDisabled,
+  mainAgentOptions,
+  nextRunAgentDescription,
   onCaptureOnly,
   onPromptChange,
+  onSelectMainAgent,
   onSend,
   onToggleDrawer,
   placeholderQuestionActive,
@@ -22,8 +26,11 @@ export function Composer({
   drawerItems: DrawerBarItem[];
   isBusy: boolean;
   isSendDisabled: boolean;
+  mainAgentOptions: Array<{ value: MainAgent; label: string; description: string }>;
+  nextRunAgentDescription: string;
   onCaptureOnly: () => void | Promise<void>;
   onPromptChange: (value: string) => void;
+  onSelectMainAgent: (selectedAgent: MainAgent) => void | Promise<void>;
   onSend: () => void | Promise<void>;
   onToggleDrawer: (panel: DrawerKey) => void;
   placeholderQuestionActive: boolean;
@@ -31,6 +38,7 @@ export function Composer({
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   state: AssistantState;
 }) {
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const iconByKey: Record<DrawerKey, ReactNode> = {
     sessions: <SessionIcon />,
     context: <ContextIcon />,
@@ -57,6 +65,37 @@ export function Composer({
 
       <div className="composer-utility-strip">
         <div className="chat-console-dock compact-icon-dock" aria-label="drawer icon bar">
+          <div className="main-agent-picker" aria-label="主 AGENT 选择器">
+            <button
+              type="button"
+              className={`main-agent-trigger ${agentMenuOpen ? "active" : ""}`}
+              aria-haspopup="menu"
+              aria-expanded={agentMenuOpen}
+              onClick={() => setAgentMenuOpen((current) => !current)}
+            >
+              主 AGENT：{state.mainAgentPreference}
+            </button>
+            {agentMenuOpen ? (
+              <div className="main-agent-menu" role="menu" aria-label="主 AGENT 菜单">
+                {mainAgentOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={option.value === state.mainAgentPreference}
+                    className={`main-agent-option ${option.value === state.mainAgentPreference ? "selected" : ""}`}
+                    onClick={() => {
+                      setAgentMenuOpen(false);
+                      onSelectMainAgent(option.value as MainAgent);
+                    }}
+                  >
+                    <span>{option.label}</span>
+                    <small>{option.description}</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           {drawerItems.map((item) => (
             <button
               key={item.key}
@@ -79,6 +118,7 @@ export function Composer({
           </button>
         </div>
         <div className="conversation-composer-actions compact-composer-actions">
+          <small className="detail-muted">{nextRunAgentDescription}</small>
           <small className="detail-muted">用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
           {sessionDrawerItem?.badge ? <small className="detail-muted">{sessionDrawerItem.badge} 个会话簇</small> : null}
         </div>

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_MAIN_AGENT } from "../shared/protocol";
 import { initialAssistantState } from "../shared/state";
 
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
@@ -64,7 +65,7 @@ describe("background rule-driven capture flow", () => {
     await import("./index");
 
     const response = await new Promise<unknown>((resolve) => {
-      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", capturePageData: true } }, {}, resolve);
+      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", selectedAgent: DEFAULT_MAIN_AGENT, capturePageData: true } }, {}, resolve);
     }) as { ok: boolean; error: { code: string } };
 
     expect(response.ok).toBe(false);
@@ -113,7 +114,7 @@ describe("background rule-driven capture flow", () => {
     const executeScript = vi.fn().mockResolvedValue(undefined);
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-1", sessionId: "ses-1" } })
+      json: async () => ({ ok: true, data: { runId: "run-1", sessionId: "ses-1", selectedAgent: DEFAULT_MAIN_AGENT } })
     }));
 
     vi.stubGlobal("chrome", {
@@ -150,12 +151,13 @@ describe("background rule-driven capture flow", () => {
     await import("./index");
 
     const response = await new Promise<unknown>((resolve) => {
-      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", capturePageData: true } }, {}, resolve);
-    }) as { ok: boolean; data: { runId: string; sessionId?: string } };
+      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", selectedAgent: DEFAULT_MAIN_AGENT, capturePageData: true } }, {}, resolve);
+    }) as { ok: boolean; data: { runId: string; sessionId?: string; currentRun: { selectedAgent: string } } };
 
     expect(response.ok).toBe(true);
     expect(response.data.runId).toBe("run-1");
     expect(response.data.sessionId).toBe("ses-1");
+    expect(response.data.currentRun.selectedAgent).toBe(DEFAULT_MAIN_AGENT);
     expect(executeScript).toHaveBeenCalledWith({ target: { tabId: 1 }, files: ["content.js"] });
     expect(sendMessage).toHaveBeenNthCalledWith(1, 1, { type: "PING" });
     expect(sendMessage).toHaveBeenNthCalledWith(2, 1, { type: "PING" });
@@ -195,7 +197,7 @@ describe("background rule-driven capture flow", () => {
     });
 
     const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-send-only", sessionId: "ses-active" } })
+      json: async () => ({ ok: true, data: { runId: "run-send-only", sessionId: "ses-active", selectedAgent: DEFAULT_MAIN_AGENT } })
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -233,8 +235,8 @@ describe("background rule-driven capture flow", () => {
     await import("./index");
 
     const response = await new Promise<unknown>((resolve) => {
-      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", capturePageData: false } }, {}, resolve);
-    }) as { ok: boolean; data: { runId: string; sessionId?: string; capturedFields: Record<string, string> | null; currentRun: { pageTitle: string; sessionId?: string } } };
+      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", selectedAgent: DEFAULT_MAIN_AGENT, capturePageData: false } }, {}, resolve);
+    }) as { ok: boolean; data: { runId: string; sessionId?: string; capturedFields: Record<string, string> | null; currentRun: { pageTitle: string; sessionId?: string; selectedAgent: string } } };
 
     expect(response.ok).toBe(true);
     expect(response.data.runId).toBe("run-send-only");
@@ -242,11 +244,13 @@ describe("background rule-driven capture flow", () => {
     expect(response.data.capturedFields).toBeNull();
     expect(response.data.currentRun.pageTitle).toBe("");
     expect(response.data.currentRun.sessionId).toBe("ses-active");
+    expect(response.data.currentRun.selectedAgent).toBe(DEFAULT_MAIN_AGENT);
     expect(sendMessage).not.toHaveBeenCalledWith(1, expect.objectContaining({ type: "COLLECT_FIELDS" }));
     const fetchCall = fetchMock.mock.calls[0];
     expect(fetchCall?.[0]).toBe("http://localhost:8000/api/runs");
     expect(JSON.parse(fetchCall?.[1]?.body as string)).toMatchObject({
       prompt: "hello",
+      selectedAgent: DEFAULT_MAIN_AGENT,
       context: {
         username: "unknown",
         usernameSource: "unresolved_login_state"
@@ -287,7 +291,7 @@ describe("background rule-driven capture flow", () => {
     });
 
     const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-2", sessionId: "ses-existing" } })
+      json: async () => ({ ok: true, data: { runId: "run-2", sessionId: "ses-existing", selectedAgent: DEFAULT_MAIN_AGENT } })
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -344,7 +348,79 @@ describe("background rule-driven capture flow", () => {
     expect(response.data.currentRun.prompt).toBe("原始用户问题");
     expect(response.data.currentRun.runId).toBe("run-2");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({ sessionId: "ses-existing" });
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({ sessionId: "ses-existing", selectedAgent: DEFAULT_MAIN_AGENT });
+  });
+
+  it("persists selected main agent and stamps new runs with the effective agent", async () => {
+    const storageState: Record<string, unknown> = {
+      "ai-web-assistant-state": { ...initialAssistantState, mainAgentPreference: DEFAULT_MAIN_AGENT },
+      "ai-web-assistant-rules": [
+        {
+          id: "rule-1",
+          name: "Example rule",
+          hostnamePattern: "example.com",
+          pathPattern: "*",
+          enabled: true,
+          fields: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ]
+    };
+
+    const listenerRegistry: { handler?: (message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean } = {};
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { runId: "run-agent", sessionId: "ses-agent", selectedAgent: "ThreatIntelliganceCommander" } })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.stubGlobal("chrome", {
+      tabs: {
+        query: vi.fn().mockResolvedValue([{ id: 1, url: "https://example.com/page" }]),
+        get: vi.fn().mockResolvedValue({ id: 1, url: "https://example.com/page" }),
+        sendMessage: vi.fn()
+      },
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: storageState[key] })),
+          set: vi.fn(async (payload: Record<string, unknown>) => Object.assign(storageState, payload))
+        }
+      },
+      permissions: {
+        contains: vi.fn().mockResolvedValue(true),
+        request: vi.fn().mockResolvedValue(true)
+      },
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        onMessage: { addListener: vi.fn((handler) => { listenerRegistry.handler = handler; }) },
+        onInstalled: { addListener: vi.fn() }
+      },
+      sidePanel: {
+        setOptions: vi.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
+        setPanelBehavior: vi.fn().mockResolvedValue(undefined)
+      },
+      scripting: {
+        executeScript: vi.fn().mockResolvedValue(undefined)
+      }
+    } as unknown as typeof chrome);
+
+    await import("./index");
+
+    const setResponse = await new Promise<unknown>((resolve) => {
+      listenerRegistry.handler?.({ type: "SET_MAIN_AGENT", payload: { selectedAgent: "ThreatIntelliganceCommander" } }, {}, resolve);
+    }) as { ok: boolean };
+
+    expect(setResponse.ok).toBe(true);
+
+    const startResponse = await new Promise<unknown>((resolve) => {
+      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", selectedAgent: "ThreatIntelliganceCommander", capturePageData: false } }, {}, resolve);
+    }) as { ok: boolean; data: { currentRun: { selectedAgent: string } } };
+
+    expect(startResponse.ok).toBe(true);
+    expect(startResponse.data.currentRun.selectedAgent).toBe("ThreatIntelliganceCommander");
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({ selectedAgent: "ThreatIntelliganceCommander" });
+    expect((storageState["ai-web-assistant-state"] as { mainAgentPreference: string }).mainAgentPreference).toBe("ThreatIntelliganceCommander");
   });
 
   it("clears active session when CLEAR_RESULT is triggered", async () => {
@@ -355,6 +431,7 @@ describe("background rule-driven capture flow", () => {
         currentRun: {
           runId: "run-1",
           sessionId: "ses-1",
+          selectedAgent: DEFAULT_MAIN_AGENT,
           prompt: "hello",
           username: "alice",
           usernameSource: "dom_text",
@@ -466,7 +543,7 @@ describe("background rule-driven capture flow", () => {
     const executeScript = vi.fn().mockResolvedValue(undefined);
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-1" } })
+      json: async () => ({ ok: true, data: { runId: "run-1", selectedAgent: DEFAULT_MAIN_AGENT } })
     }));
 
     vi.stubGlobal("chrome", {
@@ -503,7 +580,7 @@ describe("background rule-driven capture flow", () => {
     await import("./index");
 
     const response = await new Promise<unknown>((resolve) => {
-      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", capturePageData: true } }, {}, resolve);
+      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", selectedAgent: DEFAULT_MAIN_AGENT, capturePageData: true } }, {}, resolve);
     }) as { ok: boolean; data: { usernameContext: { username: string } } };
 
     expect(response.ok).toBe(true);
@@ -631,6 +708,7 @@ describe("background rule-driven capture flow", () => {
           currentRun: {
             runId: "run-1",
             sessionId: "ses-1",
+            selectedAgent: DEFAULT_MAIN_AGENT,
             prompt: "hello",
             username: "alice",
             usernameSource: "dom_text",

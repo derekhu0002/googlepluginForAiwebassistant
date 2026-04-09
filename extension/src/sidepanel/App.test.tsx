@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_MAIN_AGENT } from "../shared/protocol";
 import { initialAssistantState } from "../shared/state";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
 import type { NormalizedRunEvent, RunHistoryDetail, RunRecord } from "../shared/protocol";
@@ -84,7 +85,7 @@ const { App, mergeStateUpdate } = await import("./App");
 interface ChromeStubOptions {
   contexts: ActiveTabContext[];
   permissionsRequest?: ReturnType<typeof vi.fn>;
-  startRunResponse?: { ok: boolean; data?: { runId: string; sessionId?: string; currentRun: AssistantState["currentRun"] }; error?: { message: string } };
+  startRunResponse?: { ok: boolean; data?: { runId: string; sessionId?: string; selectedAgent?: "TARA_analyst" | "ThreatIntelliganceCommander"; currentRun: AssistantState["currentRun"] }; error?: { message: string } };
   rules?: PageRule[];
   getStateResponse?: AssistantState;
 }
@@ -109,6 +110,7 @@ function createCurrentRun() {
   return {
     runId: "run-1",
     sessionId: "ses-1",
+    selectedAgent: DEFAULT_MAIN_AGENT,
     prompt: "hello",
     username: "alice",
     usernameSource: "dom_text" as const,
@@ -161,7 +163,9 @@ function setupChromeStub(options: ChromeStubOptions) {
       case "GET_ACTIVE_CONTEXT":
         return contextQueue.shift() ?? options.contexts[options.contexts.length - 1] ?? null;
       case "START_RUN":
-        return options.startRunResponse ?? { ok: true, data: { runId: "run-1", currentRun: createCurrentRun() } };
+        return options.startRunResponse ?? { ok: true, data: { runId: "run-1", selectedAgent: DEFAULT_MAIN_AGENT, currentRun: createCurrentRun() } };
+      case "SET_MAIN_AGENT":
+        return { ok: true, data: { selectedAgent: message.payload.selectedAgent } };
       case "RECAPTURE":
         return { ok: true };
       default:
@@ -426,7 +430,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "START_RUN", payload: { prompt: initialAssistantState.runPrompt, capturePageData: false } });
+    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "START_RUN", payload: { prompt: initialAssistantState.runPrompt, selectedAgent: DEFAULT_MAIN_AGENT, capturePageData: false } });
     expect(runtimeSendMessage).not.toHaveBeenCalledWith({ type: "RECAPTURE" });
     expect(mockCreateRunEventStream).toHaveBeenCalledWith("run-1", expect.objectContaining({ onEvent: expect.any(Function), onError: expect.any(Function) }));
     expect(container.textContent).toContain("You");
@@ -437,7 +441,7 @@ describe("side panel host permission request flow", () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: { ...initialAssistantState, activeSessionId: "ses-existing" },
-      startRunResponse: { ok: true, data: { runId: "run-2", sessionId: "ses-existing", currentRun: { ...createCurrentRun(), runId: "run-2", sessionId: "ses-existing" } } }
+      startRunResponse: { ok: true, data: { runId: "run-2", sessionId: "ses-existing", selectedAgent: DEFAULT_MAIN_AGENT, currentRun: { ...createCurrentRun(), runId: "run-2", sessionId: "ses-existing" } } }
     });
 
     await act(async () => {
@@ -1395,6 +1399,43 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("运行");
   });
 
+  it("renders current main agent control and switches future-run preference only", async () => {
+    const { runtimeSendMessage } = setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        mainAgentPreference: DEFAULT_MAIN_AGENT,
+        currentRun: {
+          ...createCurrentRun(),
+          selectedAgent: DEFAULT_MAIN_AGENT,
+          status: "streaming"
+        }
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain(`主 AGENT：${DEFAULT_MAIN_AGENT}`);
+    expect(container.textContent).toContain(`后续新 run 将显式使用 ${DEFAULT_MAIN_AGENT}`);
+
+    const trigger = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes(`主 AGENT：${DEFAULT_MAIN_AGENT}`));
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const option = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("ThreatIntelliganceCommander"));
+    await act(async () => {
+      option?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "SET_MAIN_AGENT", payload: { selectedAgent: "ThreatIntelliganceCommander" } });
+    expect(container.textContent).toContain("当前 run 继续使用 TARA_analyst；切换只影响后续新 run。");
+  });
+
   it("keeps drawers collapsed by default", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
@@ -1648,7 +1689,7 @@ describe("side panel host permission request flow", () => {
         },
         runEvents: [createRunEvent(1, { type: "result", message: "最终回答" })]
       }),
-      startRunResponse: { ok: true, data: { runId: "run-2", currentRun: { ...createCurrentRun(), runId: "run-2", prompt: "原始用户问题" } } }
+      startRunResponse: { ok: true, data: { runId: "run-2", selectedAgent: DEFAULT_MAIN_AGENT, currentRun: { ...createCurrentRun(), runId: "run-2", prompt: "原始用户问题" } } }
     });
 
     await act(async () => {
@@ -1666,6 +1707,7 @@ describe("side panel host permission request flow", () => {
       type: "START_RUN",
       payload: {
         prompt: "原始用户问题",
+        selectedAgent: DEFAULT_MAIN_AGENT,
         capturePageData: false,
         retryFromRunId: "run-1",
         retryFromMessageId: "event-1"

@@ -6,11 +6,16 @@ import { evaluatePageAccess, matchesChromePattern, toOriginPermissionPattern } f
 import { ensureContentScriptReady, isReceivingEndMissingError } from "../shared/scripting";
 import { findMatchingRule, getStoredRules, removeRule, RULES_STORAGE_KEY, saveRules, toCanonicalCapturedFields, upsertRule } from "../shared/rules";
 import type { ActiveTabContext, AssistantState, CapturedFields, PageRule, RuntimeMessage, UsernameContext } from "../shared/types";
-import type { RunRecord } from "../shared/protocol";
+import { DEFAULT_MAIN_AGENT, type MainAgent, type RunRecord } from "../shared/protocol";
 
 async function getState(): Promise<AssistantState> {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
-  return (stored[STORAGE_KEY] as AssistantState | undefined) ?? initialAssistantState;
+  const state = (stored[STORAGE_KEY] as AssistantState | undefined) ?? initialAssistantState;
+  return {
+    ...initialAssistantState,
+    ...state,
+    mainAgentPreference: state.mainAgentPreference ?? DEFAULT_MAIN_AGENT
+  };
 }
 
 async function getRules(): Promise<PageRule[]> {
@@ -206,6 +211,7 @@ async function runCaptureOnly() {
 async function buildRunRecord(options: {
   runId: string;
   sessionId?: string | null;
+  selectedAgent: MainAgent;
   prompt: string;
   usernameContext: UsernameContext;
   capturedFields: CapturedFields | null;
@@ -215,6 +221,7 @@ async function buildRunRecord(options: {
   const currentRun: RunRecord = {
     runId: options.runId,
     ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+    selectedAgent: options.selectedAgent,
     prompt: options.prompt,
     username: options.usernameContext.username,
     usernameSource: options.usernameContext.usernameSource,
@@ -234,7 +241,7 @@ async function buildRunRecord(options: {
 /** @ArchitectureID: ELM-APP-EXT-RUN-ORCHESTRATION */
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 /** @ArchitectureID: ELM-APP-008B */
-async function startRunFromActiveTab(options: { prompt: string; sessionId?: string; retryFromRunId?: string; retryFromMessageId?: string; capturePageData?: boolean }) {
+async function startRunFromActiveTab(options: { prompt: string; selectedAgent: MainAgent; sessionId?: string; retryFromRunId?: string; retryFromMessageId?: string; capturePageData?: boolean }) {
   const { prompt } = options;
   const activeTab = await getActiveTab();
   const rules = await getRules();
@@ -258,7 +265,8 @@ async function startRunFromActiveTab(options: { prompt: string; sessionId?: stri
       }
     : null;
   const targetSessionId = options.sessionId ?? existingState.activeSessionId;
-  const runResponse = await startRun(prompt, runCapture, usernameContext, targetSessionId);
+  const requestedAgent = options.selectedAgent ?? existingState.mainAgentPreference ?? DEFAULT_MAIN_AGENT;
+  const runResponse = await startRun(prompt, runCapture, usernameContext, requestedAgent, targetSessionId);
 
   if (!runResponse.ok) {
     const domainError = normalizeDomainError(runResponse.error, createDomainError("ANALYSIS_ERROR", runResponse.error.message));
@@ -269,6 +277,7 @@ async function startRunFromActiveTab(options: { prompt: string; sessionId?: stri
   const { currentRun } = await buildRunRecord({
     runId: runResponse.data.runId,
     sessionId: runResponse.data.sessionId ?? targetSessionId,
+    selectedAgent: runResponse.data.selectedAgent,
     prompt,
     usernameContext,
     capturedFields
@@ -306,8 +315,10 @@ async function startRunFromActiveTab(options: { prompt: string; sessionId?: stri
 }
 
 async function clearResult() {
+  const current = await getState();
   await setState({
     ...initialAssistantState,
+    mainAgentPreference: current.mainAgentPreference,
     capturedFields: null,
     activeSessionId: null,
     lastUpdatedAt: new Date().toISOString()
@@ -385,6 +396,10 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
           break;
         case "START_RUN":
           sendResponse(await startRunFromActiveTab(message.payload));
+          break;
+        case "SET_MAIN_AGENT":
+          await patchState({ mainAgentPreference: message.payload.selectedAgent });
+          sendResponse({ ok: true, data: { selectedAgent: message.payload.selectedAgent } });
           break;
         case "SYNC_RUN_STATE":
           await syncRunState(message.payload);

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createRunEventStream, submitQuestionAnswer } from "../shared/api";
 import { toDisplayMessage } from "../shared/errors";
 import { initialAssistantState } from "../shared/state";
-import type { RunHistoryDetail, RunRecord } from "../shared/protocol";
+import { DEFAULT_MAIN_AGENT, MAIN_AGENTS, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, hasPendingQuestion } from "./questionState";
 import { resolveCockpitStatusModel, resolveTimelinePresentationState, type BuildChatStreamItemsOptions } from "./reasoningTimeline";
@@ -34,6 +34,12 @@ export interface DrawerBarItem {
   description: string;
   badge?: string;
   status?: "default" | "pending" | "active";
+}
+
+export interface MainAgentOption {
+  value: MainAgent;
+  label: MainAgent;
+  description: string;
 }
 
 async function syncRunStateToBackground(nextState: Pick<AssistantState, "status" | "activeSessionId" | "capturedFields" | "runPrompt" | "runEvents" | "currentRun" | "answers" | "error" | "errorMessage" | "matchedRule" | "lastCapturedUrl" | "usernameContext" | "stream">) {
@@ -397,6 +403,15 @@ export function useSidepanelController() {
 
   const selectedConversationHasContent = liveConversationSegments.length > 0;
   const selectedThreadRun = selectedSessionItem?.latestRun ?? selectedHistoryFallbackDetail?.run ?? state.currentRun;
+  const selectedThreadAgent = selectedThreadRun?.selectedAgent ?? state.currentRun?.selectedAgent ?? state.mainAgentPreference;
+  const mainAgentOptions = useMemo<MainAgentOption[]>(() => MAIN_AGENTS.map((agent) => ({
+    value: agent,
+    label: agent,
+    description: agent === DEFAULT_MAIN_AGENT ? "默认主 AGENT" : "可切换的备用主 AGENT"
+  })), []);
+  const nextRunAgentDescription = state.currentRun?.selectedAgent && state.currentRun.selectedAgent !== state.mainAgentPreference
+    ? `当前 run 继续使用 ${state.currentRun.selectedAgent}；切换只影响后续新 run。`
+    : `后续新 run 将显式使用 ${state.mainAgentPreference}。`;
   const selectedThreadStatus = selectedSessionIsCurrent ? livePresentationState.runStatus : selectedThreadRun?.status;
   const selectedThreadStreamStatus = selectedSessionIsCurrent ? livePresentationState.streamStatus : undefined;
   const selectedThreadUpdatedAt = selectedSessionIsCurrent
@@ -464,10 +479,11 @@ export function useSidepanelController() {
     setPrompt(nextPrompt);
     const targetSessionItem = sessionNavigationItems.find((item) => item.key === effectiveSelectedSessionKey) ?? null;
 
-    const response = await sendMessage<{ ok: boolean; data?: { runId: string; sessionId?: string; currentRun: RunRecord }; error?: { message: string } }>({
+    const response = await sendMessage<{ ok: boolean; data?: { runId: string; sessionId?: string; selectedAgent: MainAgent; currentRun: RunRecord }; error?: { message: string } }>({
       type: "START_RUN",
       payload: {
         prompt: nextPrompt,
+        selectedAgent: state.mainAgentPreference,
         ...(!retryPayload?.retryFromRunId && targetSessionItem?.sessionId ? { sessionId: targetSessionItem.sessionId } : {}),
         capturePageData: retryPayload?.capturePageData,
         retryFromRunId: retryPayload?.retryFromRunId,
@@ -649,6 +665,32 @@ export function useSidepanelController() {
     });
   }
 
+  async function handleSelectMainAgent(selectedAgent: MainAgent) {
+    if (selectedAgent === state.mainAgentPreference) {
+      return;
+    }
+
+    const previousAgent = state.mainAgentPreference;
+
+    setState((current) => ({
+      ...current,
+      mainAgentPreference: selectedAgent
+    }));
+
+    const response = await sendMessage<{ ok: boolean; data?: { selectedAgent: MainAgent }; error?: { message: string } }>({
+      type: "SET_MAIN_AGENT",
+      payload: { selectedAgent }
+    });
+
+    if (!response?.ok) {
+      setState((current) => ({
+        ...current,
+        mainAgentPreference: previousAgent
+      }));
+      setStreamError(response?.error?.message ?? "保存主 AGENT 失败");
+    }
+  }
+
   async function handleStartFreshSession() {
     if (isBusy) {
       return;
@@ -765,6 +807,7 @@ export function useSidepanelController() {
     handleRemoveFieldRule,
     handleRetry,
     handleReturnToCurrentSession,
+    handleSelectMainAgent,
     handleSelectRule,
     handleSelectSession,
     handleStartFreshSession,
@@ -776,6 +819,8 @@ export function useSidepanelController() {
     livePrompt,
     latestReasoningItems,
     latestRunSummary,
+    mainAgentOptions,
+    nextRunAgentDescription,
     openDrawer,
     prompt,
     questionEvent,
@@ -789,6 +834,7 @@ export function useSidepanelController() {
     selectedRuleId,
     selectedSessionIsCurrent,
     selectedSessionItem,
+    selectedThreadAgent,
     selectedThreadError,
     selectedThreadFinalOutput,
     selectedThreadRun,

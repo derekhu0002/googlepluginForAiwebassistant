@@ -10,6 +10,7 @@ import httpx
 
 from .config import Settings
 from .models import (
+    MainAgent,
     NormalizedRunEvent,
     NormalizedRunEventSemantic,
     QuestionAnswerRequest,
@@ -20,8 +21,12 @@ from .models import (
 
 
 ClientFactory = Callable[[float | None], httpx.AsyncClient]
-ANALYST_AGENT_TARGET = "tara_analyst"
-ANALYST_AGENT_ALIASES = frozenset({"tara_analyst", "tara-analyst"})
+DEFAULT_MAIN_AGENT: MainAgent = "TARA_analyst"
+ALLOWED_MAIN_AGENTS = frozenset({"TARA_analyst", "ThreatIntelliganceCommander"})
+REMOTE_AGENT_WHITELIST: dict[MainAgent, frozenset[str]] = {
+    "TARA_analyst": frozenset({"tara_analyst", "tara-analyst"}),
+    "ThreatIntelliganceCommander": frozenset({"threatintelligancecommander", "threat_intelligance_commander", "threat-intelligance-commander"}),
+}
 
 
 class RunNotFoundError(LookupError):
@@ -96,6 +101,14 @@ class OpencodeAdapter:
     def _normalize_agent_name(self, agent_name: str) -> str:
         return agent_name.strip().lower().replace("-", "_")
 
+    def _validate_requested_agent(self, selected_agent: str) -> MainAgent:
+        if selected_agent not in ALLOWED_MAIN_AGENTS:
+            raise RuntimeError(
+                "Requested main agent is not allowed: "
+                f"{selected_agent!r}; allowed={sorted(ALLOWED_MAIN_AGENTS)!r}"
+            )
+        return selected_agent  # type: ignore[return-value]
+
     def _is_equivalent_agent_name(self, expected_agent: str, observed_agent: str) -> bool:
         return self._normalize_agent_name(expected_agent) == self._normalize_agent_name(observed_agent)
 
@@ -132,23 +145,24 @@ class OpencodeAdapter:
                 return [direct_candidates[0]]
         return []
 
-    def _select_canonical_remote_agent(self, catalog: list[str]) -> str:
-        matches = [agent for agent in catalog if self._normalize_agent_name(agent) in ANALYST_AGENT_ALIASES]
+    def _select_canonical_remote_agent(self, requested_agent: MainAgent, catalog: list[str]) -> str:
+        aliases = REMOTE_AGENT_WHITELIST[requested_agent]
+        matches = [agent for agent in catalog if self._normalize_agent_name(agent) in aliases]
         if not catalog:
             raise RuntimeError("Remote /agent discovery failed: server returned no agent catalog entries")
         if not matches:
             raise RuntimeError(
-                "Remote /agent discovery failed: target analyst agent not found in remote catalog; "
-                f"expected alias for {ANALYST_AGENT_TARGET!r}, got {catalog!r}"
+                "Remote /agent discovery failed: requested agent is unavailable in remote catalog; "
+                f"requested={requested_agent!r}; got {catalog!r}"
             )
         if len(matches) > 1:
             raise RuntimeError(
-                "Remote /agent discovery failed: ambiguous analyst aliases in remote catalog; "
+                "Remote /agent discovery failed: ambiguous requested agent aliases in remote catalog; "
                 f"matches={matches!r}"
             )
         return matches[0]
 
-    async def _discover_canonical_remote_agent(self) -> str:
+    async def _discover_canonical_remote_agent(self, requested_agent: MainAgent) -> str:
         try:
             async with self._client_factory(30.0) as client:
                 response = await client.get(self.settings.opencode_agent_list_endpoint, params=self._query_params())
@@ -160,7 +174,7 @@ class OpencodeAdapter:
         catalog = self._extract_remote_agent_catalog(payload)
         if not catalog:
             raise RuntimeError("Remote /agent discovery failed: invalid /agent response payload")
-        return self._select_canonical_remote_agent(catalog)
+        return self._select_canonical_remote_agent(requested_agent, catalog)
 
     def _build_session_create_payload(self, request: RunStartRequest) -> dict[str, Any]:
         title = f"SR {request.capture.get('selected_sr', '').strip() or 'analysis'}"
@@ -320,6 +334,7 @@ class OpencodeAdapter:
         run["primary_agent_evidence_source"] = source
 
     async def start_run(self, request: RunStartRequest) -> str:
+        requested_agent = self._validate_requested_agent(request.selectedAgent)
         run_id = f"run-{uuid4().hex}"
         run = {
             "run_id": run_id,
@@ -342,23 +357,24 @@ class OpencodeAdapter:
             "confirmed_primary_agent": None,
             "primary_agent_evidence_source": None,
             "selected_remote_agent": None,
+            "selected_agent": requested_agent,
         }
         self._runs[run_id] = run
 
         if self.settings.use_mock_opencode:
-            run["selected_remote_agent"] = ANALYST_AGENT_TARGET
+            run["selected_remote_agent"] = requested_agent
             run["events"] = self._build_mock_initial_events(run)
             run["waiting_question_id"] = "question-1"
             return run_id
 
         try:
-            selected_remote_agent = await self._discover_canonical_remote_agent()
+            selected_remote_agent = await self._discover_canonical_remote_agent(requested_agent)
             run["selected_remote_agent"] = selected_remote_agent
         except Exception as exc:
             if self.settings.allow_mock_fallback:
                 run["mode"] = "mock-fallback"
                 run["fallback_reason"] = str(exc)
-                run["selected_remote_agent"] = ANALYST_AGENT_TARGET
+                run["selected_remote_agent"] = requested_agent
                 run["events"] = self._build_mock_initial_events(run, fallback_reason=str(exc))
                 run["waiting_question_id"] = "question-1"
             else:

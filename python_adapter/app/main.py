@@ -31,13 +31,31 @@ def map_start_run_error(exc: RuntimeError) -> HTTPException:
     error_message = str(exc)
     normalized_message = error_message.lower()
 
+    if "requested main agent is not allowed" in normalized_message:
+        return HTTPException(
+            status_code=400,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": f"请求的主 AGENT 不在允许清单内。原因：{error_message}",
+            },
+        )
+
+    if "requested agent is unavailable in remote catalog" in normalized_message:
+        return HTTPException(
+            status_code=502,
+            detail={
+                "code": "ANALYSIS_ERROR",
+                "message": f"远端 /agent 未提供用户所选主 AGENT，已显式拒绝启动 run。原因：{error_message}",
+            },
+        )
+
     if "remote /agent discovery failed" in normalized_message:
         return HTTPException(
             status_code=502,
             detail={
                 "code": "ANALYSIS_ERROR",
                 "message": (
-                    "opencode 远端 /agent 能力探测失败，请确认远端 server 可用、返回合法 agent catalog，且存在唯一 analyst canonical agent。"
+                    "opencode 远端 /agent 能力探测失败，请确认远端 server 可用、返回合法 agent catalog，且能唯一解析所请求主 AGENT。"
                     f"原因：{error_message}"
                 ),
             },
@@ -142,7 +160,7 @@ async def start_run(request: RunStartRequest, _auth: None = Depends(enforce_api_
         "phase": "start_run",
     })
     run = adapter._runs.get(run_id, {})
-    return JSONResponse({"ok": True, "data": {"runId": run_id, "sessionId": run.get("session_id")}})
+    return JSONResponse({"ok": True, "data": {"runId": run_id, "sessionId": run.get("session_id"), "selectedAgent": run.get("selected_agent")}})
 
 
 @app.get("/api/runs/{run_id}/events")

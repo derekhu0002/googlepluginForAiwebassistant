@@ -5,6 +5,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+MainAgent = Literal["TARA_analyst", "ThreatIntelliganceCommander"]
+
+
 NormalizedEventType = Literal["thinking", "tool_call", "question", "result", "error"]
 NormalizedEventChannel = Literal["reasoning", "assistant_text"]
 NormalizedEventEmissionKind = Literal["delta", "snapshot", "final"]
@@ -21,6 +24,7 @@ class RunContext(BaseModel):
 
 class RunStartRequest(BaseModel):
     prompt: str = Field(min_length=1)
+    selectedAgent: str = Field(min_length=1)
     capture: dict[str, str] = Field(default_factory=dict)
     sessionId: str | None = None
     context: RunContext
@@ -77,6 +81,7 @@ class NormalizedRunEvent(BaseModel):
 
 
 class RunStartResult(BaseModel):
+    selectedAgent: MainAgent
     sessionId: str | None = None
     startupError: str | None = None
     mode: str

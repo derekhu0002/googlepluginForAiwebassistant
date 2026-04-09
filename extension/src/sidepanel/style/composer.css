@@ -58,6 +58,66 @@
   scrollbar-width: none;
 }
 
+.main-agent-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 0;
+  flex: 0 0 auto;
+}
+
+.main-agent-trigger {
+  min-width: 220px;
+  height: 34px;
+  padding: 6px 12px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--copilot-border);
+  color: var(--copilot-text);
+  text-align: left;
+}
+
+.main-agent-trigger.active {
+  background: rgba(14, 99, 156, 0.18);
+}
+
+.main-agent-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  min-width: 240px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--copilot-border);
+  background: var(--cockpit-surface-2);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  z-index: 5;
+}
+
+.main-agent-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--copilot-text);
+}
+
+.main-agent-option.selected {
+  border-color: var(--cockpit-border-strong);
+  background: rgba(91, 140, 255, 0.12);
+}
+
+.main-agent-option small {
+  color: var(--copilot-muted);
+}
+
 .chat-console-dock::-webkit-scrollbar {
   display: none;
 }
@@ -127,6 +187,7 @@
 .compact-composer-actions {
   justify-content: flex-end;
   align-items: center;
-  gap: 0;
+  gap: 8px;
   flex: 0 0 auto;
+  flex-wrap: wrap;
 }

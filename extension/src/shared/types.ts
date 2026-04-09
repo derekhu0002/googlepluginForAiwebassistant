@@ -1,5 +1,5 @@
 import type { DomainError } from "./errors";
-import type { AnswerRecord, MessageFeedbackRequest, MessageFeedbackResponse, NormalizedRunEvent, QuestionAnswerRequest, RunHistoryDetail, RunRecord, UsernameSource } from "./protocol";
+import type { AnswerRecord, MainAgent, MessageFeedbackRequest, MessageFeedbackResponse, NormalizedRunEvent, QuestionAnswerRequest, RunHistoryDetail, RunRecord, UsernameSource } from "./protocol";
 
 export type CapturedFields = Record<string, string>;
 
@@ -75,6 +75,7 @@ export interface StreamConnectionState {
 
 export interface AssistantState {
   status: "idle" | "collecting" | "streaming" | "waiting_for_answer" | "done" | "error";
+  mainAgentPreference: MainAgent;
   activeSessionId: string | null;
   capturedFields: CapturedFields | null;
   runPrompt: string;
@@ -97,6 +98,7 @@ export interface StartRunResponse {
   ok: true;
   data: {
     runId: string;
+    selectedAgent: MainAgent;
     sessionId?: string;
   };
 }
@@ -151,12 +153,14 @@ export type RuntimeMessage =
       type: "START_RUN";
       payload: {
         prompt: string;
+        selectedAgent: MainAgent;
         sessionId?: string;
         capturePageData?: boolean;
         retryFromRunId?: string;
         retryFromMessageId?: string;
       };
     }
+  | { type: "SET_MAIN_AGENT"; payload: { selectedAgent: MainAgent } }
   | {
       type: "SYNC_RUN_STATE";
       payload: Pick<AssistantState, "status" | "activeSessionId" | "capturedFields" | "runPrompt" | "runEvents" | "currentRun" | "answers" | "error" | "errorMessage" | "matchedRule" | "lastCapturedUrl" | "usernameContext" | "stream">;

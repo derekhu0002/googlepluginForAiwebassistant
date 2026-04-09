@@ -1,5 +1,12 @@
 export const NORMALIZED_EVENT_TYPES = ["thinking", "tool_call", "question", "result", "error"] as const;
 
+/** @ArchitectureID: ELM-APP-EXT-SHARED-API-CONTRACT */
+export const MAIN_AGENTS = ["TARA_analyst", "ThreatIntelliganceCommander"] as const;
+
+export type MainAgent = typeof MAIN_AGENTS[number];
+
+export const DEFAULT_MAIN_AGENT: MainAgent = "TARA_analyst";
+
 export type NormalizedEventType = typeof NORMALIZED_EVENT_TYPES[number];
 export const NORMALIZED_EVENT_CHANNELS = ["reasoning", "assistant_text"] as const;
 export const NORMALIZED_EVENT_EMISSION_KINDS = ["delta", "snapshot", "final"] as const;
@@ -60,6 +67,7 @@ export const RUN_STREAM_LIFECYCLE: RunStreamLifecycle = {
 
 export interface RunStartRequest {
   prompt: string;
+  selectedAgent: MainAgent;
   capture?: Record<string, string>;
   sessionId?: string;
   context: {
@@ -99,6 +107,7 @@ export interface MessageFeedbackResponse {
 export interface RunRecord {
   runId: string;
   sessionId?: string;
+  selectedAgent: MainAgent;
   prompt: string;
   username: string;
   usernameSource: UsernameSource;

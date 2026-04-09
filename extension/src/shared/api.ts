@@ -2,7 +2,7 @@ import { z } from "zod";
 import { extensionConfig } from "./config";
 import { createDomainError, ERROR_CODES } from "./errors";
 import type { AnswerApiResponse, CapturedFields, FeedbackApiResponse, StartRunApiResponse, UsernameContext } from "./types";
-import type { MessageFeedbackRequest, NormalizedRunEvent, QuestionAnswerRequest, RunStartRequest } from "./protocol";
+import { MAIN_AGENTS, type MainAgent, type MessageFeedbackRequest, type NormalizedRunEvent, type QuestionAnswerRequest, type RunStartRequest } from "./protocol";
 
 const failureSchema = z.object({
   ok: z.literal(false),
@@ -15,12 +15,13 @@ const failureSchema = z.object({
 
 const startRunSchema = z.union([
   z.object({
-    ok: z.literal(true),
-    data: z.object({
-      runId: z.string().min(1),
-      sessionId: z.string().min(1).optional()
-    })
-  }),
+      ok: z.literal(true),
+      data: z.object({
+        runId: z.string().min(1),
+        selectedAgent: z.enum(MAIN_AGENTS),
+        sessionId: z.string().min(1).optional()
+      })
+    }),
   failureSchema
 ]);
 
@@ -99,10 +100,11 @@ async function parseJsonOrFailure(response: Response) {
 }
 
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
-export async function startRun(prompt: string, capture: CapturedFields | null, usernameContext: UsernameContext, sessionId?: string | null): Promise<StartRunApiResponse> {
+export async function startRun(prompt: string, capture: CapturedFields | null, usernameContext: UsernameContext, selectedAgent: MainAgent, sessionId?: string | null): Promise<StartRunApiResponse> {
   const normalizedCapture = capture && Object.keys(capture).length > 0 ? capture : null;
   const payload: RunStartRequest = {
     prompt,
+    selectedAgent,
     ...(normalizedCapture ? { capture: normalizedCapture } : {}),
     ...(sessionId ? { sessionId } : {}),
     context: {

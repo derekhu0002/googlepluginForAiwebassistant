@@ -13,6 +13,7 @@ from python_adapter.app.opencode_adapter import OpencodeAdapter, RunNotFoundErro
 def create_request() -> RunStartRequest:
     return RunStartRequest(
         prompt="hello from adapter",
+        selectedAgent="TARA_analyst",
         capture={
             "pageTitle": "Example",
             "pageUrl": "https://example.com",
@@ -33,6 +34,7 @@ def create_request() -> RunStartRequest:
 def create_request_without_capture() -> RunStartRequest:
     return RunStartRequest(
         prompt="hello from adapter",
+        selectedAgent="TARA_analyst",
         context=RunContext(
             source="chrome-extension",
             capturedAt="2026-04-01T00:00:00.000Z",
@@ -624,7 +626,7 @@ def test_remote_agent_alias_is_canonicalized_from_supported_catalog() -> None:
             ("GET", "/agent", make_agent_catalog_response("tara-analyst", "other_agent")),
         ]))
 
-        selected = await adapter._discover_canonical_remote_agent()
+        selected = await adapter._discover_canonical_remote_agent("TARA_analyst")
 
         assert selected == "tara-analyst"
 
@@ -637,8 +639,8 @@ def test_remote_agent_discovery_rejects_ambiguous_alias_matches() -> None:
             ("GET", "/agent", make_agent_catalog_response("TARA_Analyst", "tara-analyst")),
         ]))
 
-        with pytest.raises(RuntimeError, match="ambiguous analyst aliases"):
-            await adapter._discover_canonical_remote_agent()
+        with pytest.raises(RuntimeError, match="ambiguous requested agent aliases"):
+            await adapter._discover_canonical_remote_agent("TARA_analyst")
 
     anyio.run(scenario)
 
@@ -649,8 +651,8 @@ def test_remote_agent_discovery_rejects_missing_target_agent() -> None:
             ("GET", "/agent", make_agent_catalog_response("other_agent")),
         ]))
 
-        with pytest.raises(RuntimeError, match="target analyst agent not found"):
-            await adapter._discover_canonical_remote_agent()
+        with pytest.raises(RuntimeError, match="requested agent is unavailable in remote catalog"):
+            await adapter._discover_canonical_remote_agent("TARA_analyst")
 
     anyio.run(scenario)
 
@@ -662,7 +664,7 @@ def test_remote_agent_discovery_rejects_invalid_payload() -> None:
         ]))
 
         with pytest.raises(RuntimeError, match="invalid /agent response payload"):
-            await adapter._discover_canonical_remote_agent()
+            await adapter._discover_canonical_remote_agent("TARA_analyst")
 
     anyio.run(scenario)
 
@@ -675,6 +677,46 @@ def test_start_run_raises_when_remote_agent_discovery_fails_without_mock_fallbac
 
         with pytest.raises(RuntimeError, match="Remote /agent discovery failed"):
             await adapter.start_run(create_request())
+
+    anyio.run(scenario)
+
+
+def test_start_run_raises_when_selected_agent_is_not_whitelisted() -> None:
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"))
+
+        request = create_request().model_dump()
+        request["selectedAgent"] = "OtherAgent"
+
+        with pytest.raises(RuntimeError, match="Requested main agent is not allowed"):
+            await adapter.start_run(RunStartRequest.model_construct(**request))
+
+    anyio.run(scenario)
+
+
+def test_remote_agent_discovery_resolves_second_allowed_agent_without_ui_catalog_expansion() -> None:
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=lambda _timeout: FakeAsyncClient([
+            ("GET", "/agent", make_agent_catalog_response("ThreatIntelliganceCommander", "other_agent")),
+        ]))
+
+        selected = await adapter._discover_canonical_remote_agent("ThreatIntelliganceCommander")
+
+        assert selected == "ThreatIntelliganceCommander"
+
+    anyio.run(scenario)
+
+
+def test_start_run_fails_explicitly_when_requested_agent_not_supported_by_remote() -> None:
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=lambda _timeout: FakeAsyncClient([
+            ("GET", "/agent", make_agent_catalog_response("TARA_analyst")),
+        ]))
+
+        request = create_request().model_copy(update={"selectedAgent": "ThreatIntelliganceCommander"})
+
+        with pytest.raises(RuntimeError, match="requested agent is unavailable in remote catalog"):
+            await adapter.start_run(request)
 
     anyio.run(scenario)
 

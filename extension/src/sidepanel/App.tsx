@@ -120,8 +120,11 @@ export function App() {
             drawerItems={controller.drawerItems}
             isBusy={controller.isBusy}
             isSendDisabled={controller.isSendDisabled}
+            mainAgentOptions={controller.mainAgentOptions}
+            nextRunAgentDescription={controller.nextRunAgentDescription}
             onCaptureOnly={controller.handleCaptureOnly}
             onPromptChange={controller.setPrompt}
+            onSelectMainAgent={controller.handleSelectMainAgent}
             onSend={() => controller.startStreamingRun({ capturePageData: false })}
             onToggleDrawer={controller.toggleDrawer}
             placeholderQuestionActive={Boolean(controller.selectedSessionIsCurrent && controller.questionEvent?.question)}
