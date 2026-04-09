@@ -221,6 +221,7 @@ async function flushAllTimers() {
 }
 
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
+/** @ArchitectureID: ELM-001 */
 describe("side panel host permission request flow", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
