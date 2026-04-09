@@ -20,8 +20,6 @@ def test_settings_default_to_real_opencode_and_canonical_log_path(monkeypatch) -
     assert settings.opencode_agent_list_endpoint == "/agent"
     assert settings.feedback_backend_base_url == "http://127.0.0.1:8787"
     assert settings.feedback_backend_endpoint == "/api/message-feedback"
-    assert settings.opencode_config_path.endswith(".opencode/opencode.json")
-    assert settings.opencode_tara_agent_path.endswith(".opencode/agents/TARA_analyst.md")
 
 
 def test_settings_preserve_adapter_and_upstream_port_boundary(monkeypatch) -> None:

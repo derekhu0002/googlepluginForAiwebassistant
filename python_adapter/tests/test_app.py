@@ -116,7 +116,7 @@ def test_start_run_returns_active_session_id(monkeypatch) -> None:
 
 
 def test_start_run_surfaces_session_agent_enforcement_error(monkeypatch) -> None:
-    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("TARA primary agent enforcement failed: remote session reported primary agent 'other_agent'")))
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote canonical agent mismatch: remote session reported agent 'other_agent', expected canonical remote agent 'TARA_analyst'")))
 
     response = client.post(
         "/api/runs",
@@ -143,7 +143,7 @@ def test_start_run_surfaces_session_agent_enforcement_error(monkeypatch) -> None
     payload = response.json()
     assert payload["ok"] is False
     assert payload["error"]["code"] == "ANALYSIS_ERROR"
-    assert "opencode 主分析代理校验失败" in payload["error"]["message"]
+    assert "opencode 真实运行时 agent 与远端 /agent 选定 canonical agent 不一致" in payload["error"]["message"]
     assert "other_agent" in payload["error"]["message"]
 
 
@@ -159,13 +159,14 @@ def test_health_exposes_runtime_defaults(monkeypatch) -> None:
     assert payload["opencode_base_url"] == "http://localhost:8124"
     assert payload["opencode_health_endpoint"] == "/global/health"
     assert payload["opencode_global_event_endpoint"] == "/global/event"
+    assert payload["opencode_agent_list_endpoint"] == "/agent"
     assert isinstance(payload["use_mock_opencode"], bool)
     assert isinstance(payload["allow_mock_fallback"], bool)
     assert payload["invocation_log_path"].endswith("python_adapter/logs/invocations.jsonl")
 
 
-def test_start_run_returns_explicit_error_when_primary_agent_guard_fails(monkeypatch) -> None:
-    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("TARA primary agent guard failed: missing agent")))
+def test_start_run_returns_explicit_error_when_remote_agent_discovery_fails(monkeypatch) -> None:
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote /agent discovery failed: target analyst agent not found in remote catalog")))
 
     response = client.post(
         "/api/runs",
@@ -192,8 +193,8 @@ def test_start_run_returns_explicit_error_when_primary_agent_guard_fails(monkeyp
     payload = response.json()
     assert payload["ok"] is False
     assert payload["error"]["code"] == "ANALYSIS_ERROR"
-    assert "opencode 主分析代理校验失败" in payload["error"]["message"]
-    assert "missing agent" in payload["error"]["message"]
+    assert "opencode 远端 /agent 能力探测失败" in payload["error"]["message"]
+    assert "target analyst agent not found" in payload["error"]["message"]
 
 
 def test_start_run_keeps_unexpected_runtime_errors_as_internal_server_error(monkeypatch) -> None:

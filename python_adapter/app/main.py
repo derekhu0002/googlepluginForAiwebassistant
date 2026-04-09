@@ -31,13 +31,25 @@ def map_start_run_error(exc: RuntimeError) -> HTTPException:
     error_message = str(exc)
     normalized_message = error_message.lower()
 
-    if "primary agent" in normalized_message or "guard failed" in normalized_message:
+    if "remote /agent discovery failed" in normalized_message:
         return HTTPException(
             status_code=502,
             detail={
                 "code": "ANALYSIS_ERROR",
                 "message": (
-                    "opencode 主分析代理校验失败，请确认 TARA_analyst 本地配置正确，且真实运行时未落到其他 agent。"
+                    "opencode 远端 /agent 能力探测失败，请确认远端 server 可用、返回合法 agent catalog，且存在唯一 analyst canonical agent。"
+                    f"原因：{error_message}"
+                ),
+            },
+        )
+
+    if "canonical agent mismatch" in normalized_message or "remote agent enforcement failed" in normalized_message:
+        return HTTPException(
+            status_code=502,
+            detail={
+                "code": "ANALYSIS_ERROR",
+                "message": (
+                    "opencode 真实运行时 agent 与远端 /agent 选定 canonical agent 不一致，请确认会话未落到其他 agent。"
                     f"原因：{error_message}"
                 ),
             },
@@ -107,6 +119,7 @@ async def health() -> dict[str, object]:
         "opencode_base_url": settings.opencode_base_url,
         "opencode_global_event_endpoint": settings.opencode_global_event_endpoint,
         "opencode_health_endpoint": settings.opencode_health_endpoint,
+        "opencode_agent_list_endpoint": settings.opencode_agent_list_endpoint,
         "use_mock_opencode": settings.use_mock_opencode,
         "allow_mock_fallback": settings.allow_mock_fallback,
         "invocation_log_path": str(logger.log_file),

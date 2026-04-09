@@ -55,20 +55,28 @@ cp backend/.env.example backend/.env
 - python adapter 默认监听 `127.0.0.1:8000`
 - python adapter 默认转发 feedback 到 `http://127.0.0.1:8787/api/message-feedback`
 - opencode 默认探测 `http://localhost:8124`
+- python adapter start_run 会先探测远端 `/agent`，再创建/复用 session 并调用 `prompt_async`
 - backend 默认监听 `8787`
 
-如果点击发送后 opencode server 侧出现 `prompt_async failed` / `session.error`，先确认仓库本地 `.opencode/opencode.json` 的 `default_agent` 与 `.opencode/agents/TARA_analyst.md` 配置正确。当前 adapter 不再把 `GET http://localhost:8124/agent?directory=<repo>` 是否枚举 repo-local agent 作为启动前置条件，而是在真实事件/消息表明会话实际落到其他 agent 时直接报错。
+如果点击发送后 opencode server 侧出现 `prompt_async failed` / `session.error`，先确认远端 `GET /agent?directory=<repo>[&workspace=...]` 可返回合法 agent catalog，且其中存在唯一 analyst alias（`TARA_Analyst` / `TARA_analyst` / `tara-analyst` 之一）。当前 adapter 已不再读取本机 `.opencode/opencode.json` / `TARA_analyst.md` 作为 admission gate，而是以远端 `/agent` 能力发现结果为真源，并在真实事件/消息表明会话实际落到其他 agent 时直接报 mismatch。
 
 > 提示：`python_adapter/.env.example` 与 `backend/.env.example` 中的 `chrome-extension://dev-extension-id` 只是示例值。实际加载 unpacked extension 后，如需严格校准 allowlist，请替换成你本机扩展的真实 ID。
 
 ## 推荐本地调试顺序
 
-### 1. 先探测 opencode serve
+### 1. 先探测 opencode serve 与远端 `/agent`
 
 ```bash
 . .venv/bin/activate
 python python_adapter/scripts/probe_opencode.py
 ```
+
+探测脚本会同时检查：
+
+- `GET /global/health`
+- `GET /agent?directory=<repo>[&workspace=...]`
+
+只有当 health 与 `/agent` catalog 都可用时，才视为真实跨机链路准备完成。
 
 ### 2. 启动 backend（完整联调必开，用于 feedback）
 

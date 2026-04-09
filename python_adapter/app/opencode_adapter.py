@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -21,7 +20,8 @@ from .models import (
 
 
 ClientFactory = Callable[[float | None], httpx.AsyncClient]
-REQUIRED_PRIMARY_AGENT = "TARA_analyst"
+ANALYST_AGENT_TARGET = "tara_analyst"
+ANALYST_AGENT_ALIASES = frozenset({"tara_analyst", "tara-analyst"})
 
 
 class RunNotFoundError(LookupError):
@@ -93,33 +93,74 @@ class OpencodeAdapter:
             log_data=log_data if log_data is not None else data,
         )
 
-    def _ensure_tara_primary_agent(self) -> None:
-        config_path = Path(self.settings.opencode_config_path)
-        agent_path = Path(self.settings.opencode_tara_agent_path)
+    def _normalize_agent_name(self, agent_name: str) -> str:
+        return agent_name.strip().lower().replace("-", "_")
 
-        try:
-            config_raw = config_path.read_text(encoding="utf-8")
-        except Exception as exc:
-            raise RuntimeError(f"TARA primary agent guard failed: unable to read {config_path}: {exc}") from exc
+    def _is_equivalent_agent_name(self, expected_agent: str, observed_agent: str) -> bool:
+        return self._normalize_agent_name(expected_agent) == self._normalize_agent_name(observed_agent)
 
-        try:
-            config_payload = json.loads(config_raw)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"TARA primary agent guard failed: invalid JSON in {config_path}: {exc}") from exc
+    def _extract_agent_candidates(self, payload: Any) -> list[str]:
+        if isinstance(payload, str):
+            return [payload]
+        if isinstance(payload, dict):
+            candidates: list[str] = []
+            for key in ("id", "name", "slug", "agent", "agentId", "agentName"):
+                value = payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    candidates.append(value.strip())
+            return candidates
+        return []
 
-        default_agent = config_payload.get("default_agent")
-        if default_agent != REQUIRED_PRIMARY_AGENT:
+    def _extract_remote_agent_catalog(self, payload: Any) -> list[str]:
+        def from_collection(items: list[Any]) -> list[str]:
+            catalog: list[str] = []
+            for item in items:
+                candidates = self._extract_agent_candidates(item)
+                if candidates:
+                    catalog.append(candidates[0])
+            return catalog
+
+        if isinstance(payload, list):
+            return from_collection(payload)
+        if isinstance(payload, dict):
+            for key in ("agents", "items", "data", "results"):
+                nested = payload.get(key)
+                if isinstance(nested, list):
+                    return from_collection(nested)
+            direct_candidates = self._extract_agent_candidates(payload)
+            if direct_candidates:
+                return [direct_candidates[0]]
+        return []
+
+    def _select_canonical_remote_agent(self, catalog: list[str]) -> str:
+        matches = [agent for agent in catalog if self._normalize_agent_name(agent) in ANALYST_AGENT_ALIASES]
+        if not catalog:
+            raise RuntimeError("Remote /agent discovery failed: server returned no agent catalog entries")
+        if not matches:
             raise RuntimeError(
-                f"TARA primary agent guard failed: .opencode/opencode.json default_agent must be '{REQUIRED_PRIMARY_AGENT}', got {default_agent!r}"
+                "Remote /agent discovery failed: target analyst agent not found in remote catalog; "
+                f"expected alias for {ANALYST_AGENT_TARGET!r}, got {catalog!r}"
             )
+        if len(matches) > 1:
+            raise RuntimeError(
+                "Remote /agent discovery failed: ambiguous analyst aliases in remote catalog; "
+                f"matches={matches!r}"
+            )
+        return matches[0]
 
+    async def _discover_canonical_remote_agent(self) -> str:
         try:
-            agent_contents = agent_path.read_text(encoding="utf-8")
+            async with self._client_factory(30.0) as client:
+                response = await client.get(self.settings.opencode_agent_list_endpoint, params=self._query_params())
+                response.raise_for_status()
+                payload = response.json()
         except Exception as exc:
-            raise RuntimeError(f"TARA primary agent guard failed: unable to read {agent_path}: {exc}") from exc
+            raise RuntimeError(f"Remote /agent discovery failed: unable to fetch remote agent catalog: {exc}") from exc
 
-        if not agent_contents.strip():
-            raise RuntimeError(f"TARA primary agent guard failed: {agent_path} is empty")
+        catalog = self._extract_remote_agent_catalog(payload)
+        if not catalog:
+            raise RuntimeError("Remote /agent discovery failed: invalid /agent response payload")
+        return self._select_canonical_remote_agent(catalog)
 
     def _build_session_create_payload(self, request: RunStartRequest) -> dict[str, Any]:
         title = f"SR {request.capture.get('selected_sr', '').strip() or 'analysis'}"
@@ -266,18 +307,19 @@ class OpencodeAdapter:
         if not agent_name:
             return
 
-        if agent_name != REQUIRED_PRIMARY_AGENT:
+        expected_agent = run.get("selected_remote_agent")
+        if not isinstance(expected_agent, str) or not expected_agent.strip():
+            raise RuntimeError("Remote agent enforcement failed: selected canonical remote agent missing from run state")
+
+        if not self._is_equivalent_agent_name(expected_agent, agent_name):
             raise RuntimeError(
-                f"TARA primary agent enforcement failed: {source} reported agent {agent_name!r}, expected {REQUIRED_PRIMARY_AGENT!r}"
+                f"Remote canonical agent mismatch: {source} reported agent {agent_name!r}, expected canonical remote agent {expected_agent!r}"
             )
 
         run["confirmed_primary_agent"] = agent_name
         run["primary_agent_evidence_source"] = source
 
     async def start_run(self, request: RunStartRequest) -> str:
-        if not self.settings.use_mock_opencode:
-            self._ensure_tara_primary_agent()
-
         run_id = f"run-{uuid4().hex}"
         run = {
             "run_id": run_id,
@@ -299,12 +341,37 @@ class OpencodeAdapter:
             "result_emitted": False,
             "confirmed_primary_agent": None,
             "primary_agent_evidence_source": None,
+            "selected_remote_agent": None,
         }
         self._runs[run_id] = run
 
         if self.settings.use_mock_opencode:
+            run["selected_remote_agent"] = ANALYST_AGENT_TARGET
             run["events"] = self._build_mock_initial_events(run)
             run["waiting_question_id"] = "question-1"
+            return run_id
+
+        try:
+            selected_remote_agent = await self._discover_canonical_remote_agent()
+            run["selected_remote_agent"] = selected_remote_agent
+        except Exception as exc:
+            if self.settings.allow_mock_fallback:
+                run["mode"] = "mock-fallback"
+                run["fallback_reason"] = str(exc)
+                run["selected_remote_agent"] = ANALYST_AGENT_TARGET
+                run["events"] = self._build_mock_initial_events(run, fallback_reason=str(exc))
+                run["waiting_question_id"] = "question-1"
+            else:
+                run["startup_error"] = str(exc)
+                run["events"] = [
+                    self._next_tool_event(
+                        run,
+                        "正在执行远端 /agent capability discovery。",
+                        data={"stage": "preflight_check", "agent_endpoint": self.settings.opencode_agent_list_endpoint},
+                        log_data={"target": self.settings.opencode_base_url, "mock_mode": False, "error": str(exc), "agent_endpoint": self.settings.opencode_agent_list_endpoint},
+                    )
+                ]
+                raise RuntimeError(str(exc)) from exc
             return run_id
 
         try:
@@ -315,9 +382,9 @@ class OpencodeAdapter:
                 run["events"] = [
                     self._next_tool_event(
                         run,
-                        "已复用当前 opencode session，准备继续提交 follow-up prompt。",
+                        f"已通过远端 /agent 探测并选定 canonical agent={selected_remote_agent}，复用当前 opencode session，准备继续提交 follow-up prompt。",
                         title="会话已连接",
-                        data={"session_id": session_id, "session_reused": True},
+                        data={"session_id": session_id, "session_reused": True, "canonical_agent": selected_remote_agent},
                     ),
                     self._next_tool_event(
                         run,
@@ -330,6 +397,7 @@ class OpencodeAdapter:
                             "event_endpoint": self.settings.opencode_global_event_endpoint,
                             "mock_mode": False,
                             "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                            "canonical_agent": selected_remote_agent,
                         },
                         log_data={
                             "target": self.settings.opencode_base_url,
@@ -338,6 +406,7 @@ class OpencodeAdapter:
                             "event_endpoint": self.settings.opencode_global_event_endpoint,
                             "mock_mode": False,
                             "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                            "canonical_agent": selected_remote_agent,
                         },
                     ),
                 ]
@@ -348,9 +417,9 @@ class OpencodeAdapter:
                 run["events"] = [
                     self._next_tool_event(
                         run,
-                        f"已创建 opencode session，准备提交 prompt。software_version={request.capture.get('software_version', '') or '(empty)'}；selected_sr={request.capture.get('selected_sr', '') or '(empty)'}。",
+                        f"已通过远端 /agent 探测并选定 canonical agent={selected_remote_agent}，创建 opencode session，准备提交 prompt。software_version={request.capture.get('software_version', '') or '(empty)'}；selected_sr={request.capture.get('selected_sr', '') or '(empty)'}。",
                         title="会话已创建",
-                        data={"session_id": session_id},
+                        data={"session_id": session_id, "canonical_agent": selected_remote_agent},
                     ),
                     self._next_tool_event(
                         run,
@@ -362,6 +431,7 @@ class OpencodeAdapter:
                             "event_endpoint": self.settings.opencode_global_event_endpoint,
                             "mock_mode": False,
                             "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                            "canonical_agent": selected_remote_agent,
                         },
                         log_data={
                             "target": self.settings.opencode_base_url,
@@ -369,26 +439,21 @@ class OpencodeAdapter:
                             "event_endpoint": self.settings.opencode_global_event_endpoint,
                             "mock_mode": False,
                             "mock_fallback_enabled": self.settings.allow_mock_fallback,
+                            "canonical_agent": selected_remote_agent,
                         },
                     ),
                 ]
-            await self._prompt_session(session_id, request)
+            await self._prompt_session(run, session_id, request)
         except Exception as exc:
-            if self.settings.allow_mock_fallback:
-                run["mode"] = "mock-fallback"
-                run["fallback_reason"] = str(exc)
-                run["events"] = self._build_mock_initial_events(run, fallback_reason=str(exc))
-                run["waiting_question_id"] = "question-1"
-            else:
-                run["startup_error"] = str(exc)
-                run["events"] = [
-                    self._next_tool_event(
-                        run,
-                        "正在校验主分析代理配置。",
-                        data={"stage": "preflight_check"},
-                        log_data={"target": self.settings.opencode_base_url, "mock_mode": False, "error": str(exc)},
-                    )
-                ]
+            run["startup_error"] = str(exc)
+            run["events"] = [
+                self._next_tool_event(
+                    run,
+                    "正在建立远端 opencode 会话。",
+                    data={"stage": "session_bootstrap", "agent_endpoint": self.settings.opencode_agent_list_endpoint},
+                    log_data={"target": self.settings.opencode_base_url, "mock_mode": False, "error": str(exc), "agent_endpoint": self.settings.opencode_agent_list_endpoint},
+                )
+            ]
 
         return run_id
 
@@ -533,13 +598,16 @@ class OpencodeAdapter:
                 raise ValueError("Invalid session create response")
             return payload
 
-    async def _prompt_session(self, session_id: str, request: RunStartRequest) -> None:
+    async def _prompt_session(self, run: dict[str, Any], session_id: str, request: RunStartRequest) -> None:
+        selected_remote_agent = run.get("selected_remote_agent")
+        if not isinstance(selected_remote_agent, str) or not selected_remote_agent.strip():
+            raise RuntimeError("Remote /agent discovery failed: canonical agent not selected before prompt dispatch")
         async with self._client_factory(30.0) as client:
             response = await client.post(
                 self.settings.opencode_prompt_async_endpoint.format(session_id=session_id),
                 params=self._query_params(),
                 json={
-                    "agent": REQUIRED_PRIMARY_AGENT,
+                    "agent": selected_remote_agent,
                     "parts": [{"type": "text", "text": request.prompt}],
                 },
             )
