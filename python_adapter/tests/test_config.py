@@ -24,6 +24,16 @@ def test_settings_default_to_real_opencode_and_canonical_log_path(monkeypatch) -
     assert settings.opencode_tara_agent_path.endswith(".opencode/agents/TARA_analyst.md")
 
 
+def test_settings_preserve_adapter_and_upstream_port_boundary(monkeypatch) -> None:
+    monkeypatch.delenv("PYTHON_ADAPTER_PORT", raising=False)
+    monkeypatch.delenv("OPENCODE_BASE_URL", raising=False)
+
+    settings = Settings()
+
+    assert settings.port == 8000
+    assert settings.opencode_base_url == "http://localhost:8124"
+
+
 def test_settings_allow_explicit_mock_mode(monkeypatch) -> None:
     monkeypatch.setenv("PYTHON_ADAPTER_USE_MOCK_OPENCODE", "1")
     monkeypatch.setenv("PYTHON_ADAPTER_ALLOW_MOCK_FALLBACK", "1")

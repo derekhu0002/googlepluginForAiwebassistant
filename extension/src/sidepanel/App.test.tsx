@@ -302,6 +302,20 @@ describe("side panel host permission request flow", () => {
     expect(container.querySelector("details.utility-panel")).toBeNull();
   });
 
+  it("keeps the authorize-current-domain CTA visible in both main stage callout and header", async () => {
+    setupChromeStub({
+      contexts: [createContext()]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.querySelector(".host-permission-callout button")?.textContent).toContain("授权当前域名");
+    expect(container.querySelector("[data-component='header'] button[aria-label='授权当前域名']")?.textContent).toContain("授权当前域名");
+  });
+
   it("keeps rules configuration center collapsed by default and expands on explicit user action", async () => {
     setupChromeStub({
       contexts: [createContext()],
