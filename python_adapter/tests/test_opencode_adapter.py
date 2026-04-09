@@ -582,7 +582,7 @@ def test_real_path_returns_error_when_session_create_fails() -> None:
     anyio.run(scenario)
 
 
-def test_explicit_mock_fallback_keeps_flow_when_real_contract_fails() -> None:
+def test_explicit_selected_agent_discovery_failure_does_not_mock_fallback_even_when_enabled() -> None:
     def factory(_timeout):
         return FakeAsyncClient([
             ("GET", "/agent", make_agent_catalog_response(status_code=503, json_body={"error": "unavailable"})),
@@ -590,13 +590,8 @@ def test_explicit_mock_fallback_keeps_flow_when_real_contract_fails() -> None:
 
     async def scenario() -> None:
         adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver", allow_mock_fallback=True), client_factory=factory)
-        run_id = await adapter.start_run(create_request())
-        await adapter.submit_answer(run_id, QuestionAnswerRequest(questionId="question-1", answer="high", choiceId="p1"))
-        events = [event async for event in adapter.stream_events(run_id)]
-
-        assert events[-1].type == "result"
-        assert events[-1].data is not None
-        assert events[-1].data["opencode_mode"] == "mock-fallback"
+        with pytest.raises(RuntimeError, match="Remote /agent discovery failed"):
+            await adapter.start_run(create_request())
 
     anyio.run(scenario)
 

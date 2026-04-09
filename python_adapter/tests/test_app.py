@@ -170,7 +170,7 @@ def test_health_exposes_runtime_defaults(monkeypatch) -> None:
 
 
 def test_start_run_returns_explicit_error_when_remote_agent_discovery_fails(monkeypatch) -> None:
-    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote /agent discovery failed: target analyst agent not found in remote catalog")))
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote /agent discovery failed: requested agent is unavailable in remote catalog; requested='TARA_analyst'; got []")))
 
     response = client.post(
         "/api/runs",
@@ -198,8 +198,8 @@ def test_start_run_returns_explicit_error_when_remote_agent_discovery_fails(monk
     payload = response.json()
     assert payload["ok"] is False
     assert payload["error"]["code"] == "ANALYSIS_ERROR"
-    assert "opencode 远端 /agent 能力探测失败" in payload["error"]["message"]
-    assert "target analyst agent not found" in payload["error"]["message"]
+    assert "远端 /agent 未提供用户所选主 AGENT" in payload["error"]["message"]
+    assert "requested='TARA_analyst'" in payload["error"]["message"]
 
 
 def test_start_run_keeps_unexpected_runtime_errors_as_internal_server_error(monkeypatch) -> None:

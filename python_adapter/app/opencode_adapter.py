@@ -371,24 +371,16 @@ class OpencodeAdapter:
             selected_remote_agent = await self._discover_canonical_remote_agent(requested_agent)
             run["selected_remote_agent"] = selected_remote_agent
         except Exception as exc:
-            if self.settings.allow_mock_fallback:
-                run["mode"] = "mock-fallback"
-                run["fallback_reason"] = str(exc)
-                run["selected_remote_agent"] = requested_agent
-                run["events"] = self._build_mock_initial_events(run, fallback_reason=str(exc))
-                run["waiting_question_id"] = "question-1"
-            else:
-                run["startup_error"] = str(exc)
-                run["events"] = [
-                    self._next_tool_event(
-                        run,
-                        "正在执行远端 /agent capability discovery。",
-                        data={"stage": "preflight_check", "agent_endpoint": self.settings.opencode_agent_list_endpoint},
-                        log_data={"target": self.settings.opencode_base_url, "mock_mode": False, "error": str(exc), "agent_endpoint": self.settings.opencode_agent_list_endpoint},
-                    )
-                ]
-                raise RuntimeError(str(exc)) from exc
-            return run_id
+            run["startup_error"] = str(exc)
+            run["events"] = [
+                self._next_tool_event(
+                    run,
+                    "正在执行远端 /agent capability discovery。",
+                    data={"stage": "preflight_check", "agent_endpoint": self.settings.opencode_agent_list_endpoint},
+                    log_data={"target": self.settings.opencode_base_url, "mock_mode": False, "error": str(exc), "agent_endpoint": self.settings.opencode_agent_list_endpoint},
+                )
+            ]
+            raise RuntimeError(str(exc)) from exc
 
         try:
             existing_session_id = self._normalize_existing_session_id(request)
