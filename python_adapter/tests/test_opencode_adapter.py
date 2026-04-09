@@ -9,7 +9,7 @@ import pytest
 
 from python_adapter.app.config import Settings
 from python_adapter.app.models import QuestionAnswerRequest, RunContext, RunStartRequest
-from python_adapter.app.opencode_adapter import OpencodeAdapter
+from python_adapter.app.opencode_adapter import OpencodeAdapter, RunNotFoundError
 
 
 def create_request() -> RunStartRequest:
@@ -842,5 +842,29 @@ def test_real_contract_does_not_preflight_remote_agent_catalog() -> None:
         assert len(clients) == 2
         assert clients[0].calls[0][1] == "/session"
         assert clients[1].calls[0][1] == "/session/ses-1/prompt_async"
+
+    anyio.run(scenario)
+
+
+def test_stream_events_raises_run_not_found_for_unknown_run_id() -> None:
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"))
+
+        with pytest.raises(RunNotFoundError, match="run-missing"):
+            events = adapter.stream_events("run-missing")
+            await events.__anext__()
+
+    anyio.run(scenario)
+
+
+def test_submit_answer_raises_run_not_found_for_unknown_run_id() -> None:
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"))
+
+        with pytest.raises(RunNotFoundError, match="run-missing"):
+            await adapter.submit_answer(
+                "run-missing",
+                QuestionAnswerRequest(questionId="question-1", answer="high", choiceId="p1"),
+            )
 
     anyio.run(scenario)

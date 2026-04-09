@@ -24,6 +24,12 @@ ClientFactory = Callable[[float | None], httpx.AsyncClient]
 REQUIRED_PRIMARY_AGENT = "TARA_analyst"
 
 
+class RunNotFoundError(LookupError):
+    def __init__(self, run_id: str) -> None:
+        super().__init__(f"Run '{run_id}' not found")
+        self.run_id = run_id
+
+
 # @ArchitectureID: ELM-006
 # @ArchitectureID: ELM-APP-008C
 class OpencodeAdapter:
@@ -43,6 +49,12 @@ class OpencodeAdapter:
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def require_run(self, run_id: str) -> dict[str, Any]:
+        run = self._runs.get(run_id)
+        if run is None:
+            raise RunNotFoundError(run_id)
+        return run
 
     def _next_event(
         self,
@@ -381,7 +393,7 @@ class OpencodeAdapter:
         return run_id
 
     async def stream_events(self, run_id: str):
-        run = self._runs[run_id]
+        run = self.require_run(run_id)
 
         for event in run["events"]:
             await asyncio.sleep(0.01)
@@ -422,7 +434,7 @@ class OpencodeAdapter:
             run["completed"] = True
 
     async def submit_answer(self, run_id: str, answer: QuestionAnswerRequest) -> None:
-        run = self._runs[run_id]
+        run = self.require_run(run_id)
         run["answers"].append(answer.model_dump())
         run["waiting_question_id"] = None
 

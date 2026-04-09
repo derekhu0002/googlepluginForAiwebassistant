@@ -309,3 +309,32 @@ def test_message_feedback_surfaces_backend_failure(monkeypatch) -> None:
         "ok": False,
         "error": {"code": "ANALYSIS_ERROR", "message": "feedback backend unavailable"},
     }
+
+
+def test_stream_events_returns_404_for_unknown_run() -> None:
+    response = client.get("/api/runs/run-missing/events")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "ok": False,
+        "error": {
+            "code": "RUN_NOT_FOUND",
+            "message": "Run 'run-missing' 不存在或已过期，请重新发起新的 run。",
+        },
+    }
+
+
+def test_submit_answer_returns_404_for_unknown_run() -> None:
+    response = client.post(
+        "/api/runs/run-missing/answers",
+        json={"questionId": "question-1", "answer": "high", "choiceId": "p1"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "ok": False,
+        "error": {
+            "code": "RUN_NOT_FOUND",
+            "message": "Run 'run-missing' 不存在或已过期，请重新发起新的 run。",
+        },
+    }

@@ -12,7 +12,7 @@ from sse_starlette.sse import EventSourceResponse
 from .config import settings
 from .logging_store import JsonlInvocationLogger
 from .models import MessageFeedbackRequest, QuestionAnswerRequest, RunStartRequest
-from .opencode_adapter import OpencodeAdapter
+from .opencode_adapter import OpencodeAdapter, RunNotFoundError
 
 app = FastAPI(title="AI Web Assistant Python Adapter")
 app.add_middleware(
@@ -44,6 +44,16 @@ def map_start_run_error(exc: RuntimeError) -> HTTPException:
         )
 
     return HTTPException(status_code=500, detail={"code": "ANALYSIS_ERROR", "message": error_message})
+
+
+def map_run_not_found_error(exc: RunNotFoundError) -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail={
+            "code": "RUN_NOT_FOUND",
+            "message": f"Run '{exc.run_id}' 不存在或已过期，请重新发起新的 run。",
+        },
+    )
 
 
 async def post_feedback_to_backend(request: MessageFeedbackRequest) -> dict[str, object]:
@@ -124,6 +134,11 @@ async def start_run(request: RunStartRequest, _auth: None = Depends(enforce_api_
 
 @app.get("/api/runs/{run_id}/events")
 async def stream_run_events(run_id: str, _auth: None = Depends(enforce_stream_api_key)) -> EventSourceResponse:
+    try:
+        adapter.require_run(run_id)
+    except RunNotFoundError as exc:
+        raise map_run_not_found_error(exc) from exc
+
     async def event_generator():
         async for event in adapter.stream_events(run_id):
             logger.write({
@@ -140,7 +155,10 @@ async def stream_run_events(run_id: str, _auth: None = Depends(enforce_stream_ap
 
 @app.post("/api/runs/{run_id}/answers")
 async def answer_question(run_id: str, request: QuestionAnswerRequest, _auth: None = Depends(enforce_api_key)) -> JSONResponse:
-    await adapter.submit_answer(run_id, request)
+    try:
+        await adapter.submit_answer(run_id, request)
+    except RunNotFoundError as exc:
+        raise map_run_not_found_error(exc) from exc
     logger.write({
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "run_id": run_id,
