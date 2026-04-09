@@ -582,11 +582,11 @@ def test_explicit_mock_fallback_keeps_flow_when_real_contract_fails() -> None:
 
 
 def test_default_client_factory_disables_environment_proxy_inheritance() -> None:
-    adapter = OpencodeAdapter(Settings(opencode_base_url="http://localhost:8123"))
+    adapter = OpencodeAdapter(Settings(opencode_base_url="http://localhost:8124"))
     client = adapter._default_client_factory(30.0)
 
     try:
-        assert client.base_url == httpx.URL("http://localhost:8123")
+        assert client.base_url == httpx.URL("http://localhost:8124")
         assert client.timeout.connect == 30.0
         assert client.trust_env is False
     finally:

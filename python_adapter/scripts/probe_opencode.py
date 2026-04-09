@@ -7,7 +7,7 @@ from urllib import error, request
 
 def get_settings() -> tuple[str, str]:
     return (
-        os.getenv("OPENCODE_BASE_URL", "http://localhost:8123"),
+        os.getenv("OPENCODE_BASE_URL", "http://localhost:8124"),
         os.getenv("OPENCODE_HEALTH_ENDPOINT", "/global/health"),
     )
 

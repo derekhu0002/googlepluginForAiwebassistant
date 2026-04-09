@@ -13,7 +13,7 @@ def test_settings_default_to_real_opencode_and_canonical_log_path(monkeypatch) -
 
     assert settings.use_mock_opencode is False
     assert settings.allow_mock_fallback is False
-    assert settings.opencode_base_url == "http://localhost:8123"
+    assert settings.opencode_base_url == "http://localhost:8124"
     assert settings.log_dir == str(Path(__file__).resolve().parents[1] / "logs")
     assert settings.opencode_health_endpoint == "/global/health"
     assert settings.opencode_global_event_endpoint == "/global/event"

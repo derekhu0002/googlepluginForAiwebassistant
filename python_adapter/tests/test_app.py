@@ -156,7 +156,7 @@ def test_health_exposes_runtime_defaults(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
-    assert payload["opencode_base_url"] == "http://localhost:8123"
+    assert payload["opencode_base_url"] == "http://localhost:8124"
     assert payload["opencode_health_endpoint"] == "/global/health"
     assert payload["opencode_global_event_endpoint"] == "/global/event"
     assert isinstance(payload["use_mock_opencode"], bool)
