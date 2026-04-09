@@ -42,7 +42,7 @@
           "summary": "Release not prepared for the current goal.",
           "updatedAt": "2026-04-09T09:52:01.485Z"
         },
-        "updatedAt": "2026-04-09T09:52:54.689Z"
+        "updatedAt": "2026-04-09T12:10:25.910Z"
       }
     }
   },
@@ -513,7 +513,7 @@
         ],
         "documentation": [
           {
-            "value": "Fast-track localized UI cleanup completed. Removed heavy non-functional stage/status wrapper blocks such as the stage banner and structured reading panel, replaced them with minimal inline status hints when needed, kept core chat/streaming/question/retry/error behaviors intact, updated timeline ordering to preserve earlier same-session answers, and refreshed sidepanel tests for the lighter presentation."
+            "value": "Fast-track follow-up completed: removed collapsed drawer explanatory placeholder copy from extension/src/sidepanel/App.tsx without changing drawer mechanics. Verified with targeted sidepanel App tests."
           }
         ],
         "extensions": {
@@ -524,12 +524,12 @@
             "status": "Done",
             "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Fast-track localized UI cleanup completed. Removed heavy non-functional stage/status wrapper blocks such as the stage banner and structured reading panel, replaced them with minimal inline status hints when needed, kept core chat/streaming/question/retry/error behaviors intact, updated timeline ordering to preserve earlier same-session answers, and refreshed sidepanel tests for the lighter presentation.",
-            "commitId": "bdf5020458a115e6ce8b669fc0a87ae7d7c34a26",
+            "summary": "Fast-track follow-up completed: removed collapsed drawer explanatory placeholder copy from extension/src/sidepanel/App.tsx without changing drawer mechanics. Verified with targeted sidepanel App tests.",
+            "commitId": "e26a312427f45eff270b945c684330194972e4bb",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-09T10:05:42.805Z"
+            "updatedAt": "2026-04-09T12:12:32.951Z"
           }
         }
       }
