@@ -189,7 +189,7 @@ describe("reasoning timeline view-model", () => {
       events,
       runStatus: "done",
       finalOutput: ""
-    })).toBe("助手正在继续生成回答，完成后会显示最终结果。");
+    })).toBe("助手仍在处理中，完成后会显示最终结果。");
   });
 
   it("maps question to answer to streaming to result in one chat stream", () => {
@@ -562,7 +562,7 @@ describe("reasoning timeline view-model", () => {
       "user_prompt",
       "assistant_progress"
     ]);
-    expect(items[1]?.summary).toBe("正在生成回答");
+    expect(items[1]?.summary).toBe("正在继续…");
   });
 
   it("maps waiting and completed cockpit stages conservatively from existing run evidence", () => {

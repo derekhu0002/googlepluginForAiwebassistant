@@ -136,7 +136,7 @@ export interface ChatStreamItemModel {
   feedbackState?: MessageFeedbackUiState;
 }
 
-const GENERIC_STREAMING_COPY = "正在生成回答";
+const GENERIC_STREAMING_COPY = "正在继续…";
 
 export function createIdleFeedbackState(): MessageFeedbackUiState {
   return {
@@ -1601,6 +1601,6 @@ export function getTimelineStatusCopy(options: {
     case "waiting_for_answer":
       return "助手正在等待你的补充信息。";
     default:
-      return "助手正在继续生成回答，完成后会显示最终结果。";
+      return "助手仍在处理中，完成后会显示最终结果。";
   }
 }

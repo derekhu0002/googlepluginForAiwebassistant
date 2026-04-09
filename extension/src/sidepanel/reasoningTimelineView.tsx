@@ -9,12 +9,12 @@ import {
   getDefaultFeedbackMessage,
   getTimelineCardStatus,
   resolveTimelinePresentationState,
-  resolveCockpitStatusModel,
   type BuildChatStreamItemsOptions,
   type ChatStreamItemModel
 } from "./reasoningTimeline";
 
 const TYPEWRITER_INTERVAL_MS = 24;
+const GENERIC_STREAMING_COPY = "正在继续…";
 
 const CHAT_ITEM_SORT_RANK: Record<ChatStreamItemModel["kind"], number> = {
   user_prompt: 0,
@@ -286,7 +286,7 @@ function ChatStreamTurn({
   questionSubmitDisabled?: boolean;
 }) {
   const isUser = item.kind === "user_prompt" || item.kind === "user_answer";
-  const shouldAnimateSummary = animate && !isUser && Boolean(item.summary) && item.summary !== "正在生成回答";
+  const shouldAnimateSummary = animate && !isUser && Boolean(item.summary) && item.summary !== GENERIC_STREAMING_COPY;
   const displayedSummary = useBufferedTypewriter(item.summary, shouldAnimateSummary);
   const thinkingItems = item.processItems
     .map((processItem) => ({
@@ -441,15 +441,30 @@ export function ReasoningTimeline({
     finalOutput,
     errorMessage
   }), [errorMessage, events, finalOutput, runStatus, streamStatus]);
-  const cockpitStatus = useMemo(() => resolveCockpitStatusModel({
-    events,
-    assistantStatus,
-    runStatus,
-    streamStatus,
-    pendingQuestionId,
-    finalOutput,
-    errorMessage
-  }), [assistantStatus, errorMessage, events, finalOutput, pendingQuestionId, runStatus, streamStatus]);
+  const inlineStatusCopy = useMemo(() => {
+    if (presentationState.runStatus === "error" || presentationState.streamStatus === "error") {
+      return "本轮已中断，可直接重试。";
+    }
+
+    if (
+      pendingQuestionId
+      || assistantStatus === "waiting_for_answer"
+      || presentationState.runStatus === "waiting_for_answer"
+      || presentationState.streamStatus === "waiting_for_answer"
+    ) {
+      return "等待补充信息…";
+    }
+
+    if (presentationState.streamStatus === "reconnecting") {
+      return "正在重新连接…";
+    }
+
+    if (presentationState.streamStatus === "connecting") {
+      return "连接中…";
+    }
+
+    return "";
+  }, [assistantStatus, pendingQuestionId, presentationState.runStatus, presentationState.streamStatus]);
   const items = useMemo(() => buildChatStreamItems({
     runId,
     prompt,
@@ -468,23 +483,34 @@ export function ReasoningTimeline({
     }
 
     return runSegments
-      .flatMap((segment) => buildChatStreamItems({
+      .flatMap((segment, segmentIndex) => buildChatStreamItems({
         ...segment,
         feedbackByMessageId
-      }))
+      }).map((item, itemIndex) => ({ item, segmentIndex, itemIndex })))
       .sort((left, right) => {
-        const timestampDelta = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+        const timestampDelta = new Date(left.item.createdAt).getTime() - new Date(right.item.createdAt).getTime();
         if (timestampDelta !== 0) {
           return timestampDelta;
         }
 
-        const rankDelta = CHAT_ITEM_SORT_RANK[left.kind] - CHAT_ITEM_SORT_RANK[right.kind];
+        const segmentDelta = left.segmentIndex - right.segmentIndex;
+        if (segmentDelta !== 0) {
+          return segmentDelta;
+        }
+
+        const itemDelta = left.itemIndex - right.itemIndex;
+        if (itemDelta !== 0) {
+          return itemDelta;
+        }
+
+        const rankDelta = CHAT_ITEM_SORT_RANK[left.item.kind] - CHAT_ITEM_SORT_RANK[right.item.kind];
         if (rankDelta !== 0) {
           return rankDelta;
         }
 
-        return left.id.localeCompare(right.id);
-      });
+        return left.item.id.localeCompare(right.item.id);
+      })
+      .map(({ item }) => item);
   }, [feedbackByMessageId, items, runSegments]);
 
   useEffect(() => {
@@ -578,16 +604,7 @@ export function ReasoningTimeline({
 
   return (
     <div className="timeline-shell conversation-timeline-shell chat-stream-shell">
-      <section className={`cockpit-stage-banner tone-${cockpitStatus.tone}`} aria-label="运行阶段摘要">
-        <div className="cockpit-stage-banner-copy">
-          <div className="cockpit-stage-banner-meta">
-            <span className="stage-kicker">{cockpitStatus.stageLabel}</span>
-            <span className="mode-kicker">{cockpitStatus.modeLabel}</span>
-          </div>
-          <strong>{cockpitStatus.headline}</strong>
-          <p>{cockpitStatus.detail}</p>
-        </div>
-      </section>
+      {inlineStatusCopy ? <p className="conversation-inline-status detail-muted" role="status" aria-live="polite">{inlineStatusCopy}</p> : null}
       <div
         className="event-feed conversation-thread chat-stream-feed"
         ref={containerRef}
@@ -620,26 +637,6 @@ export function ReasoningTimeline({
           />
         )) : <p className="empty-state chat-empty-state">{emptyText}</p>}
       </div>
-
-      {mergedItems.some((item) => item.kind === "assistant_result") ? (
-        <section className="structured-reading-panel" aria-label="结构化结果阅读区">
-          <div className="structured-reading-header">
-            <strong>结果阅读</strong>
-            <small>{presentationState.runStatus === "done" ? "最终答案已归档" : "当前输出仍在变化"}</small>
-          </div>
-          <div className="structured-reading-grid">
-            <div className="structured-reading-card">
-              <span className="structured-reading-label">主回答</span>
-              <p>{mergedItems.filter((item) => item.kind === "assistant_result").length} 条最终回答片段已合并为单一阅读流。</p>
-            </div>
-            <div className="structured-reading-card">
-              <span className="structured-reading-label">推理过程</span>
-              <p>{mergedItems.reduce((count, item) => count + item.processItems.length, 0)} 条过程项已按保守规则折叠展示。</p>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
     </div>
   );
 }

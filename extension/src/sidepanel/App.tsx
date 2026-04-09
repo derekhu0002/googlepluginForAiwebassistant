@@ -26,10 +26,7 @@ export function App() {
           <MainStage
             activeContext={controller.activeContext}
             canShowPermissionButton={controller.canShowPermissionButton}
-            cockpitStatus={controller.cockpitStatus}
             contextError={controller.contextError}
-            currentSessionHistorySummaries={controller.currentSessionHistorySummaries}
-            hasLivePendingQuestion={controller.hasLivePendingQuestion}
             isBusy={controller.isBusy}
             livePrompt={controller.livePrompt}
             liveConversationSegments={controller.liveConversationSegments}
@@ -37,7 +34,6 @@ export function App() {
             onRequestPermission={controller.requestPermission}
             onRetry={controller.handleRetry}
             onStartFreshSession={controller.handleStartFreshSession}
-            questionEvent={controller.questionEvent}
             questionSubmitDisabled={controller.selectedSessionIsCurrent ? !controller.questionEvent?.question : true}
             requestingPermission={controller.requestingPermission}
             selectedConversationHasContent={controller.selectedConversationHasContent}
@@ -49,7 +45,6 @@ export function App() {
             selectedThreadStatus={controller.selectedThreadStatus}
             selectedThreadStreamStatus={controller.selectedThreadStreamStatus}
             selectedThreadUpdatedAt={controller.selectedThreadUpdatedAt}
-            shellStatusLabel={controller.shellStatusLabel}
             shouldShowPermissionCallout={controller.shouldShowPermissionCallout}
             state={controller.state}
           />

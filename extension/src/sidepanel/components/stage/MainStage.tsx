@@ -1,6 +1,5 @@
-import type { ReactNode } from "react";
 import { ReasoningTimeline } from "../../reasoningTimelineView";
-import type { BuildChatStreamItemsOptions, CockpitStatusModel } from "../../reasoningTimeline";
+import type { BuildChatStreamItemsOptions } from "../../reasoningTimeline";
 import type { ActiveTabContext, AssistantState } from "../../../shared/types";
 import type { RunRecord } from "../../../shared/protocol";
 import type { SessionNavigationItem } from "../../model";
@@ -9,10 +8,7 @@ import { deriveRunTitle } from "../../model";
 export function MainStage({
   activeContext,
   canShowPermissionButton,
-  cockpitStatus,
   contextError,
-  currentSessionHistorySummaries,
-  hasLivePendingQuestion,
   isBusy,
   livePrompt,
   liveConversationSegments,
@@ -20,7 +16,6 @@ export function MainStage({
   onRequestPermission,
   onRetry,
   onStartFreshSession,
-  questionEvent,
   questionSubmitDisabled,
   requestingPermission,
   selectedConversationHasContent,
@@ -32,16 +27,12 @@ export function MainStage({
   selectedThreadStatus,
   selectedThreadStreamStatus,
   selectedThreadUpdatedAt,
-  shellStatusLabel,
   shouldShowPermissionCallout,
   state
 }: {
   activeContext: ActiveTabContext | null;
   canShowPermissionButton: boolean | null | undefined;
-  cockpitStatus: CockpitStatusModel;
   contextError: string;
-  currentSessionHistorySummaries: string[];
-  hasLivePendingQuestion: boolean;
   isBusy: boolean;
   livePrompt: string;
   liveConversationSegments: BuildChatStreamItemsOptions[];
@@ -49,7 +40,6 @@ export function MainStage({
   onRequestPermission: () => void | Promise<void>;
   onRetry: (payload: { prompt: string; runId: string; messageId: string }) => void | Promise<void>;
   onStartFreshSession: () => void | Promise<void>;
-  questionEvent: { question?: { questionId: string } | null } | null;
   questionSubmitDisabled: boolean;
   requestingPermission: boolean;
   selectedConversationHasContent: boolean;
@@ -61,7 +51,6 @@ export function MainStage({
   selectedThreadStatus: RunRecord["status"] | "streaming" | undefined;
   selectedThreadStreamStatus: AssistantState["stream"]["status"] | undefined;
   selectedThreadUpdatedAt: string | null | undefined;
-  shellStatusLabel: string;
   shouldShowPermissionCallout: boolean;
   state: AssistantState;
 }) {
@@ -90,30 +79,12 @@ export function MainStage({
       <div className="chat-primary-header section-header compact" data-component="header">
         <div>
           <h2>AI Working Cockpit</h2>
-          <small>{selectedSessionItem ? deriveRunTitle(selectedSessionItem.latestRun) : cockpitStatus.headline}</small>
+          <small>{selectedSessionItem ? deriveRunTitle(selectedSessionItem.latestRun) : (activeContext?.hostname ?? "当前对话")}</small>
         </div>
         <div className="chat-primary-meta">
-          <small className={`conversation-live-chip tone-${cockpitStatus.tone}`}>{selectedSessionIsCurrent ? shellStatusLabel : (selectedThreadRun?.status ?? "done")}</small>
           {selectedThreadRun?.runId ? <small className="detail-muted">Run：{selectedThreadRun.runId}</small> : null}
           <button className="secondary quick-session-button" disabled={isBusy} onClick={() => onStartFreshSession()}>新会话</button>
         </div>
-      </div>
-
-      <div className="chat-stage-statusbar">
-        <span className={`pill pill-stage pill-${cockpitStatus.tone}`}>阶段：{cockpitStatus.stageLabel}</span>
-        <span className="pill pill-mode">模式：{cockpitStatus.modeLabel}</span>
-        <span className="pill pill-muted">页面：{activeContext?.hostname ?? "未读取"}</span>
-        <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
-          {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
-        </span>
-        <span className={`pill ${selectedSessionIsCurrent && hasLivePendingQuestion ? "pill-warning" : "pill-muted"}`}>
-          {selectedSessionIsCurrent && hasLivePendingQuestion ? "等待补充信息" : "自由对话"}
-        </span>
-        <span className="pill pill-muted">状态：{selectedThreadStatus ?? state.status}</span>
-        <span className="pill pill-muted">流连接：{selectedThreadStreamStatus ?? state.stream.status}</span>
-        {currentSessionHistorySummaries.slice(-2).map((summary, index) => (
-          <span key={`${index}-${summary}`} className="pill pill-history-summary">历史：{summary.slice(0, 24)}{summary.length > 24 ? "…" : ""}</span>
-        ))}
       </div>
 
       <div className="conversation-mainline chat-primary-mainline">
@@ -132,7 +103,7 @@ export function MainStage({
             errorMessage={selectedThreadError}
             updatedAt={selectedThreadUpdatedAt}
             pendingQuestionId={selectedSessionIsCurrent ? state.stream.pendingQuestionId : null}
-            emptyText="正在生成回答…"
+            emptyText="正在继续…"
             onRetry={onRetry}
             onQuestionSubmit={onQuestionSubmit}
             questionSubmitDisabled={questionSubmitDisabled}
@@ -144,11 +115,6 @@ export function MainStage({
           </div>
         )}
       </div>
-      {selectedSessionIsCurrent && questionEvent?.question ? <StageSemanticCue>对话</StageSemanticCue> : null}
     </section>
   );
-}
-
-function StageSemanticCue({ children }: { children: ReactNode }) {
-  return <div className="sr-only">{children}</div>;
 }

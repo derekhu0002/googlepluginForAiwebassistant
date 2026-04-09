@@ -276,7 +276,7 @@ describe("side panel host permission request flow", () => {
 
     expect(permissionsRequest).toHaveBeenCalledWith({ origins: ["https://example.com/*"] });
     expect(runtimeSendMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: "REQUEST_HOST_PERMISSION" }));
-    expect(container.textContent).toContain("域名已授权");
+    expect(container.querySelector(".host-permission-callout")).toBeNull();
   });
 
   it("surfaces the host permission action before the collapsed context panel when permission is missing", async () => {
@@ -568,14 +568,14 @@ describe("side panel host permission request flow", () => {
       throw new Error("expected createRunEventStream to be called");
     }
     const handlers = lastCall[1] as unknown as { onStatusChange?: (status: "connecting" | "streaming" | "reconnecting") => void; onError: (error: Error) => void };
-    expect(container.textContent).toContain("流连接：connecting");
+    expect(container.textContent).toContain("连接中…");
 
     await act(async () => {
       handlers.onStatusChange?.("reconnecting");
     });
     await flushUi();
 
-    expect(container.textContent).toContain("流连接：reconnecting");
+    expect(container.textContent).toContain("正在重新连接…");
     expect(container.textContent).not.toContain("SSE connection failed");
 
     await act(async () => {
@@ -583,7 +583,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("流连接：streaming");
+    expect(container.textContent).not.toContain("正在重新连接…");
   });
 
   it("keeps local run events when STATE_UPDATED carries empty events for the active run", () => {
@@ -802,7 +802,7 @@ describe("side panel host permission request flow", () => {
 
     await flushAllTimers();
 
-    expect(container.textContent).toContain("正在生成回答");
+    expect(container.textContent).toContain("正在继续…");
     expect(container.textContent).not.toContain("event 1");
 
     mockRunHistoryState.history = [{
@@ -816,7 +816,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("正在生成回答");
+    expect(container.textContent).toContain("正在继续…");
     expect(container.textContent).not.toContain("event 1");
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
@@ -850,7 +850,6 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("对话");
     expect(container.textContent).toContain("You");
     expect(container.textContent).toContain("Assistant");
     expect(container.textContent).toContain("最终结论");
@@ -1037,9 +1036,8 @@ describe("side panel host permission request flow", () => {
     await flushUi();
     await flushAllTimers();
 
-    expect(container.textContent).toContain("状态：");
-    expect(container.textContent).toContain("done");
     expect(container.textContent).toContain("final answer");
+    expect(container.querySelector("button[aria-label='重试']")).not.toBeNull();
 
     mockRunHistoryState.history = [{
       ...createCurrentRun(),
@@ -1075,8 +1073,8 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("done");
     expect(container.textContent).toContain("final answer");
+    expect(container.querySelector("button[aria-label='重试']")).not.toBeNull();
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
@@ -1294,7 +1292,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("个会话簇");
   });
 
-  it("renders the new stage banner and structured reading summary for completed runs", async () => {
+  it("keeps completed runs focused on the main answer without extra summary blocks", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1319,10 +1317,9 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("结果已就绪");
-    expect(container.textContent).toContain("结构化阅读");
-    expect(container.textContent).toContain("结果阅读");
-    expect(container.textContent).toContain("最终答案已归档");
+    expect(container.textContent).toContain("最终回答");
+    expect(container.textContent).not.toContain("结果阅读");
+    expect(container.querySelector(".structured-reading-panel")).toBeNull();
   });
 
   it("shows awaiting-input stage language when a live follow-up question is pending", async () => {
@@ -1361,8 +1358,6 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("等待补充");
-    expect(container.textContent).toContain("追问补充");
     expect(container.textContent).toContain("等待补充信息");
   });
 
@@ -1811,11 +1806,8 @@ describe("side panel host permission request flow", () => {
       answer: "继续执行",
       choiceId: "resume"
     }));
-    expect(container.textContent).toContain("正在生成回答");
+    expect(container.textContent).toContain("正在继续…");
     expect(container.textContent).not.toContain("待确认");
-    expect(container.textContent).toContain("状态：");
-    expect(container.textContent).toContain("streaming");
-    expect(container.textContent).toContain("流连接：streaming");
     expect(container.querySelector(".question-card")).toBeNull();
   });
 
@@ -1966,7 +1958,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("正在生成回答");
+    expect(container.textContent).toContain("正在继续…");
     expect(container.textContent).not.toContain("正在检索相关信息");
     expect(container.textContent).not.toContain("token=123");
     expect(container.textContent).not.toContain("grep");
