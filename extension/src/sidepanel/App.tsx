@@ -426,8 +426,6 @@ function buildSessionNavigationItems(history: RunRecord[], currentRun: RunRecord
 export function App() {
   const [state, setState] = useState<AssistantState>(initialAssistantState);
   const [rules, setRules] = useState<PageRule[]>([]);
-  const [legacyRulesPanelOpen, setLegacyRulesPanelOpen] = useState(false);
-  const [isRulesCenterExpanded, setIsRulesCenterExpanded] = useState(false);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [draftRule, setDraftRule] = useState<PageRule | null>(null);
   const [activeContext, setActiveContext] = useState<ActiveTabContext | null>(null);
@@ -1101,22 +1099,6 @@ export function App() {
               <span className="pill pill-muted">流连接：{selectedThreadStreamStatus ?? state.stream.status}</span>
             </div>
 
-            <details className="utility-panel">
-              <summary>上下文兼容面板</summary>
-            </details>
-
-            <details className="rules-config-panel" onToggle={(event) => setLegacyRulesPanelOpen((event.currentTarget as HTMLDetailsElement).open)}>
-              <summary onClick={() => setLegacyRulesPanelOpen(true)}>规则配置兼容面板</summary>
-              {legacyRulesPanelOpen ? (
-                <div>
-                  <button type="button">保存规则</button>
-                </div>
-              ) : null}
-            </details>
-
-            {currentSessionHistorySummaries.length ? (
-              <div className="detail-muted session-history-preview">{currentSessionHistorySummaries.join(" ")}</div>
-            ) : null}
 
             <div className="conversation-mainline chat-primary-mainline">
               {selectedConversationHasContent ? (

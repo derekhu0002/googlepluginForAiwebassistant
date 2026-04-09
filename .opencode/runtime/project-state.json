@@ -1,43 +1,149 @@
 {
   "version": 2,
   "activeGoal": "修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。",
-  "designSummary": "",
-  "designDecisions": [],
+  "designSummary": "Full-model baseline for duplicate THINKING text remediation: move root-cause control to the normalized event contract and reasoning projection boundary. Extend existing brownfield modules rather than creating new software units. Python adapter normalization must emit stable semantic metadata for reasoning/text emissions; extension shared protocol/api must validate that contract; reasoningTimeline.ts becomes the single read-model/projection authority that merges reasoning by semantic identity and separates assistant body text from Thinking process items; App.tsx remains limited to transport replay dedupe and lifecycle state; reasoningTimelineView.tsx is reduced to pure rendering with only light display sanitization. Fast-track commit 91d5b9324b106214e25e79e7f8bc728f74478871 is retained as a completed transport-level fix but is insufficient for the semantic duplicate root cause.",
+  "designDecisions": [
+    "Brownfield fit decision: extend existing modules python_adapter/app/opencode_adapter.py, python_adapter/app/models.py, extension/src/shared/protocol.ts, extension/src/shared/api.ts, extension/src/sidepanel/reasoningTimeline.ts, extension/src/sidepanel/App.tsx, extension/src/sidepanel/reasoningTimelineView.tsx, and their tests. Do not create a new standalone reasoning service or duplicate event store because the repository already has clear ownership seams for normalization, contract validation, projection, live state, and rendering.",
+    "Architectural decision: normalized event contract is the primary fix locus. Transport replay dedupe in App.tsx remains necessary but cannot resolve semantic duplicates where one reasoning emission is normalized into multiple thinking events. Projection logic in reasoningTimeline.ts must consume stable semantic metadata and become the single authority for merging reasoning snapshots and deltas.",
+    "Architectural decision: reasoningTimelineView.tsx must stop owning semantic dedupe. Any existing near-duplicate trimming in the render layer should be minimized to display sanitization only, so that live and history views rely on the same projection semantics and defects remain visible at the correct architectural layer."
+  ],
   "tasks": [
     {
       "id": "TASK-001",
       "title": "修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。",
-      "status": "todo",
+      "status": "done",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
-      "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
-      "details": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks.",
+      "summary": "Fast-track fix completed. Root cause confirmed in sidepanel current-run in-memory runEvents append path: replayed SSE events were appended without id/sequence dedupe, allowing duplicate THINKING content in the live panel. Implemented localized dedupe/replacement on event ingress in extension/src/sidepanel/App.tsx and added targeted App tests covering identical replay and same-sequence fuller snapshot behavior. Verified with extension typecheck and targeted Vitest tests for the new scenarios.",
+      "details": "Fast-track fix completed. Root cause confirmed in sidepanel current-run in-memory runEvents append path: replayed SSE events were appended without id/sequence dedupe, allowing duplicate THINKING content in the live panel. Implemented localized dedupe/replacement on event ingress in extension/src/sidepanel/App.tsx and added targeted App tests covering identical replay and same-sequence fuller snapshot behavior. Verified with extension typecheck and targeted Vitest tests for the new scenarios.",
       "createdAt": "2026-04-08T20:24:52.462Z",
-      "updatedAt": "2026-04-08T20:24:52.462Z"
+      "updatedAt": "2026-04-08T20:39:48.231Z",
+      "commitId": "91d5b9324b106214e25e79e7f8bc728f74478871"
+    },
+    {
+      "id": "TASK-002",
+      "title": "Implement normalized event contract metadata for reasoning and assistant text emissions",
+      "status": "done",
+      "retryCount": 1,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "QA retry 1 fixed sidepanel regressions by restoring same-session history visibility and live status behavior without changing normalized contract ownership. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "details": "QA retry 1 fixed sidepanel regressions by restoring same-session history visibility and live status behavior without changing normalized contract ownership. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "softwareUnitId": "SU-ADAPTER-EVENT-NORMALIZER",
+      "softwareUnitTitle": "Opencode Event Normalizer",
+      "architectureElementId": "ELM-APP-008C",
+      "createdAt": "2026-04-08T21:09:31.024Z",
+      "updatedAt": "2026-04-08T21:59:10.743Z",
+      "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d"
+    },
+    {
+      "id": "TASK-003",
+      "title": "Adopt the extended normalized event contract in extension shared protocol and SSE schema validation",
+      "status": "done",
+      "retryCount": 1,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "QA retry 1 confirmed shared contract integration after App/session retry behavior fixes. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "details": "QA retry 1 confirmed shared contract integration after App/session retry behavior fixes. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "softwareUnitId": "SU-EXT-STREAM-CONTRACT",
+      "softwareUnitTitle": "Extension Stream Contract",
+      "architectureElementId": "ELM-APP-EXT-SHARED-API-CONTRACT",
+      "createdAt": "2026-04-08T21:09:31.024Z",
+      "updatedAt": "2026-04-08T21:59:10.831Z",
+      "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d"
+    },
+    {
+      "id": "TASK-004",
+      "title": "Refactor reasoningTimeline projection to merge Thinking by semantic identity instead of view-layer text dedupe",
+      "status": "done",
+      "retryCount": 1,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "QA retry 1 adjusted reasoning projection output for generic streaming copy, conditional Thinking visibility, and stable multi-run rendering while preserving reasoningTimeline as semantic authority. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "details": "QA retry 1 adjusted reasoning projection output for generic streaming copy, conditional Thinking visibility, and stable multi-run rendering while preserving reasoningTimeline as semantic authority. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "softwareUnitId": "SU-EXT-REASONING-PROJECTION",
+      "softwareUnitTitle": "Reasoning Projection Mapper",
+      "architectureElementId": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+      "createdAt": "2026-04-08T21:09:31.024Z",
+      "updatedAt": "2026-04-08T21:59:10.891Z",
+      "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d"
+    },
+    {
+      "id": "TASK-005",
+      "title": "Constrain App live run state handling to transport replay dedupe and lifecycle updates",
+      "status": "done",
+      "retryCount": 1,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "QA retry 1 restored App session selection, history fallback, retry payload, and lifecycle/status presentation behavior while keeping App scoped to replay dedupe and lifecycle orchestration. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "details": "QA retry 1 restored App session selection, history fallback, retry payload, and lifecycle/status presentation behavior while keeping App scoped to replay dedupe and lifecycle orchestration. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "softwareUnitId": "SU-EXT-LIVE-RUN-STATE",
+      "softwareUnitTitle": "Live Run State Orchestrator",
+      "architectureElementId": "ELM-APP-EXT-RUN-ORCHESTRATION",
+      "createdAt": "2026-04-08T21:09:31.024Z",
+      "updatedAt": "2026-04-08T21:59:10.977Z",
+      "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d"
+    },
+    {
+      "id": "TASK-006",
+      "title": "Reduce renderer duplicate-handling logic so Thinking rendering depends on projected read-model semantics",
+      "status": "done",
+      "retryCount": 1,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "QA retry 1 kept renderer free of semantic dedupe while fixing streaming placeholder timing and stable multi-run render keys. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "details": "QA retry 1 kept renderer free of semantic dedupe while fixing streaming placeholder timing and stable multi-run render keys. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "softwareUnitId": "SU-EXT-CONVERSATION-RENDERER",
+      "softwareUnitTitle": "Conversation Renderer",
+      "architectureElementId": "ELM-APP-EXT-CONVERSATION-RENDERER",
+      "createdAt": "2026-04-08T21:09:31.024Z",
+      "updatedAt": "2026-04-08T21:59:11.066Z",
+      "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d"
+    },
+    {
+      "id": "TASK-007",
+      "title": "Add regression tests for normalized contract, projection merge, renderer scope, and current-session duplicate prevention",
+      "status": "done",
+      "retryCount": 1,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "QA retry 1 updated projection regression coverage to match restored generic streaming behavior and process-summary expectations, alongside passing App full regression coverage. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "details": "QA retry 1 updated projection regression coverage to match restored generic streaming behavior and process-summary expectations, alongside passing App full regression coverage. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+      "softwareUnitId": "SU-EXT-REASONING-PROJECTION",
+      "softwareUnitTitle": "Reasoning Projection Mapper",
+      "architectureElementId": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+      "createdAt": "2026-04-08T21:09:31.024Z",
+      "updatedAt": "2026-04-08T21:59:11.194Z",
+      "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d"
     }
   ],
   "issues": [],
   "validations": {
     "qa": {
-      "status": "not_run",
-      "summary": "QA not run for the current goal.",
-      "updatedAt": "2026-04-08T20:24:52.462Z"
+      "status": "passed",
+      "summary": "QA passed for commit 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Verified previously failing App full regression suite is now green (44/44), extension targeted suites are green (92/92 across App/shared api/reasoningTimeline), focused THINKING duplicate regressions passed, focused projection semantics regressions passed, Python adapter regression tests passed (21/21 with PYTHONPATH=.), and extension typecheck passed. This supports that semantic Thinking merge, assistant-body separation, current-session replay dedupe, and renderer scope constraints are functioning as intended. Repository worktree remains dirty outside the reviewed commit context.",
+      "details": "QA passed for commit 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Verified previously failing App full regression suite is now green (44/44), extension targeted suites are green (92/92 across App/shared api/reasoningTimeline), focused THINKING duplicate regressions passed, focused projection semantics regressions passed, Python adapter regression tests passed (21/21 with PYTHONPATH=.), and extension typecheck passed. This supports that semantic Thinking merge, assistant-body separation, current-session replay dedupe, and renderer scope constraints are functioning as intended. Repository worktree remains dirty outside the reviewed commit context.",
+      "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d",
+      "updatedAt": "2026-04-08T22:02:23.853Z"
     },
     "audit": {
-      "status": "not_run",
-      "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-08T20:24:52.462Z"
+      "status": "passed",
+      "summary": "Audit passed for commit 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Regression repair remains aligned with approved duplicate-thinking architecture. The normalized event contract and shared schema ownership remain unchanged in adapter/protocol layers; reasoningTimeline.ts still owns projection semantics, including assistant body derivation, generic streaming placeholder generation, and Thinking visibility policy; App.tsx changes restore session/history/lifecycle shell behavior without reintroducing semantic dedupe or projection authority; reasoningTimelineView.tsx remains render-only with display sanitization and stable keys, not semantic merge logic. Architecture trace evidence for TASK-002..TASK-007 remains present, and updated tests validate generic streaming progress, mixed reasoning/body rendering, and restored sidepanel session behavior.",
+      "details": "Audit passed for commit 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Regression repair remains aligned with approved duplicate-thinking architecture. The normalized event contract and shared schema ownership remain unchanged in adapter/protocol layers; reasoningTimeline.ts still owns projection semantics, including assistant body derivation, generic streaming placeholder generation, and Thinking visibility policy; App.tsx changes restore session/history/lifecycle shell behavior without reintroducing semantic dedupe or projection authority; reasoningTimelineView.tsx remains render-only with display sanitization and stable keys, not semantic merge logic. Architecture trace evidence for TASK-002..TASK-007 remains present, and updated tests validate generic streaming progress, mixed reasoning/body rendering, and restored sidepanel session behavior.",
+      "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d",
+      "updatedAt": "2026-04-08T22:00:46.590Z"
     }
   },
   "release": {
-    "status": "not_started",
-    "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-08T20:24:52.462Z"
+    "status": "completed",
+    "summary": "Release completed for THINKING duplicate reasoning fix. Goal: 修复 THINKING 框重复 reasoning 文本问题。 Key commits: baseline 91d5b9324b106214e25e79e7f8bc728f74478871, full-model implementation 525290be0b9f29b365352c7f01e037c82d922ae5, final validated QA retry fix 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Completed scope: TASK-002..TASK-007. Validation: QA passed, Audit passed. Release log path: /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md.",
+    "releaseLogPath": "SprintRleaseLog.md",
+    "updatedAt": "2026-04-08T22:03:46.363Z"
   },
   "counters": {
-    "task": 1,
+    "task": 7,
     "issue": 0
   },
-  "updatedAt": "2026-04-08T20:24:52.463Z"
+  "updatedAt": "2026-04-08T22:03:46.366Z"
 }

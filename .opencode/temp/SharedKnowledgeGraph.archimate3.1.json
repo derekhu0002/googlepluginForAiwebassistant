@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "Schema-compliant shared knowledge graph maintained by OpenCode tools."
+      "value": "Full-model baseline for duplicate THINKING text remediation: move root-cause control to the normalized event contract and reasoning projection boundary. Extend existing brownfield modules rather than creating new software units. Python adapter normalization must emit stable semantic metadata for reasoning/text emissions; extension shared protocol/api must validate that contract; reasoningTimeline.ts becomes the single read-model/projection authority that merges reasoning by semantic identity and separates assistant body text from Thinking process items; App.tsx remains limited to transport replay dedupe and lifecycle state; reasoningTimelineView.tsx is reduced to pure rendering with only light display sanitization. Fast-track commit 91d5b9324b106214e25e79e7f8bc728f74478871 is retained as a completed transport-level fix but is insufficient for the semantic duplicate root cause."
     }
   ],
   "metadata": {
@@ -19,9 +19,1433 @@
     "ai4pb": {
       "managedBy": "opencode",
       "counters": {},
-      "designSummary": "",
-      "designDecisions": [],
-      "runtime": {}
+      "designSummary": "Full-model baseline for duplicate THINKING text remediation: move root-cause control to the normalized event contract and reasoning projection boundary. Extend existing brownfield modules rather than creating new software units. Python adapter normalization must emit stable semantic metadata for reasoning/text emissions; extension shared protocol/api must validate that contract; reasoningTimeline.ts becomes the single read-model/projection authority that merges reasoning by semantic identity and separates assistant body text from Thinking process items; App.tsx remains limited to transport replay dedupe and lifecycle state; reasoningTimelineView.tsx is reduced to pure rendering with only light display sanitization. Fast-track commit 91d5b9324b106214e25e79e7f8bc728f74478871 is retained as a completed transport-level fix but is insufficient for the semantic duplicate root cause.",
+      "designDecisions": [
+        "Brownfield fit decision: extend existing modules python_adapter/app/opencode_adapter.py, python_adapter/app/models.py, extension/src/shared/protocol.ts, extension/src/shared/api.ts, extension/src/sidepanel/reasoningTimeline.ts, extension/src/sidepanel/App.tsx, extension/src/sidepanel/reasoningTimelineView.tsx, and their tests. Do not create a new standalone reasoning service or duplicate event store because the repository already has clear ownership seams for normalization, contract validation, projection, live state, and rendering.",
+        "Architectural decision: normalized event contract is the primary fix locus. Transport replay dedupe in App.tsx remains necessary but cannot resolve semantic duplicates where one reasoning emission is normalized into multiple thinking events. Projection logic in reasoningTimeline.ts must consume stable semantic metadata and become the single authority for merging reasoning snapshots and deltas.",
+        "Architectural decision: reasoningTimelineView.tsx must stop owning semantic dedupe. Any existing near-duplicate trimming in the render layer should be minimized to display sanitization only, so that live and history views rely on the same projection semantics and defects remain visible at the correct architectural layer."
+      ],
+      "runtime": {
+        "activeGoal": "修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。",
+        "validations": {
+          "qa": {
+            "status": "passed",
+            "summary": "QA passed for commit 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Verified previously failing App full regression suite is now green (44/44), extension targeted suites are green (92/92 across App/shared api/reasoningTimeline), focused THINKING duplicate regressions passed, focused projection semantics regressions passed, Python adapter regression tests passed (21/21 with PYTHONPATH=.), and extension typecheck passed. This supports that semantic Thinking merge, assistant-body separation, current-session replay dedupe, and renderer scope constraints are functioning as intended. Repository worktree remains dirty outside the reviewed commit context.",
+            "details": "QA passed for commit 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Verified previously failing App full regression suite is now green (44/44), extension targeted suites are green (92/92 across App/shared api/reasoningTimeline), focused THINKING duplicate regressions passed, focused projection semantics regressions passed, Python adapter regression tests passed (21/21 with PYTHONPATH=.), and extension typecheck passed. This supports that semantic Thinking merge, assistant-body separation, current-session replay dedupe, and renderer scope constraints are functioning as intended. Repository worktree remains dirty outside the reviewed commit context.",
+            "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d",
+            "updatedAt": "2026-04-08T22:02:23.853Z"
+          },
+          "audit": {
+            "status": "passed",
+            "summary": "Audit passed for commit 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Regression repair remains aligned with approved duplicate-thinking architecture. The normalized event contract and shared schema ownership remain unchanged in adapter/protocol layers; reasoningTimeline.ts still owns projection semantics, including assistant body derivation, generic streaming placeholder generation, and Thinking visibility policy; App.tsx changes restore session/history/lifecycle shell behavior without reintroducing semantic dedupe or projection authority; reasoningTimelineView.tsx remains render-only with display sanitization and stable keys, not semantic merge logic. Architecture trace evidence for TASK-002..TASK-007 remains present, and updated tests validate generic streaming progress, mixed reasoning/body rendering, and restored sidepanel session behavior.",
+            "details": "Audit passed for commit 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Regression repair remains aligned with approved duplicate-thinking architecture. The normalized event contract and shared schema ownership remain unchanged in adapter/protocol layers; reasoningTimeline.ts still owns projection semantics, including assistant body derivation, generic streaming placeholder generation, and Thinking visibility policy; App.tsx changes restore session/history/lifecycle shell behavior without reintroducing semantic dedupe or projection authority; reasoningTimelineView.tsx remains render-only with display sanitization and stable keys, not semantic merge logic. Architecture trace evidence for TASK-002..TASK-007 remains present, and updated tests validate generic streaming progress, mixed reasoning/body rendering, and restored sidepanel session behavior.",
+            "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d",
+            "updatedAt": "2026-04-08T22:00:46.590Z"
+          }
+        },
+        "release": {
+          "status": "completed",
+          "summary": "Release completed for THINKING duplicate reasoning fix. Goal: 修复 THINKING 框重复 reasoning 文本问题。 Key commits: baseline 91d5b9324b106214e25e79e7f8bc728f74478871, full-model implementation 525290be0b9f29b365352c7f01e037c82d922ae5, final validated QA retry fix 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Completed scope: TASK-002..TASK-007. Validation: QA passed, Audit passed. Release log path: /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md.",
+          "releaseLogPath": "SprintRleaseLog.md",
+          "updatedAt": "2026-04-08T22:03:46.363Z"
+        },
+        "updatedAt": "2026-04-08T22:02:23.854Z"
+      }
     }
-  }
+  },
+  "elements": {
+    "element": [
+      {
+        "identifier": "ELM-STRATEGY-GOAL",
+        "type": "Goal",
+        "name": [
+          {
+            "value": "Product Delivery Goal"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as a goal: a high-level end state or outcome that stakeholders intend to achieve. In this architecture, Product Delivery Goal defines the intended strategic outcome for 修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。 and anchors the rest of the baseline intention model. Establish baseline for the Google plugin AI web assistant duplicate reasoning remediation. Strategy: stable normalized event semantics and single-display reasoning UX. Business: users must see each reasoning emission once in the active session and history. Application: python adapter normalization, shared extension event contract, sidepanel reasoning projection, live run state handling, and conversation rendering. Technology: Python adapter SSE ingestion, browser EventSource streaming, Chrome sidepanel runtime, and automated pytest/vitest validation."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "strategy",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-STRATEGY-CAPABILITY",
+        "type": "Capability",
+        "name": [
+          {
+            "value": "Core Product Capability"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as a capability: an ability that an organization, person, or system possesses to achieve an outcome. In this architecture, Core Product Capability captures the organization or product's capacity to achieve 修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。 through coordinated business and application behavior."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "strategy",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-STRATEGY-COURSE",
+        "type": "CourseOfAction",
+        "name": [
+          {
+            "value": "MVP Delivery Course Of Action"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as a course of action: an approach, directive, or plan for configuring capabilities and resources. In this architecture, MVP Delivery Course Of Action prescribes a runnable local MVP with explicit architecture-to-implementation traceability as the preferred means of delivery."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "strategy",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-BUSINESS-ACTOR",
+        "type": "BusinessActor",
+        "name": [
+          {
+            "value": "Primary User"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as a business actor: an organizational entity that is capable of performing behavior and owning or using business roles, processes, or services. In this architecture, Primary User identifies the main human or organizational party that consumes the delivered business service and interacts with the core business flow."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "business",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-BUSINESS-PROCESS",
+        "type": "BusinessProcess",
+        "name": [
+          {
+            "value": "Core Business Flow"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as a business process: a sequence of business behavior that produces a defined set of business outcomes. In this architecture, Core Business Flow sequences the core activities needed to operationalize 修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。 and deliver the intended value to the primary user."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "business",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-BUSINESS-SERVICE",
+        "type": "BusinessService",
+        "name": [
+          {
+            "value": "Core User Service"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as a business service: externally visible business behavior delivered to customers or other business roles. In this architecture, Core User Service is the user-facing service delivered through the core business process to the primary actor."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "business",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APPLICATION-COMPONENT",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Core Application System"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Core Application System is the modular software building block that automates and supports the business process behind 修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APPLICATION-SERVICE",
+        "type": "ApplicationService",
+        "name": [
+          {
+            "value": "Core Application Service"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as an application service: externally visible automated behavior provided by an application component. In this architecture, Core Application Service provides the externally visible automation boundary that supports and serves the core business service."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APPLICATION-DATA",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "Core Domain Data"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as a data object: passive data suitable for automated processing by application behavior. In this architecture, Core Domain Data captures the domain and state information created, read, and maintained by the core application system."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-TECHNOLOGY-NODE",
+        "type": "Node",
+        "name": [
+          {
+            "value": "Core Technology Runtime"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as a node: a computational or physical resource that hosts, executes, or supports technology and application behavior. In this architecture, Core Technology Runtime is the runtime environment that hosts and executes the technology and application behavior required for 修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "technology",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-TECHNOLOGY-ARTIFACT",
+        "type": "Artifact",
+        "name": [
+          {
+            "value": "Deployable Solution Artifact"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as an artifact: a physical or deployable piece of information used or produced in technology or application realization. In this architecture, Deployable Solution Artifact is the deployable solution package generated from the core application system for operation on the target runtime node."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "technology",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-008C",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Opencode Event Normalizer"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Opencode Event Normalizer encapsulates the Python adapter logic that converts opencode SSE payloads into normalized run events with stable semantic metadata for reasoning, tool, question, result, and error emissions."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-EXT-SHARED-API-CONTRACT",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Stream Contract"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Extension Stream Contract owns the shared TypeScript protocol and runtime schema validation for normalized run events consumed by the browser extension."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Reasoning Projection Mapper"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Reasoning Projection Mapper builds the read-model for Thinking, assistant body text, questions, and result/error turns from normalized run events and is the single authority for semantic merge behavior."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-EXT-RUN-ORCHESTRATION",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Live Run State Orchestrator"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Live Run State Orchestrator owns current-session event ingress, transport-level replay deduplication, run lifecycle state transitions, and background state synchronization for the sidepanel."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Conversation Renderer"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Conversation Renderer renders the projected assistant conversation, Thinking panel, and interaction affordances from the read-model supplied by the projection mapper without reinterpreting event semantics."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application"
+          }
+        }
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Full-model baseline for duplicate THINKING text remediation: move root-cause control to the normalized event contract and reasoning projection boundary. Extend existing brownfield modules rather than creating new software units. Python adapter normalization must emit stable semantic metadata for reasoning/text emissions; extension shared protocol/api must validate that contract; reasoningTimeline.ts becomes the single read-model/projection authority that merges reasoning by semantic identity and separates assistant body text from Thinking process items; App.tsx remains limited to transport replay dedupe and lifecycle state; reasoningTimelineView.tsx is reduced to pure rendering with only light display sanitization. Fast-track commit 91d5b9324b106214e25e79e7f8bc728f74478871 is retained as a completed transport-level fix but is insufficient for the semantic duplicate root cause."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Project",
+            "rawRequirement": "修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。",
+            "status": "InProgress"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-001",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "修复当前会话过程中 THINKING 框出现重复 reasoning 文本的问题，确保 reasoning 内容不会被重复追加或重复渲染。"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Fast-track fix completed. Root cause confirmed in sidepanel current-run in-memory runEvents append path: replayed SSE events were appended without id/sequence dedupe, allowing duplicate THINKING content in the live panel. Implemented localized dedupe/replacement on event ingress in extension/src/sidepanel/App.tsx and added targeted App tests covering identical replay and same-sequence fuller snapshot behavior. Verified with extension typecheck and targeted Vitest tests for the new scenarios."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "planning",
+            "status": "Done",
+            "retryCount": 0,
+            "assignee": "SystemArchitect",
+            "summary": "Fast-track fix completed. Root cause confirmed in sidepanel current-run in-memory runEvents append path: replayed SSE events were appended without id/sequence dedupe, allowing duplicate THINKING content in the live panel. Implemented localized dedupe/replacement on event ingress in extension/src/sidepanel/App.tsx and added targeted App tests covering identical replay and same-sequence fuller snapshot behavior. Verified with extension typecheck and targeted Vitest tests for the new scenarios.",
+            "commitId": "91d5b9324b106214e25e79e7f8bc728f74478871",
+            "softwareUnitId": "",
+            "softwareUnitTitle": "",
+            "architectureElementId": "",
+            "updatedAt": "2026-04-08T20:39:48.231Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-002",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Implement normalized event contract metadata for reasoning and assistant text emissions"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "QA retry 1 fixed sidepanel regressions by restoring same-session history visibility and live status behavior without changing normalized contract ownership. Verified App full suite, reasoningTimeline subset, and extension typecheck."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "QA retry 1 fixed sidepanel regressions by restoring same-session history visibility and live status behavior without changing normalized contract ownership. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+            "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d",
+            "softwareUnitId": "SU-ADAPTER-EVENT-NORMALIZER",
+            "softwareUnitTitle": "Opencode Event Normalizer",
+            "architectureElementId": "ELM-APP-008C",
+            "updatedAt": "2026-04-08T21:59:10.743Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-003",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Adopt the extended normalized event contract in extension shared protocol and SSE schema validation"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "QA retry 1 confirmed shared contract integration after App/session retry behavior fixes. Verified App full suite, reasoningTimeline subset, and extension typecheck."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "QA retry 1 confirmed shared contract integration after App/session retry behavior fixes. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+            "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d",
+            "softwareUnitId": "SU-EXT-STREAM-CONTRACT",
+            "softwareUnitTitle": "Extension Stream Contract",
+            "architectureElementId": "ELM-APP-EXT-SHARED-API-CONTRACT",
+            "updatedAt": "2026-04-08T21:59:10.831Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-004",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Refactor reasoningTimeline projection to merge Thinking by semantic identity instead of view-layer text dedupe"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "QA retry 1 adjusted reasoning projection output for generic streaming copy, conditional Thinking visibility, and stable multi-run rendering while preserving reasoningTimeline as semantic authority. Verified App full suite, reasoningTimeline subset, and extension typecheck."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "QA retry 1 adjusted reasoning projection output for generic streaming copy, conditional Thinking visibility, and stable multi-run rendering while preserving reasoningTimeline as semantic authority. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+            "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d",
+            "softwareUnitId": "SU-EXT-REASONING-PROJECTION",
+            "softwareUnitTitle": "Reasoning Projection Mapper",
+            "architectureElementId": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+            "updatedAt": "2026-04-08T21:59:10.891Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-005",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Constrain App live run state handling to transport replay dedupe and lifecycle updates"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "QA retry 1 restored App session selection, history fallback, retry payload, and lifecycle/status presentation behavior while keeping App scoped to replay dedupe and lifecycle orchestration. Verified App full suite, reasoningTimeline subset, and extension typecheck."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "QA retry 1 restored App session selection, history fallback, retry payload, and lifecycle/status presentation behavior while keeping App scoped to replay dedupe and lifecycle orchestration. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+            "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d",
+            "softwareUnitId": "SU-EXT-LIVE-RUN-STATE",
+            "softwareUnitTitle": "Live Run State Orchestrator",
+            "architectureElementId": "ELM-APP-EXT-RUN-ORCHESTRATION",
+            "updatedAt": "2026-04-08T21:59:10.977Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-006",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Reduce renderer duplicate-handling logic so Thinking rendering depends on projected read-model semantics"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "QA retry 1 kept renderer free of semantic dedupe while fixing streaming placeholder timing and stable multi-run render keys. Verified App full suite, reasoningTimeline subset, and extension typecheck."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "QA retry 1 kept renderer free of semantic dedupe while fixing streaming placeholder timing and stable multi-run render keys. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+            "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d",
+            "softwareUnitId": "SU-EXT-CONVERSATION-RENDERER",
+            "softwareUnitTitle": "Conversation Renderer",
+            "architectureElementId": "ELM-APP-EXT-CONVERSATION-RENDERER",
+            "updatedAt": "2026-04-08T21:59:11.066Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-007",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Add regression tests for normalized contract, projection merge, renderer scope, and current-session duplicate prevention"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "QA retry 1 updated projection regression coverage to match restored generic streaming behavior and process-summary expectations, alongside passing App full regression coverage. Verified App full suite, reasoningTimeline subset, and extension typecheck."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "QA retry 1 updated projection regression coverage to match restored generic streaming behavior and process-summary expectations, alongside passing App full regression coverage. Verified App full suite, reasoningTimeline subset, and extension typecheck.",
+            "commitId": "9f1673248fe60b9a107cde5fe15b0aace5ec518d",
+            "softwareUnitId": "SU-EXT-REASONING-PROJECTION",
+            "softwareUnitTitle": "Reasoning Projection Mapper",
+            "architectureElementId": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+            "updatedAt": "2026-04-08T21:59:11.194Z"
+          }
+        }
+      },
+      {
+        "identifier": "RELEASE-LOG",
+        "type": "Artifact",
+        "name": [
+          {
+            "value": "SprintReleaseLog"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Release completed for THINKING duplicate reasoning fix. Goal: 修复 THINKING 框重复 reasoning 文本问题。 Key commits: baseline 91d5b9324b106214e25e79e7f8bc728f74478871, full-model implementation 525290be0b9f29b365352c7f01e037c82d922ae5, final validated QA retry fix 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Completed scope: TASK-002..TASK-007. Validation: QA passed, Audit passed. Release log path: /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ReleaseLog",
+            "version": "1.0.0",
+            "content": "Release completed for THINKING duplicate reasoning fix. Goal: 修复 THINKING 框重复 reasoning 文本问题。 Key commits: baseline 91d5b9324b106214e25e79e7f8bc728f74478871, full-model implementation 525290be0b9f29b365352c7f01e037c82d922ae5, final validated QA retry fix 9f1673248fe60b9a107cde5fe15b0aace5ec518d. Completed scope: TASK-002..TASK-007. Validation: QA passed, Audit passed. Release log path: /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md.",
+            "timestamp": "2026-04-08T22:03:46.363Z",
+            "path": "SprintRleaseLog.md"
+          }
+        }
+      }
+    ]
+  },
+  "relationships": {
+    "relationship": [
+      {
+        "identifier": "REL-CAPABILITY-REALIZES-GOAL",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Capability realizes goal"
+          }
+        ],
+        "source": "ELM-STRATEGY-CAPABILITY",
+        "target": "ELM-STRATEGY-GOAL",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Product Capability makes Product Delivery Goal concrete by providing the ability needed to achieve that strategic outcome."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-COURSE-REALIZES-CAPABILITY",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Course realizes capability"
+          }
+        ],
+        "source": "ELM-STRATEGY-COURSE",
+        "target": "ELM-STRATEGY-CAPABILITY",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, MVP Delivery Course Of Action gives concrete form to Core Product Capability by prescribing how that capability will be established."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-BUSINESS-REALIZES-STRATEGY",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Business realizes strategy"
+          }
+        ],
+        "source": "ELM-BUSINESS-PROCESS",
+        "target": "ELM-STRATEGY-CAPABILITY",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Business Flow operationalizes Core Product Capability through executable business behavior."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ACTOR-ASSIGNED-BUSINESS",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Actor participates in business flow"
+          }
+        ],
+        "source": "ELM-BUSINESS-ACTOR",
+        "target": "ELM-BUSINESS-PROCESS",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an assignment: the allocation of responsibility, behavior, or execution from an active structure element to a behavior element, or vice versa where appropriate in ArchiMate. In this architecture, Primary User is allocated participation responsibility in Core Business Flow from a business perspective."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-BUSINESS-PROCESS-REALIZES-SERVICE",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Business process realizes service"
+          }
+        ],
+        "source": "ELM-BUSINESS-PROCESS",
+        "target": "ELM-BUSINESS-SERVICE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Business Flow implements and makes Core User Service concrete as externally visible behavior."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-BUSINESS-SERVICE-SERVES-ACTOR",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Business service serves actor"
+          }
+        ],
+        "source": "ELM-BUSINESS-SERVICE",
+        "target": "ELM-BUSINESS-ACTOR",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Core User Service provides business value and externally visible behavior to Primary User."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-APPLICATION-SERVICE-SERVES-BUSINESS",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Application service serves business service"
+          }
+        ],
+        "source": "ELM-APPLICATION-SERVICE",
+        "target": "ELM-BUSINESS-SERVICE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Core Application Service provides the automated support needed by the business-facing Core User Service."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-APPLICATION-REALIZES-SERVICE",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Application component realizes application service"
+          }
+        ],
+        "source": "ELM-APPLICATION-COMPONENT",
+        "target": "ELM-APPLICATION-SERVICE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Application System implements and makes Core Application Service concrete as the exposed application service boundary."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-APPLICATION-ACCESSES-DATA",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Application accesses domain data"
+          }
+        ],
+        "source": "ELM-APPLICATION-COMPONENT",
+        "target": "ELM-APPLICATION-DATA",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an access relationship: the source behavior or active structure concept reads, writes, or otherwise uses the target passive structure concept. In this architecture, Core Application System reads and writes Core Domain Data in order to execute application behavior."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TECHNOLOGY-SUPPORTS-APPLICATION",
+        "type": "Association",
+        "name": [
+          {
+            "value": "Technology supports application"
+          }
+        ],
+        "source": "ELM-TECHNOLOGY-NODE",
+        "target": "ELM-APPLICATION-COMPONENT",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an association: a generic structural or semantic link used when no more specific ArchiMate relationship type applies. In this architecture, Core Technology Runtime has a structural support link with Core Application System where no more specific baseline relationship is modeled."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TECHNOLOGY-HOSTS-APPLICATION-SERVICE",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Technology hosts application service"
+          }
+        ],
+        "source": "ELM-TECHNOLOGY-NODE",
+        "target": "ELM-APPLICATION-SERVICE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Core Technology Runtime provides the infrastructure behavior required to host and expose Core Application Service."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ARTIFACT-REALIZES-APPLICATION",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Artifact realizes application deliverable"
+          }
+        ],
+        "source": "ELM-TECHNOLOGY-ARTIFACT",
+        "target": "ELM-APPLICATION-COMPONENT",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Deployable Solution Artifact is the concrete deployable manifestation of Core Application System."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-APP-NORMALIZER-SERVES-CONTRACT",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Normalizer serves contract"
+          }
+        ],
+        "source": "ELM-APP-008C",
+        "target": "ELM-APP-EXT-SHARED-API-CONTRACT",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Opencode Event Normalizer provides the normalized event payloads and semantic metadata consumed by Extension Stream Contract."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-APP-CONTRACT-SERVES-MAPPER",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Contract serves mapper"
+          }
+        ],
+        "source": "ELM-APP-EXT-SHARED-API-CONTRACT",
+        "target": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Extension Stream Contract provides the validated event semantics consumed by Reasoning Projection Mapper."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-APP-MAPPER-SERVES-RENDERER",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Mapper serves renderer"
+          }
+        ],
+        "source": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "target": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Reasoning Projection Mapper supplies the read-model that Conversation Renderer displays."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-APP-ORCHESTRATOR-SERVES-MAPPER",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Live state serves mapper"
+          }
+        ],
+        "source": "ELM-APP-EXT-RUN-ORCHESTRATION",
+        "target": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Live Run State Orchestrator provides active-session normalized event streams and lifecycle state to Reasoning Projection Mapper."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-001",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-001"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-001",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-002",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-002"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-002",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-002-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-002 traces to ELM-APP-008C"
+          }
+        ],
+        "source": "TASK-002",
+        "target": "ELM-APP-008C",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-003",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-003"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-003",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-003-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-003 traces to ELM-APP-EXT-SHARED-API-CONTRACT"
+          }
+        ],
+        "source": "TASK-003",
+        "target": "ELM-APP-EXT-SHARED-API-CONTRACT",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-004",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-004"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-004",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-004-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-004 traces to ELM-APP-EXT-RUN-CONVERSATION-MAPPER"
+          }
+        ],
+        "source": "TASK-004",
+        "target": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-005",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-005"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-005",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-005-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-005 traces to ELM-APP-EXT-RUN-ORCHESTRATION"
+          }
+        ],
+        "source": "TASK-005",
+        "target": "ELM-APP-EXT-RUN-ORCHESTRATION",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-006",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-006"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-006",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-006-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-006 traces to ELM-APP-EXT-CONVERSATION-RENDERER"
+          }
+        ],
+        "source": "TASK-006",
+        "target": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-007",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-007"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-007",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-007-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-007 traces to ELM-APP-EXT-RUN-CONVERSATION-MAPPER"
+          }
+        ],
+        "source": "TASK-007",
+        "target": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      }
+    ]
+  },
+  "organizations": [
+    {
+      "identifier": "ORG-INTENTION-ROOT",
+      "label": [
+        {
+          "value": "Intention Architecture"
+        }
+      ],
+      "documentation": [
+        {
+          "value": "Core layered intention model maintained by SystemArchitect."
+        }
+      ],
+      "item": [
+        {
+          "identifier": "ORG-INTENTION-STRATEGY",
+          "label": [
+            {
+              "value": "Strategy Layer"
+            }
+          ],
+          "item": [
+            {
+              "identifier": "ORG-REF-STRATEGY-GOAL",
+              "label": [
+                {
+                  "value": "Goal"
+                }
+              ],
+              "elementRef": "ELM-STRATEGY-GOAL"
+            },
+            {
+              "identifier": "ORG-REF-STRATEGY-CAPABILITY",
+              "label": [
+                {
+                  "value": "Capability"
+                }
+              ],
+              "elementRef": "ELM-STRATEGY-CAPABILITY"
+            },
+            {
+              "identifier": "ORG-REF-STRATEGY-COURSE",
+              "label": [
+                {
+                  "value": "Course Of Action"
+                }
+              ],
+              "elementRef": "ELM-STRATEGY-COURSE"
+            }
+          ],
+          "extensions": {
+            "ai4pb": {
+              "managedBy": "system-architect",
+              "baseline": "core"
+            }
+          }
+        },
+        {
+          "identifier": "ORG-INTENTION-BUSINESS",
+          "label": [
+            {
+              "value": "Business Layer"
+            }
+          ],
+          "item": [
+            {
+              "identifier": "ORG-REF-BUSINESS-ACTOR",
+              "label": [
+                {
+                  "value": "Business Actor"
+                }
+              ],
+              "elementRef": "ELM-BUSINESS-ACTOR"
+            },
+            {
+              "identifier": "ORG-REF-BUSINESS-PROCESS",
+              "label": [
+                {
+                  "value": "Business Process"
+                }
+              ],
+              "elementRef": "ELM-BUSINESS-PROCESS"
+            },
+            {
+              "identifier": "ORG-REF-BUSINESS-SERVICE",
+              "label": [
+                {
+                  "value": "Business Service"
+                }
+              ],
+              "elementRef": "ELM-BUSINESS-SERVICE"
+            }
+          ],
+          "extensions": {
+            "ai4pb": {
+              "managedBy": "system-architect",
+              "baseline": "core"
+            }
+          }
+        },
+        {
+          "identifier": "ORG-INTENTION-APPLICATION",
+          "label": [
+            {
+              "value": "Application Layer"
+            }
+          ],
+          "item": [
+            {
+              "identifier": "ORG-REF-APPLICATION-COMPONENT",
+              "label": [
+                {
+                  "value": "Application Component"
+                }
+              ],
+              "elementRef": "ELM-APPLICATION-COMPONENT"
+            },
+            {
+              "identifier": "ORG-REF-APPLICATION-SERVICE",
+              "label": [
+                {
+                  "value": "Application Service"
+                }
+              ],
+              "elementRef": "ELM-APPLICATION-SERVICE"
+            },
+            {
+              "identifier": "ORG-REF-APPLICATION-DATA",
+              "label": [
+                {
+                  "value": "Data Object"
+                }
+              ],
+              "elementRef": "ELM-APPLICATION-DATA"
+            }
+          ],
+          "extensions": {
+            "ai4pb": {
+              "managedBy": "system-architect",
+              "baseline": "core"
+            }
+          }
+        },
+        {
+          "identifier": "ORG-INTENTION-TECHNOLOGY",
+          "label": [
+            {
+              "value": "Technology Layer"
+            }
+          ],
+          "item": [
+            {
+              "identifier": "ORG-REF-TECHNOLOGY-NODE",
+              "label": [
+                {
+                  "value": "Node"
+                }
+              ],
+              "elementRef": "ELM-TECHNOLOGY-NODE"
+            },
+            {
+              "identifier": "ORG-REF-TECHNOLOGY-ARTIFACT",
+              "label": [
+                {
+                  "value": "Artifact"
+                }
+              ],
+              "elementRef": "ELM-TECHNOLOGY-ARTIFACT"
+            }
+          ],
+          "extensions": {
+            "ai4pb": {
+              "managedBy": "system-architect",
+              "baseline": "core"
+            }
+          }
+        }
+      ],
+      "extensions": {
+        "ai4pb": {
+          "managedBy": "system-architect",
+          "baseline": "core"
+        }
+      }
+    }
+  ]
 }
