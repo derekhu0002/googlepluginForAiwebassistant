@@ -1,48 +1,44 @@
-# Release Summary: THINKING duplicate reasoning fix
+# Release Summary: Sidepanel OpenCode strict-reference redo batch
 
 ## Release Status
 
 - Status: completed
 - Date: 2026-04-09
-- Goal: 修复 THINKING 框重复 reasoning 文本问题，完成 full-model 实现收尾并通过最终回归验证。
-- Fast-track baseline commit: `91d5b9324b106214e25e79e7f8bc728f74478871`
-- Full-model implementation commit: `525290be0b9f29b365352c7f01e037c82d922ae5`
-- Final validated commit: `9f1673248fe60b9a107cde5fe15b0aace5ec518d`
+- Goal: 按 OpenCode 开源代码强参考重做 `extension/src/sidepanel`。
+- Final validated commit: `9e85165`
 
 ## Release Summary
 
-- TASK-002..TASK-007 completed for the normalized event contract, shared protocol/schema adoption, reasoning projection merge semantics, App live-run replay/lifecycle handling, renderer scope reduction, and regression coverage.
-- QA retry regression fix on `9f1673248fe60b9a107cde5fe15b0aace5ec518d` restored session/history/lifecycle behavior while preserving reasoningTimeline semantic authority and duplicate-prevention guarantees.
+- `TASK-017` 至 `TASK-021` 已完成，交付基于 OpenCode console/web 强参考的 sidepanel 重做批次。
+- 本批次将 sidepanel 重构为 OpenCode 对齐的 shell/header/main stage/auxiliary panels/composer/status rail 结构，并保留 brownfield 既有会话、上下文、权限、规则、追问与重试能力。
 
 ## Completed Scope
 
-- `TASK-002`: Implement normalized event contract metadata for reasoning and assistant text emissions
-- `TASK-003`: Adopt the extended normalized event contract in extension shared protocol and SSE schema validation
-- `TASK-004`: Refactor reasoningTimeline projection to merge Thinking by semantic identity instead of view-layer text dedupe
-- `TASK-005`: Constrain App live run state handling to transport replay dedupe and lifecycle updates
-- `TASK-006`: Reduce renderer duplicate-handling logic so Thinking rendering depends on projected read-model semantics
-- `TASK-007`: Add regression tests for normalized contract, projection merge, renderer scope, and current-session duplicate prevention
+- `TASK-017`: 交付并固化 `extension/src/sidepanel/referenceMap.ts`，将 OpenCode console/web 参考路径映射到 shell、header、stage、transcript、styles、panels、visual 各实现区。
+- `TASK-018`: 将 `App.tsx` 重构为 OpenCode 对齐的壳层分区组合，由 `useSidepanelController` 驱动 header、main stage、auxiliary panels、composer 与 status rail。
+- `TASK-019`: 将样式入口重构为 `main.tsx -> app.css -> style/index.css`，并拆分为 base、shell、header、panels、stage、composer、transcript 等模块化样式切片。
+- `TASK-020`: 将 session history、page context、permissions、capture summaries 与 rules 重映射到显式辅助面板，替代此前偏单体的布局。
+- `TASK-021`: 将主舞台组织为更接近 OpenCode Share 的 summary + transcript + thinking/process + inline follow-up + retry 组合。
 
 ## Validation Results
 
 - QA: passed
-  - Verified App full regression suite is green, targeted extension suites passed, THINKING duplicate regressions passed, projection semantics regressions passed, python adapter regressions passed, and extension typecheck passed.
+  - 已确认 sidepanel 定向测试、完整 extension 测试、typecheck 与 build 全部通过，并验证 OpenCode 参考分区、样式入口链路、辅助面板迁移与 transcript 主舞台组合均符合目标。
 - Audit: passed
-  - Confirmed the duplicate-thinking repair remains aligned with the approved architecture: normalized contract ownership stays in adapter/protocol layers, `reasoningTimeline.ts` remains semantic authority, `App.tsx` handles replay/lifecycle shell behavior only, and `reasoningTimelineView.tsx` stays render-only.
+  - 已确认 `referenceMap.ts`、`App.tsx`、`main.tsx -> app.css -> style/index.css`、辅助面板重组与 transcript stage 组织均与本批次 OpenCode 强参考重做目标一致，未发现阻塞性架构缺口。
 
 ## Commit Traceability
 
-- Fast-track baseline: `91d5b9324b106214e25e79e7f8bc728f74478871`
-- Full-model implementation: `525290be0b9f29b365352c7f01e037c82d922ae5`
-- QA retry regression fix / final validated commit: `9f1673248fe60b9a107cde5fe15b0aace5ec518d`
+- Final implementation and validation baseline: `9e85165`
 
 ## Release Artifacts
 
 - Release log: `SprintRleaseLog.md`
-- Completed tasks: `TASK-002`, `TASK-003`, `TASK-004`, `TASK-005`, `TASK-006`, `TASK-007`
+- Scope path: `extension/src/sidepanel`
+- Completed tasks: `TASK-017`, `TASK-018`, `TASK-019`, `TASK-020`, `TASK-021`
 - QA status: `passed`
 - Audit status: `passed`
 
 ## Release Conclusion
 
-The THINKING duplicate reasoning fix is finalized on commit `9f1673248fe60b9a107cde5fe15b0aace5ec518d`. The release removes repeated reasoning rendering by shifting duplicate handling to normalized event/projection semantics, preserving renderer simplicity and restoring session/history/lifecycle behavior, with QA and Audit both passing.
+The sidepanel OpenCode strict-reference redo batch is finalized on commit `9e85165`. This release delivers the persisted OpenCode reference map, OpenCode-aligned shell zoning, modular style entry rebuild, auxiliary panel remapping, and transcript-stage alignment, with QA and Audit both passing.
