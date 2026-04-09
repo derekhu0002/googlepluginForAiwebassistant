@@ -1,0 +1,152 @@
+.session-sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.session-sidebar-meta,
+.chat-stage-statusbar,
+.session-card-meta-row,
+.chat-primary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.current-session-card {
+  flex-direction: column;
+  padding: 14px;
+  border: 1px solid rgba(14, 99, 156, 0.34);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(14, 99, 156, 0.18) 0%, rgba(37, 37, 38, 0.98) 100%);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
+}
+
+.current-session-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.current-session-card-header strong {
+  display: block;
+  color: #ffffff;
+  line-height: 1.4;
+}
+
+.current-session-card-header small {
+  color: var(--copilot-muted);
+}
+
+.session-summary-text {
+  line-height: 1.55;
+}
+
+.copilot-history-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.history-nav-item {
+  text-align: left;
+  gap: 4px;
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg, #252526 0%, #1f1f1f 100%);
+  color: var(--copilot-text);
+  border: 1px solid var(--copilot-border);
+}
+
+.history-nav-item.active,
+.rule-list-item.active {
+  border-color: var(--copilot-accent);
+  background: rgba(14, 99, 156, 0.18);
+}
+
+.history-nav-item strong,
+.history-nav-item small,
+.rule-list-item strong,
+.rule-list-item small {
+  text-align: left;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.status-dot.status-streaming,
+.status-dot.status-waiting_for_answer {
+  background: #0e639c;
+  box-shadow: 0 0 0 4px rgba(14, 99, 156, 0.14);
+}
+
+.status-dot.status-done {
+  background: #2ea043;
+  box-shadow: 0 0 0 4px rgba(46, 160, 67, 0.14);
+}
+
+.status-dot.status-error {
+  background: #da3633;
+  box-shadow: 0 0 0 4px rgba(218, 54, 51, 0.12);
+}
+
+.rules-layout {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 12px;
+  min-height: 0;
+}
+
+.rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rule-list-item {
+  text-align: left;
+  background: #252526;
+  color: var(--copilot-text);
+  border: 1px solid var(--copilot-border);
+}
+
+.rule-editor {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.field-rule-card {
+  border: 1px solid var(--copilot-border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--copilot-surface-2);
+}
+
+.context-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.demoted-card {
+  background: #252526;
+  border-color: var(--copilot-border);
+}
+
+.field-list {
+  margin: 0;
+}
+
+.field-item dd {
+  margin: 0;
+  word-break: break-word;
+}

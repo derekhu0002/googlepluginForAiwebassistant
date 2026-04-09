@@ -1,0 +1,125 @@
+.chat-primary-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 24px;
+  box-shadow: 0 32px 84px rgba(0, 0, 0, 0.34);
+  background: linear-gradient(180deg, rgba(16, 20, 29, 0.98) 0%, rgba(12, 16, 24, 0.96) 100%);
+}
+
+.chat-primary-header {
+  padding: 18px 18px 0;
+}
+
+.chat-primary-header h2,
+.chat-primary-header small {
+  color: var(--copilot-text);
+}
+
+.chat-stage-statusbar {
+  padding: 14px 18px 0;
+}
+
+.chat-primary-mainline {
+  min-height: 0;
+  flex: 1;
+  padding: 8px 18px 12px;
+  overflow: hidden;
+}
+
+.cockpit-stage-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 18px 0;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--cockpit-border);
+  background: linear-gradient(180deg, rgba(22, 28, 40, 0.96) 0%, rgba(14, 18, 27, 0.96) 100%);
+}
+
+.cockpit-stage-banner-copy strong,
+.structured-reading-header strong,
+.stage-kicker,
+.structured-reading-label {
+  color: var(--cockpit-text-strong);
+}
+
+.cockpit-stage-banner-copy p,
+.structured-reading-card p,
+.mode-kicker {
+  color: var(--cockpit-text-muted);
+}
+
+.cockpit-stage-banner-meta,
+.structured-reading-header,
+.structured-reading-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stage-kicker,
+.mode-kicker,
+.structured-reading-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.structured-reading-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 18px 18px;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--cockpit-border);
+}
+
+.structured-reading-card {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--cockpit-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.chat-empty-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px;
+  border: 1px dashed var(--copilot-border);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(14, 99, 156, 0.16) 0%, rgba(31, 31, 31, 0.96) 100%);
+}
+
+.chat-empty-hero strong {
+  font-size: 18px;
+  color: #ffffff;
+}
+
+.host-permission-callout {
+  gap: 12px;
+  margin: 18px 18px 0;
+  border-color: rgba(198, 144, 38, 0.36);
+  background: linear-gradient(180deg, rgba(78, 59, 22, 0.36) 0%, rgba(31, 31, 31, 0.98) 100%);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+}
+
+.host-permission-callout strong {
+  color: #f2cc60;
+}
+
+.host-permission-callout p {
+  color: #d7ba7d;
+}
