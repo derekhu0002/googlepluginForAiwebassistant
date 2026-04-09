@@ -769,8 +769,18 @@ export interface AssistantResponseAggregation {
   hasResponseEvent: boolean;
 }
 
+export type TimelineAssistantStatus = "idle" | "collecting" | "streaming" | "waiting_for_answer" | "done" | "error";
 type TimelineRunStatus = RunRecord["status"];
 type TimelineStreamStatus = "idle" | "connecting" | "streaming" | "reconnecting" | "waiting_for_answer" | "done" | "error";
+
+export interface CockpitStatusModel {
+  stageKey: "ready" | "collecting" | "connecting" | "working" | "awaiting_input" | "completed" | "error";
+  stageLabel: string;
+  modeLabel: string;
+  headline: string;
+  detail: string;
+  tone: "neutral" | "progress" | "warning" | "success" | "danger";
+}
 
 function trimTerminalText(value?: string | null) {
   return value?.trim() || "";
@@ -1043,6 +1053,101 @@ export function resolveTimelinePresentationState(options: {
     hasTerminalEvidence: hasResultEvidence || hasErrorEvidence,
     runStatus: resolveTerminalStatus(options.runStatus, { hasResultEvidence, hasErrorEvidence }),
     streamStatus: resolveTerminalStatus(options.streamStatus, { hasResultEvidence, hasErrorEvidence })
+  };
+}
+
+/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+export function resolveCockpitStatusModel(options: {
+  events: NormalizedRunEvent[];
+  assistantStatus?: TimelineAssistantStatus;
+  runStatus?: TimelineRunStatus;
+  streamStatus?: TimelineStreamStatus;
+  pendingQuestionId?: string | null;
+  finalOutput?: string | null;
+  errorMessage?: string | null;
+}): CockpitStatusModel {
+  const presentationState = resolveTimelinePresentationState(options);
+  const hasEvents = options.events.length > 0;
+  const waitingForInput = Boolean(options.pendingQuestionId)
+    || options.assistantStatus === "waiting_for_answer"
+    || presentationState.runStatus === "waiting_for_answer"
+    || presentationState.streamStatus === "waiting_for_answer";
+
+  if (options.assistantStatus === "error" || presentationState.runStatus === "error" || presentationState.streamStatus === "error") {
+    return {
+      stageKey: "error",
+      stageLabel: "异常中断",
+      modeLabel: "重试处理",
+      headline: "本轮会话已中断，请查看失败提示后决定是否重试。",
+      detail: "已保留当前 run 的历史记录、追问链路和重试入口。",
+      tone: "danger"
+    };
+  }
+
+  if (waitingForInput) {
+    return {
+      stageKey: "awaiting_input",
+      stageLabel: "等待补充",
+      modeLabel: "追问补充",
+      headline: "助手已暂停当前轮次，等待你补充必要信息后继续。",
+      detail: "问题上下文和当前 run 会被原样保留，不会修改 backend/protocol 语义。",
+      tone: "warning"
+    };
+  }
+
+  if (options.assistantStatus === "collecting") {
+    return {
+      stageKey: "collecting",
+      stageLabel: "采集上下文",
+      modeLabel: "页面刷新",
+      headline: "正在刷新页面字段、命中规则和域名授权可用性。",
+      detail: "这是保守的前端采集阶段表达，不会改变现有 run/status 协议。",
+      tone: "progress"
+    };
+  }
+
+  if (presentationState.runStatus === "done") {
+    return {
+      stageKey: "completed",
+      stageLabel: "结果已就绪",
+      modeLabel: "结构化阅读",
+      headline: "最终回答已经落定，可继续阅读、复制、反馈或同会话追问。",
+      detail: presentationState.hasTerminalEvidence
+        ? "阶段只在存在结果或错误证据时进入完成态。"
+        : "当前仍按运行中保守处理。",
+      tone: "success"
+    };
+  }
+
+  if (presentationState.streamStatus === "connecting" || presentationState.streamStatus === "reconnecting") {
+    return {
+      stageKey: "connecting",
+      stageLabel: "建立连接",
+      modeLabel: presentationState.streamStatus === "reconnecting" ? "恢复流连接" : "启动运行",
+      headline: "正在连接或恢复事件流，稍后会继续展示新的推理与回答。",
+      detail: "连接状态会在保持当前会话上下文的前提下保守映射。",
+      tone: "progress"
+    };
+  }
+
+  if (options.assistantStatus === "streaming" || presentationState.runStatus === "streaming" || hasEvents) {
+    return {
+      stageKey: "working",
+      stageLabel: "生成回答",
+      modeLabel: "工作台运行",
+      headline: "助手正在结合页面上下文、规则和历史会话生成本轮回答。",
+      detail: hasEvents ? `已累计 ${options.events.length} 条运行事件，主舞台会持续流式刷新。` : "运行已启动，等待第一批事件进入主舞台。",
+      tone: "progress"
+    };
+  }
+
+  return {
+    stageKey: "ready",
+    stageLabel: "待开始",
+    modeLabel: "新会话",
+    headline: "可以开始新的分析，或在同一会话里继续追问当前页面。",
+    detail: "发送消息后，主舞台会切换为对话式 AI working cockpit。",
+    tone: "neutral"
   };
 }
 

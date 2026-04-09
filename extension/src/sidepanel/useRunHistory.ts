@@ -9,6 +9,25 @@ export function useRunHistory() {
   const [history, setHistory] = useState<RunRecord[]>([]);
   const [selectedHistoryDetail, setSelectedHistoryDetail] = useState<RunHistoryDetail | null>(null);
 
+  const sessionHistory = useMemo(() => {
+    const sessions = new Map<string, RunRecord[]>();
+
+    for (const run of history) {
+      const key = run.sessionId ? `session:${run.sessionId}` : `run:${run.runId}`;
+      const bucket = sessions.get(key) ?? [];
+      bucket.push(run);
+      sessions.set(key, bucket);
+    }
+
+    return [...sessions.entries()]
+      .map(([sessionKey, runs]) => ({
+        sessionKey,
+        runs: [...runs].sort((left, right) => new Date(left.startedAt).getTime() - new Date(right.startedAt).getTime()),
+        latestRun: [...runs].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())[0]
+      }))
+      .sort((left, right) => new Date(right.latestRun.updatedAt).getTime() - new Date(left.latestRun.updatedAt).getTime());
+  }, [history]);
+
   async function loadRunDetail(runId: string) {
     return historyStore.getRunDetail(runId);
   }
@@ -53,6 +72,7 @@ export function useRunHistory() {
 
   return useMemo(() => ({
     history,
+    sessionHistory,
     selectedHistoryDetail,
     saveRun,
     saveEvent,
@@ -62,5 +82,5 @@ export function useRunHistory() {
     clearSelectedRun,
     refresh,
     setSelectedHistoryDetail
-  }), [history, selectedHistoryDetail]);
+  }), [history, selectedHistoryDetail, sessionHistory]);
 }

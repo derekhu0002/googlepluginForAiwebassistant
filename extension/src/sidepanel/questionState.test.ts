@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedRunEvent } from "../shared/protocol";
-import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
+import { getActiveQuestionEvent, getNextPendingQuestionId, hasPendingQuestion } from "./questionState";
 
 function createEvent(overrides: Partial<NormalizedRunEvent>): NormalizedRunEvent {
   return {
@@ -48,5 +48,22 @@ describe("question stream state", () => {
     expect(getNextPendingQuestionId(null, questionEvent)).toBe("question-2");
     expect(getNextPendingQuestionId("question-2", createEvent({ id: "event-result", type: "result" }))).toBeNull();
     expect(getNextPendingQuestionId("question-2", createEvent({ id: "event-error", type: "error" }))).toBeNull();
+  });
+
+  it("reports whether the current run is still waiting on a live question", () => {
+    const questionEvent = createEvent({
+      id: "event-question-3",
+      type: "question",
+      question: {
+        questionId: "question-3",
+        title: "补充说明",
+        message: "请继续补充",
+        options: [],
+        allowFreeText: true
+      }
+    });
+
+    expect(hasPendingQuestion([questionEvent], "question-3")).toBe(true);
+    expect(hasPendingQuestion([questionEvent], null)).toBe(false);
   });
 });

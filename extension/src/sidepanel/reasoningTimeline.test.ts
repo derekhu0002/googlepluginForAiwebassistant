@@ -8,6 +8,7 @@ import {
   collectAssistantResponseAggregation,
   getTimelineCardStatus,
   getTimelineStatusCopy,
+  resolveCockpitStatusModel,
   resolveTimelinePresentationState
 } from "./reasoningTimeline";
 
@@ -562,6 +563,39 @@ describe("reasoning timeline view-model", () => {
       "assistant_progress"
     ]);
     expect(items[1]?.summary).toBe("正在生成回答");
+  });
+
+  it("maps waiting and completed cockpit stages conservatively from existing run evidence", () => {
+    expect(resolveCockpitStatusModel({
+      events: [createEvent(1, {
+        type: "question",
+        question: {
+          questionId: "q-1",
+          title: "需要确认",
+          message: "请选择下一步",
+          options: [],
+          allowFreeText: true
+        }
+      })],
+      assistantStatus: "waiting_for_answer",
+      runStatus: "waiting_for_answer",
+      streamStatus: "waiting_for_answer",
+      pendingQuestionId: "q-1"
+    })).toMatchObject({
+      stageKey: "awaiting_input",
+      tone: "warning"
+    });
+
+    expect(resolveCockpitStatusModel({
+      events: [createEvent(2, { type: "result", message: "最终完成" })],
+      assistantStatus: "done",
+      runStatus: "done",
+      streamStatus: "done",
+      finalOutput: "最终完成"
+    })).toMatchObject({
+      stageKey: "completed",
+      tone: "success"
+    });
   });
 
   it("renders text-stream deltas as assistant body instead of Thinking when no final result is persisted", () => {

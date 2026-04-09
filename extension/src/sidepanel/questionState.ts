@@ -21,3 +21,8 @@ export function getNextPendingQuestionId(currentPendingQuestionId: string | null
 
   return currentPendingQuestionId;
 }
+
+/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+export function hasPendingQuestion(runEvents: NormalizedRunEvent[], pendingQuestionId: string | null) {
+  return Boolean(getActiveQuestionEvent(runEvents, pendingQuestionId));
+}

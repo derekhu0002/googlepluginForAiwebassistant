@@ -295,11 +295,7 @@ describe("side panel host permission request flow", () => {
     const calloutButton = callout?.querySelector("button");
     expect(calloutButton?.textContent).toContain("授权当前域名");
 
-    const details = container.querySelector("details.utility-panel") as HTMLDetailsElement | null;
-    expect(details?.open).toBe(false);
-
-    const detailsButton = details?.querySelector("button");
-    expect(detailsButton).toBeNull();
+    expect(container.querySelector("details.utility-panel")).toBeNull();
   });
 
   it("keeps rules configuration center collapsed by default and expands on explicit user action", async () => {
@@ -322,17 +318,14 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const details = container.querySelector("details.rules-config-panel") as HTMLDetailsElement | null;
-    expect(details?.open).toBe(false);
     expect(container.textContent).not.toContain("保存规则");
 
-    const summary = details?.querySelector("summary");
+    const rulesButton = container.querySelector("button[aria-label='规则']");
     await act(async () => {
-      summary?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      rulesButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushUi();
 
-    expect(details?.open).toBe(true);
     expect(container.textContent).toContain("保存规则");
   });
 
@@ -1295,9 +1288,81 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("对话");
+    expect(container.textContent).toContain("AI Working Cockpit");
     expect(container.querySelector("button[aria-label='会话']")).not.toBeNull();
-    expect(container.textContent).toContain("个会话");
+    expect(container.textContent).toContain("个会话簇");
+  });
+
+  it("renders the new stage banner and structured reading summary for completed runs", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          finalOutput: "最终回答",
+          updatedAt: "2026-04-02T00:00:03.000Z"
+        },
+        runEvents: [createRunEvent(1, { type: "result", message: "最终回答" })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("结果已就绪");
+    expect(container.textContent).toContain("结构化阅读");
+    expect(container.textContent).toContain("结果阅读");
+    expect(container.textContent).toContain("最终答案已归档");
+  });
+
+  it("shows awaiting-input stage language when a live follow-up question is pending", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "waiting_for_answer",
+        stream: {
+          runId: "run-1",
+          status: "waiting_for_answer",
+          pendingQuestionId: "q-1"
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "waiting_for_answer",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [
+          createRunEvent(1, {
+            type: "question",
+            message: "请选择处理方式",
+            question: {
+              questionId: "q-1",
+              title: "需要确认",
+              message: "请选择处理方式",
+              options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+              allowFreeText: false
+            }
+          })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("等待补充");
+    expect(container.textContent).toContain("追问补充");
+    expect(container.textContent).toContain("等待补充信息");
   });
 
   it("renders console actions and composer placeholder chips", async () => {

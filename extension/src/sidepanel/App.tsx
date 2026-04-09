@@ -6,8 +6,8 @@ import { createDefaultFieldTemplates, createDefaultRule, createId } from "../sha
 import { initialAssistantState } from "../shared/state";
 import type { NormalizedRunEvent, RunHistoryDetail, RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
-import { getActiveQuestionEvent, getNextPendingQuestionId } from "./questionState";
-import { isAssistantResponseDeltaEvent, resolveTimelinePresentationState, type BuildChatStreamItemsOptions } from "./reasoningTimeline";
+import { getActiveQuestionEvent, getNextPendingQuestionId, hasPendingQuestion } from "./questionState";
+import { isAssistantResponseDeltaEvent, resolveCockpitStatusModel, resolveTimelinePresentationState, type BuildChatStreamItemsOptions } from "./reasoningTimeline";
 import { ReasoningTimeline } from "./reasoningTimelineView";
 import { useRunHistory } from "./useRunHistory";
 
@@ -439,7 +439,19 @@ export function App() {
   const [activeConsole, setActiveConsole] = useState<"sessions" | "context" | "rules" | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const { history, selectedHistoryDetail, saveRun, saveEvent, saveAnswer, loadRunDetail, selectRun, refresh, clearSelectedRun } = useRunHistory();
+  const runHistory = useRunHistory();
+  const {
+    history,
+    selectedHistoryDetail,
+    saveRun,
+    saveEvent,
+    saveAnswer,
+    loadRunDetail,
+    selectRun,
+    refresh,
+    clearSelectedRun
+  } = runHistory;
+  const sessionHistory = runHistory.sessionHistory ?? [];
   const historyRef = useRef(history);
   const selectedHistoryDetailRef = useRef(selectedHistoryDetail);
 
@@ -449,6 +461,7 @@ export function App() {
   const isSendDisabled = state.status === "collecting" || (state.status === "streaming" && !canSendWhileStreaming) || !prompt.trim();
   const isEmbedded = useMemo(() => new URLSearchParams(window.location.search).get("mode") === "embedded", []);
   const questionEvent = useMemo(() => getActiveQuestionEvent(state.runEvents, state.stream.pendingQuestionId), [state.runEvents, state.stream.pendingQuestionId]);
+  const hasLivePendingQuestion = useMemo(() => hasPendingQuestion(state.runEvents, state.stream.pendingQuestionId), [state.runEvents, state.stream.pendingQuestionId]);
 
   async function syncRunStateToBackground(nextState: Pick<AssistantState, "status" | "activeSessionId" | "capturedFields" | "runPrompt" | "runEvents" | "currentRun" | "answers" | "error" | "errorMessage" | "matchedRule" | "lastCapturedUrl" | "usernameContext" | "stream">) {
     await sendMessage<{ ok: boolean }>({
@@ -911,19 +924,16 @@ export function App() {
     finalOutput: state.currentRun?.finalOutput,
     errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError
   }), [state.currentRun?.errorMessage, state.currentRun?.finalOutput, state.currentRun?.status, state.runEvents, state.stream.status, state.errorMessage, streamError]);
-  const shellStatusLabel = questionEvent?.question
-    ? "等待补充信息"
-    : livePresentationState.runStatus === "done"
-      ? "已完成"
-      : livePresentationState.runStatus === "error"
-        ? "已失败"
-        : livePresentationState.streamStatus === "connecting"
-          ? "建立连接中"
-          : livePresentationState.streamStatus === "reconnecting"
-            ? "正在重连"
-            : hasLiveConversation
-              ? "持续输出中"
-              : "待开始";
+  const cockpitStatus = useMemo(() => resolveCockpitStatusModel({
+    events: state.runEvents,
+    assistantStatus: state.status,
+    runStatus: state.currentRun?.status,
+    streamStatus: state.stream.status,
+    pendingQuestionId: state.stream.pendingQuestionId,
+    finalOutput: state.currentRun?.finalOutput,
+    errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError
+  }), [state.currentRun?.errorMessage, state.currentRun?.finalOutput, state.currentRun?.status, state.errorMessage, state.runEvents, state.status, state.stream.pendingQuestionId, state.stream.status, streamError]);
+  const shellStatusLabel = cockpitStatus.stageLabel;
     const selectedSessionIsCurrent = !selectedHistoryFallbackDetail && (!effectiveSelectedSessionKey || effectiveSelectedSessionKey === DRAFT_SESSION_KEY || effectiveSelectedSessionKey === currentSessionKey);
 
     useEffect(() => {
@@ -1076,28 +1086,33 @@ export function App() {
           <section className="panel-block chat-primary-panel">
             <div className="section-header compact chat-primary-header">
               <div>
-                <h2>对话</h2>
-                <small>{selectedSessionItem ? deriveRunTitle(selectedSessionItem.latestRun) : "用户消息、问题确认与最终回答统一展示"}</small>
-              </div>
-              <div className="chat-primary-meta">
-                <small className="conversation-live-chip">{selectedSessionIsCurrent ? shellStatusLabel : (selectedThreadRun?.status ?? "done")}</small>
-                <small className="detail-muted">{sessionNavigationItems.length} 个会话</small>
-                {selectedThreadRun?.runId ? <small className="detail-muted">Run：{selectedThreadRun.runId}</small> : null}
-                <button className="secondary quick-session-button" disabled={isBusy} onClick={() => handleStartFreshSession()}>新会话</button>
-              </div>
-            </div>
+                    <h2>AI Working Cockpit</h2>
+                    <small>{selectedSessionItem ? deriveRunTitle(selectedSessionItem.latestRun) : cockpitStatus.headline}</small>
+                  </div>
+                  <div className="chat-primary-meta">
+                    <small className={`conversation-live-chip tone-${cockpitStatus.tone}`}>{selectedSessionIsCurrent ? shellStatusLabel : (selectedThreadRun?.status ?? "done")}</small>
+                    <small className="detail-muted">{sessionHistory.length} 个会话簇</small>
+                    {selectedThreadRun?.runId ? <small className="detail-muted">Run：{selectedThreadRun.runId}</small> : null}
+                    <button className="secondary quick-session-button" disabled={isBusy} onClick={() => handleStartFreshSession()}>新会话</button>
+                  </div>
+                </div>
 
-            <div className="chat-stage-statusbar">
-              <span className="pill pill-muted">页面：{activeContext?.hostname ?? "未读取"}</span>
-              <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
-                {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
-              </span>
-              <span className={`pill ${selectedSessionIsCurrent && questionEvent?.question ? "pill-warning" : "pill-muted"}`}>
-                {selectedSessionIsCurrent && questionEvent?.question ? "等待补充信息" : "自由对话"}
-              </span>
-              <span className="pill pill-muted">状态：{selectedThreadStatus ?? state.status}</span>
-              <span className="pill pill-muted">流连接：{selectedThreadStreamStatus ?? state.stream.status}</span>
-            </div>
+                <div className="chat-stage-statusbar">
+                  <span className={`pill pill-stage pill-${cockpitStatus.tone}`}>阶段：{cockpitStatus.stageLabel}</span>
+                  <span className="pill pill-mode">模式：{cockpitStatus.modeLabel}</span>
+                  <span className="pill pill-muted">页面：{activeContext?.hostname ?? "未读取"}</span>
+                  <span className={`pill ${activeContext?.permissionGranted ? "pill-success" : "pill-warning"}`}>
+                    {activeContext?.permissionGranted ? "域名已授权" : "域名未授权"}
+                  </span>
+                  <span className={`pill ${selectedSessionIsCurrent && hasLivePendingQuestion ? "pill-warning" : "pill-muted"}`}>
+                    {selectedSessionIsCurrent && hasLivePendingQuestion ? "等待补充信息" : "自由对话"}
+                  </span>
+                  <span className="pill pill-muted">状态：{selectedThreadStatus ?? state.status}</span>
+                  <span className="pill pill-muted">流连接：{selectedThreadStreamStatus ?? state.stream.status}</span>
+                  {currentSessionHistorySummaries.slice(-2).map((summary, index) => (
+                    <span key={`${index}-${summary}`} className="pill pill-history-summary">历史：{truncateText(summary, 24)}</span>
+                  ))}
+                </div>
 
 
             <div className="conversation-mainline chat-primary-mainline">
@@ -1107,6 +1122,7 @@ export function App() {
                   prompt={selectedThreadRun?.prompt ?? livePrompt}
                   events={selectedSessionIsCurrent ? state.runEvents : (activeSessionRunDetails[activeSessionRunDetails.length - 1]?.events ?? [])}
                   runSegments={liveConversationSegments}
+                  assistantStatus={selectedSessionIsCurrent ? state.status : undefined}
                   answers={selectedSessionIsCurrent ? state.answers : (activeSessionRunDetails[activeSessionRunDetails.length - 1]?.answers ?? [])}
                   live={selectedSessionIsCurrent}
                   streamStatus={selectedThreadStreamStatus}
@@ -1120,10 +1136,10 @@ export function App() {
                   onQuestionSubmit={selectedSessionIsCurrent ? handleQuestionSubmit : undefined}
                   questionSubmitDisabled={selectedSessionIsCurrent ? !questionEvent?.question : true}
                 />
-              ) : (
+                ) : (
                 <div className="chat-empty-hero empty-state">
                   <strong>开始一段新的会话</strong>
-                  <p>提交 prompt 后，这里会像 Copilot 一样展示用户消息、流式回复和追问。</p>
+                  <p>发送 prompt 后，这里会切换成更接近 AI working cockpit 的主舞台：展示阶段、对话、追问与结构化结果。</p>
                 </div>
               )}
             </div>
@@ -1214,7 +1230,7 @@ export function App() {
                   <div className="section-header compact floating-console-header">
                     <div>
                       <h2>会话</h2>
-                      <small>点击会话后切换主窗口续聊目标</small>
+                      <small>区分当前续聊、历史会话簇与草稿新会话</small>
                     </div>
                     <div className="session-sidebar-actions">
                       <button className="secondary" disabled={isBusy} onClick={() => handleStartFreshSession()}>新会话</button>
@@ -1223,10 +1239,10 @@ export function App() {
                     </div>
                   </div>
                   <div className="session-sidebar-meta">
-                    <span className="pill pill-muted">{sessionNavigationItems.length} 个会话</span>
-                    <span className={`pill ${selectedSessionKey === DRAFT_SESSION_KEY || selectedSessionIsCurrent ? "pill-success" : "pill-muted"}`}>
-                      {selectedSessionKey === DRAFT_SESSION_KEY ? "新会话" : selectedSessionIsCurrent ? "当前会话" : "历史会话"}
-                    </span>
+                      <span className="pill pill-muted">{sessionNavigationItems.length} 个会话簇</span>
+                      <span className={`pill ${selectedSessionKey === DRAFT_SESSION_KEY || selectedSessionIsCurrent ? "pill-success" : "pill-muted"}`}>
+                        {selectedSessionKey === DRAFT_SESSION_KEY ? "新会话" : selectedSessionIsCurrent ? "当前会话" : "历史会话"}
+                      </span>
                     {state.currentRun ? <button className="secondary floating-inline-button" onClick={() => handleReturnToCurrentSession()}>返回当前会话</button> : null}
                   </div>
                   <div className="history-list copilot-history-list floating-console-scroll">

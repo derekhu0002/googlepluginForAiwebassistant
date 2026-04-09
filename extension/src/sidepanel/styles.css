@@ -3,6 +3,17 @@
   font-family: "Segoe UI Variable Text", "Segoe UI", "SF Pro Text", sans-serif;
   color: #d4d4d4;
   background: #181818;
+  --cockpit-bg: #090b11;
+  --cockpit-surface: rgba(16, 20, 29, 0.9);
+  --cockpit-border: rgba(144, 177, 255, 0.14);
+  --cockpit-border-strong: rgba(144, 177, 255, 0.26);
+  --cockpit-text-strong: #f5f7fb;
+  --cockpit-text-muted: #93a1bb;
+  --cockpit-accent: #5b8cff;
+  --cockpit-accent-2: #72c1ff;
+  --cockpit-success: #38c793;
+  --cockpit-warning: #f2b45a;
+  --cockpit-danger: #ff7a86;
   --copilot-bg: #181818;
   --copilot-surface: #1f1f1f;
   --copilot-surface-2: #252526;
@@ -29,7 +40,10 @@ body,
 
 body {
   margin: 0;
-  background: var(--copilot-bg);
+  background:
+    radial-gradient(circle at top, rgba(91, 140, 255, 0.16), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(114, 193, 255, 0.1), transparent 24%),
+    linear-gradient(180deg, var(--cockpit-bg) 0%, #07090d 100%);
   color: var(--copilot-text);
   overflow: hidden;
 }
@@ -49,15 +63,15 @@ textarea {
   height: 100dvh;
   padding: 16px;
   background:
-    radial-gradient(circle at top, rgba(14, 99, 156, 0.16), transparent 24%),
-    linear-gradient(180deg, #181818 0%, #111111 100%);
+    radial-gradient(circle at top, rgba(91, 140, 255, 0.16), transparent 24%),
+    linear-gradient(180deg, rgba(8, 10, 16, 0.98) 0%, rgba(7, 9, 13, 1) 100%);
 }
 
 .app-header,
 .status-card,
 .panel-block {
-  background: rgba(31, 31, 31, 0.96);
-  border: 1px solid var(--copilot-border);
+  background: var(--cockpit-surface);
+  border: 1px solid var(--cockpit-border);
   border-radius: 16px;
   padding: 14px;
   backdrop-filter: blur(14px);
@@ -234,8 +248,44 @@ textarea {
 
 .chat-primary-panel,
 .secondary-panel {
-  background: rgba(31, 31, 31, 0.96);
-  border-color: var(--copilot-border);
+  background: linear-gradient(180deg, rgba(16, 20, 29, 0.98) 0%, rgba(12, 16, 24, 0.96) 100%);
+  border-color: var(--cockpit-border);
+}
+
+.conversation-live-chip.tone-neutral,
+.pill-stage.pill-neutral {
+  background: rgba(147, 161, 187, 0.14);
+  color: var(--cockpit-text-muted);
+}
+
+.conversation-live-chip.tone-progress,
+.pill-stage.pill-progress,
+.pill-mode {
+  background: rgba(91, 140, 255, 0.16);
+  color: #b6cdff;
+}
+
+.pill-history-summary {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--cockpit-text-muted);
+}
+
+.conversation-live-chip.tone-warning,
+.pill-stage.pill-warning {
+  background: rgba(242, 180, 90, 0.18);
+  color: #ffd28e;
+}
+
+.conversation-live-chip.tone-success,
+.pill-stage.pill-success {
+  background: rgba(56, 199, 147, 0.16);
+  color: #8cf0c4;
+}
+
+.conversation-live-chip.tone-danger,
+.pill-stage.pill-danger {
+  background: rgba(255, 122, 134, 0.16);
+  color: #ffb2ba;
 }
 
 .host-permission-callout {
@@ -263,6 +313,99 @@ textarea {
   overflow: hidden;
   border-radius: 24px;
   box-shadow: 0 32px 84px rgba(0, 0, 0, 0.34);
+}
+
+.cockpit-stage-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 18px 0;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--cockpit-border);
+  background: linear-gradient(180deg, rgba(22, 28, 40, 0.96) 0%, rgba(14, 18, 27, 0.96) 100%);
+}
+
+.cockpit-stage-banner.tone-progress {
+  border-color: rgba(91, 140, 255, 0.24);
+}
+
+.cockpit-stage-banner.tone-warning {
+  border-color: rgba(242, 180, 90, 0.24);
+}
+
+.cockpit-stage-banner.tone-success {
+  border-color: rgba(56, 199, 147, 0.24);
+}
+
+.cockpit-stage-banner.tone-danger {
+  border-color: rgba(255, 122, 134, 0.24);
+}
+
+.cockpit-stage-banner-copy strong,
+.structured-reading-header strong,
+.stage-kicker,
+.structured-reading-label {
+  color: var(--cockpit-text-strong);
+}
+
+.cockpit-stage-banner-copy p,
+.structured-reading-card p,
+.mode-kicker {
+  margin: 0;
+  color: var(--cockpit-text-muted);
+}
+
+.cockpit-stage-banner-meta,
+.structured-reading-header,
+.structured-reading-grid {
+  display: flex;
+  gap: 10px;
+}
+
+.cockpit-stage-banner-meta {
+  flex-wrap: wrap;
+}
+
+.stage-kicker,
+.mode-kicker,
+.structured-reading-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.structured-reading-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 18px 18px;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--cockpit-border);
+}
+
+.structured-reading-header {
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.structured-reading-grid {
+  flex-wrap: wrap;
+}
+
+.structured-reading-card {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--cockpit-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .chat-primary-header {
@@ -651,10 +794,10 @@ textarea {
 }
 
 .conversation-bubble {
-  border: 1px solid var(--copilot-border-soft);
+  border: 1px solid rgba(144, 177, 255, 0.14);
   border-radius: 20px;
   padding: 16px 16px 14px;
-  background: linear-gradient(180deg, #252526 0%, #1f1f1f 100%);
+  background: linear-gradient(180deg, rgba(25, 31, 43, 0.98) 0%, rgba(16, 20, 29, 0.98) 100%);
   min-width: 0;
   color: var(--copilot-text);
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.18);
@@ -749,7 +892,7 @@ textarea {
   padding: 10px 12px;
   border: 1px solid var(--copilot-border);
   border-radius: 14px;
-  background: rgba(17, 17, 17, 0.72);
+  background: rgba(7, 10, 16, 0.82);
 }
 
 .assistant-thinking-panel-header {
@@ -1138,7 +1281,7 @@ textarea {
   margin-top: auto;
   padding: 16px 18px 18px;
   border-top: 1px solid var(--copilot-border);
-  background: linear-gradient(180deg, rgba(24, 24, 24, 0.4) 0%, rgba(31, 31, 31, 0.98) 22%);
+  background: linear-gradient(180deg, rgba(10, 12, 18, 0.32) 0%, rgba(16, 20, 29, 0.98) 22%);
   backdrop-filter: blur(12px);
 }
 
@@ -1174,10 +1317,10 @@ textarea {
   gap: 12px;
   max-height: min(62vh, 680px);
   padding: 16px;
-  border-radius: 18px;
-  border: 1px solid var(--copilot-border);
+  border-radius: 20px;
+  border: 1px solid var(--cockpit-border-strong);
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42);
-  background: rgba(31, 31, 31, 0.98);
+  background: linear-gradient(180deg, rgba(16, 20, 29, 0.99) 0%, rgba(12, 16, 24, 0.99) 100%);
 }
 
 .floating-console-header {
@@ -1320,7 +1463,7 @@ textarea {
   border-radius: 18px;
   padding: 16px 60px 16px 16px;
   border-color: var(--copilot-border);
-  background: linear-gradient(180deg, #1f1f1f 0%, #181818 100%);
+  background: linear-gradient(180deg, rgba(19, 24, 34, 1) 0%, rgba(13, 17, 25, 1) 100%);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
@@ -1347,8 +1490,8 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, #0e639c 0%, #1177bb 100%);
-  box-shadow: 0 12px 24px rgba(14, 99, 156, 0.28);
+  background: linear-gradient(180deg, var(--cockpit-accent) 0%, var(--cockpit-accent-2) 100%);
+  box-shadow: 0 12px 24px rgba(91, 140, 255, 0.28);
 }
 
 .send-icon {

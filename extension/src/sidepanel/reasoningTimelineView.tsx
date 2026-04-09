@@ -9,6 +9,7 @@ import {
   getDefaultFeedbackMessage,
   getTimelineCardStatus,
   resolveTimelinePresentationState,
+  resolveCockpitStatusModel,
   type BuildChatStreamItemsOptions,
   type ChatStreamItemModel
 } from "./reasoningTimeline";
@@ -393,6 +394,7 @@ export interface ChatStreamViewProps {
   prompt?: string | null;
   events: import("../shared/protocol").NormalizedRunEvent[];
   runSegments?: BuildChatStreamItemsOptions[];
+  assistantStatus?: "idle" | "collecting" | "streaming" | "waiting_for_answer" | "done" | "error";
   answers?: AnswerRecord[];
   live?: boolean;
   streamStatus?: StreamConnectionState["status"];
@@ -414,6 +416,7 @@ export function ReasoningTimeline({
   prompt,
   events,
   runSegments,
+  assistantStatus,
   answers = [],
   live = false,
   streamStatus,
@@ -438,6 +441,15 @@ export function ReasoningTimeline({
     finalOutput,
     errorMessage
   }), [errorMessage, events, finalOutput, runStatus, streamStatus]);
+  const cockpitStatus = useMemo(() => resolveCockpitStatusModel({
+    events,
+    assistantStatus,
+    runStatus,
+    streamStatus,
+    pendingQuestionId,
+    finalOutput,
+    errorMessage
+  }), [assistantStatus, errorMessage, events, finalOutput, pendingQuestionId, runStatus, streamStatus]);
   const items = useMemo(() => buildChatStreamItems({
     runId,
     prompt,
@@ -566,6 +578,16 @@ export function ReasoningTimeline({
 
   return (
     <div className="timeline-shell conversation-timeline-shell chat-stream-shell">
+      <section className={`cockpit-stage-banner tone-${cockpitStatus.tone}`} aria-label="运行阶段摘要">
+        <div className="cockpit-stage-banner-copy">
+          <div className="cockpit-stage-banner-meta">
+            <span className="stage-kicker">{cockpitStatus.stageLabel}</span>
+            <span className="mode-kicker">{cockpitStatus.modeLabel}</span>
+          </div>
+          <strong>{cockpitStatus.headline}</strong>
+          <p>{cockpitStatus.detail}</p>
+        </div>
+      </section>
       <div
         className="event-feed conversation-thread chat-stream-feed"
         ref={containerRef}
@@ -598,6 +620,25 @@ export function ReasoningTimeline({
           />
         )) : <p className="empty-state chat-empty-state">{emptyText}</p>}
       </div>
+
+      {mergedItems.some((item) => item.kind === "assistant_result") ? (
+        <section className="structured-reading-panel" aria-label="结构化结果阅读区">
+          <div className="structured-reading-header">
+            <strong>结果阅读</strong>
+            <small>{presentationState.runStatus === "done" ? "最终答案已归档" : "当前输出仍在变化"}</small>
+          </div>
+          <div className="structured-reading-grid">
+            <div className="structured-reading-card">
+              <span className="structured-reading-label">主回答</span>
+              <p>{mergedItems.filter((item) => item.kind === "assistant_result").length} 条最终回答片段已合并为单一阅读流。</p>
+            </div>
+            <div className="structured-reading-card">
+              <span className="structured-reading-label">推理过程</span>
+              <p>{mergedItems.reduce((count, item) => count + item.processItems.length, 0)} 条过程项已按保守规则折叠展示。</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
     </div>
   );
