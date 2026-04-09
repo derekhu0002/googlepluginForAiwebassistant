@@ -3,7 +3,6 @@ import type { SessionNavigationItem } from "../../model";
 import { DRAFT_SESSION_KEY, deriveRunSummary, deriveRunTitle } from "../../model";
 
 export function SessionsPanel({
-  activeConsole,
   currentRun,
   draftSessionSummary,
   effectiveSelectedSessionKey,
@@ -18,7 +17,6 @@ export function SessionsPanel({
   selectedThreadFinalOutput,
   sessionNavigationItems
 }: {
-  activeConsole: "sessions" | "context" | "rules" | null;
   currentRun: RunRecord | null;
   draftSessionSummary: string;
   effectiveSelectedSessionKey: string | null;
@@ -34,7 +32,7 @@ export function SessionsPanel({
   sessionNavigationItems: SessionNavigationItem[];
 }) {
   return (
-    <section className={`panel-block session-sidebar-panel ${activeConsole === "sessions" ? "panel-emphasis" : ""}`}>
+    <section className="panel-block session-sidebar-panel">
       <div className="section-header compact session-sidebar-header">
         <div>
           <h2>会话</h2>

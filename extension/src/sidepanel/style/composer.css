@@ -44,7 +44,7 @@
 .composer-utility-strip {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   margin-top: 10px;
 }
@@ -81,6 +81,21 @@
   justify-content: center;
   flex: 0 0 auto;
   box-shadow: none;
+}
+
+.utility-icon-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--cockpit-accent);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
 }
 
 .utility-icon-button:hover,

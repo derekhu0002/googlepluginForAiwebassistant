@@ -26,11 +26,15 @@ import {
 } from "./model";
 import { useRunHistory } from "./useRunHistory";
 
-export const COMPOSER_PLACEHOLDER_CHIPS = [
-  { key: "attachment", label: "附件", description: "功能占位，暂未启用" },
-  { key: "page_context", label: "页面上下文", description: "查看已采集字段能力占位" },
-  { key: "selection", label: "选中内容", description: "将页面选中内容作为上下文的入口占位" }
-] as const;
+export type DrawerKey = "sessions" | "context" | "rules" | "run";
+
+export interface DrawerBarItem {
+  key: DrawerKey;
+  label: string;
+  description: string;
+  badge?: string;
+  status?: "default" | "pending" | "active";
+}
 
 async function syncRunStateToBackground(nextState: Pick<AssistantState, "status" | "activeSessionId" | "capturedFields" | "runPrompt" | "runEvents" | "currentRun" | "answers" | "error" | "errorMessage" | "matchedRule" | "lastCapturedUrl" | "usernameContext" | "stream">) {
   await sendMessage<{ ok: boolean }>({
@@ -55,7 +59,7 @@ export function useSidepanelController() {
   const [streamError, setStreamError] = useState<string>("");
   const [activeSessionRunDetails, setActiveSessionRunDetails] = useState<RunHistoryDetail[]>([]);
   const [selectedSessionKey, setSelectedSessionKey] = useState<string | null>(null);
-  const [activeConsole, setActiveConsole] = useState<"sessions" | "context" | "rules" | null>(null);
+  const [activeDrawer, setActiveDrawer] = useState<DrawerKey | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const runHistory = useRunHistory();
@@ -201,7 +205,7 @@ export function useSidepanelController() {
     const rule = createEmptyRule();
     setSelectedRuleId(rule.id);
     setDraftRule(rule);
-    setActiveConsole("rules");
+    setActiveDrawer("rules");
   }
 
   async function requestPermission() {
@@ -411,6 +415,41 @@ export function useSidepanelController() {
   const errorDescription = state.error ? toDisplayMessage(state.error) : state.errorMessage || streamError;
   const shouldShowPermissionCallout = Boolean(activeContext?.url && !activeContext.permissionGranted && !activeContext.restricted);
   const canShowPermissionButton = shouldShowPermissionCallout && activeContext?.canRequestPermission;
+  const latestRunSummary = selectedThreadFinalOutput || selectedThreadError || currentSessionHistorySummaries.at(-1) || "暂无运行摘要";
+  const latestReasoningItems = state.runEvents
+    .filter((event) => event.type === "thinking" || event.type === "tool_call")
+    .slice(-4)
+    .reverse();
+  const drawerItems = useMemo<DrawerBarItem[]>(() => [
+    {
+      key: "sessions",
+      label: "会话",
+      description: "历史会话与续聊目标",
+      badge: sessionNavigationItems.length ? `${sessionNavigationItems.length}` : undefined,
+      status: activeDrawer === "sessions" ? "active" : "default"
+    },
+    {
+      key: "context",
+      label: "上下文",
+      description: "页面状态、权限与参考摘要",
+      badge: shouldShowPermissionCallout ? "!" : undefined,
+      status: activeDrawer === "context" ? "active" : shouldShowPermissionCallout ? "pending" : "default"
+    },
+    {
+      key: "rules",
+      label: "规则",
+      description: "页面规则与字段映射",
+      badge: rules.length ? `${rules.length}` : undefined,
+      status: activeDrawer === "rules" ? "active" : "default"
+    },
+    {
+      key: "run",
+      label: "运行",
+      description: "运行状态、追问与推理摘要",
+      badge: hasLivePendingQuestion ? "!" : undefined,
+      status: activeDrawer === "run" ? "active" : hasLivePendingQuestion ? "pending" : "default"
+    }
+  ], [activeDrawer, hasLivePendingQuestion, rules.length, sessionNavigationItems.length, shouldShowPermissionCallout]);
 
   async function startStreamingRun(retryPayload?: { prompt?: string; retryFromRunId?: string; retryFromMessageId?: string; capturePageData?: boolean }) {
     setStreamError("");
@@ -619,13 +658,12 @@ export function useSidepanelController() {
     setStreamError("");
     setPrompt(initialAssistantState.runPrompt);
     setSelectedSessionKey(DRAFT_SESSION_KEY);
-    setActiveConsole(null);
+    setActiveDrawer(null);
     await clearSelectedRun().catch(() => undefined);
     await sendMessage<{ ok: boolean }>({ type: "CLEAR_RESULT" }).catch(() => ({ ok: false }));
     await loadBaseState().catch(() => undefined);
     requestAnimationFrame(() => {
       composerRef.current?.focus();
-      composerRef.current?.select();
     });
   }
 
@@ -633,15 +671,31 @@ export function useSidepanelController() {
     if (state.currentRun) {
       setSelectedSessionKey(deriveSessionKey(state.currentRun));
     }
-    setActiveConsole(null);
+    setActiveDrawer(null);
     await clearSelectedRun().catch(() => undefined);
     requestAnimationFrame(() => {
       composerRef.current?.focus();
     });
   }
 
-  function toggleConsole(panel: "sessions" | "context" | "rules") {
-    setActiveConsole((current) => current === panel ? null : panel);
+  function openDrawer(panel: DrawerKey) {
+    setActiveDrawer(panel);
+  }
+
+  function closeDrawer() {
+    setActiveDrawer(null);
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+    });
+  }
+
+  function toggleDrawer(panel: DrawerKey) {
+    if (activeDrawer === panel) {
+      closeDrawer();
+      return;
+    }
+
+    openDrawer(panel);
   }
 
   async function handleCaptureOnly() {
@@ -670,17 +724,13 @@ export function useSidepanelController() {
 
   function handleSelectSession(sessionKey: string) {
     setSelectedSessionKey(sessionKey);
-    if (sessionKey === DRAFT_SESSION_KEY) {
-      setActiveConsole("sessions");
-      return;
-    }
-    setActiveConsole("sessions");
+    setActiveDrawer("sessions");
   }
 
   function handleSelectRule(rule: PageRule) {
     setSelectedRuleId(rule.id);
     setDraftRule(cloneRule(rule));
-    setActiveConsole("rules");
+    setActiveDrawer("rules");
   }
 
   function handleAddFieldRule() {
@@ -692,15 +742,17 @@ export function useSidepanelController() {
   }
 
   return {
-    activeConsole,
+    activeDrawer,
     activeContext,
     activeSessionRunDetails,
     addRule,
     canShowPermissionButton,
     cockpitStatus,
+    closeDrawer,
     composerRef,
     contextError,
     currentSessionHistorySummaries,
+    drawerItems,
     deleteCurrentRule,
     draftRule,
     draftSessionSummary,
@@ -722,6 +774,9 @@ export function useSidepanelController() {
     isSendDisabled,
     liveConversationSegments,
     livePrompt,
+    latestReasoningItems,
+    latestRunSummary,
+    openDrawer,
     prompt,
     questionEvent,
     refresh,
@@ -748,7 +803,7 @@ export function useSidepanelController() {
     startStreamingRun,
     state,
     streamError,
-    toggleConsole,
+    toggleDrawer,
     updateDraft
   };
 }

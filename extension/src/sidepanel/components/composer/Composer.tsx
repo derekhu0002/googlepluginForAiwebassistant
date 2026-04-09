@@ -1,35 +1,50 @@
+import type { ReactNode, RefObject } from "react";
 import type { AssistantState } from "../../../shared/types";
-import { COMPOSER_PLACEHOLDER_CHIPS } from "../../useSidepanelController";
-import { AttachmentIcon, CaptureIcon, ContextIcon, PageContextIcon, RulesIcon, SelectionIcon, SendIcon, SessionIcon } from "../shared/icons";
+import type { DrawerBarItem, DrawerKey } from "../../useSidepanelController";
+import { CaptureIcon, ContextIcon, RulesIcon, SendIcon, SessionIcon } from "../shared/icons";
+import { RunIcon } from "../shared/icons";
 
 export function Composer({
-  activeConsole,
+  activeDrawer,
+  drawerItems,
   isBusy,
   isSendDisabled,
   onCaptureOnly,
   onPromptChange,
   onSend,
-  onToggleConsole,
+  onToggleDrawer,
   placeholderQuestionActive,
   prompt,
+  textareaRef,
   state
 }: {
-  activeConsole: "sessions" | "context" | "rules" | null;
+  activeDrawer: DrawerKey | null;
+  drawerItems: DrawerBarItem[];
   isBusy: boolean;
   isSendDisabled: boolean;
   onCaptureOnly: () => void | Promise<void>;
   onPromptChange: (value: string) => void;
   onSend: () => void | Promise<void>;
-  onToggleConsole: (panel: "sessions" | "context" | "rules") => void;
+  onToggleDrawer: (panel: DrawerKey) => void;
   placeholderQuestionActive: boolean;
   prompt: string;
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
   state: AssistantState;
 }) {
+  const iconByKey: Record<DrawerKey, ReactNode> = {
+    sessions: <SessionIcon />,
+    context: <ContextIcon />,
+    rules: <RulesIcon />,
+    run: <RunIcon />
+  };
+  const sessionDrawerItem = drawerItems.find((item) => item.key === "sessions");
+
   return (
     <div className="conversation-composer docked-composer opencode-composer-zone">
       <label className="composer-input-shell copilot-composer-shell">
-        <textarea value={prompt} onChange={(event) => onPromptChange(event.target.value)} rows={4} placeholder="Ask AI Web Assistant anything about the current page…" />
+        <textarea ref={textareaRef} value={prompt} onChange={(event) => onPromptChange(event.target.value)} onInput={(event) => onPromptChange((event.target as HTMLTextAreaElement).value)} rows={4} placeholder="Ask AI Web Assistant anything about the current page…" />
         <button
+          type="button"
           className="send-button"
           aria-label={placeholderQuestionActive ? "发送补充说明" : "发送消息"}
           title={placeholderQuestionActive ? "发送补充说明" : "发送消息"}
@@ -41,42 +56,31 @@ export function Composer({
       </label>
 
       <div className="composer-utility-strip">
-        <div className="chat-console-dock compact-icon-dock" aria-label="chat utilities">
-          <button className={`utility-icon-button ${activeConsole === "sessions" ? "active" : ""}`} aria-label="会话" title="会话控制台，切换当前续聊目标" data-tooltip="会话" onClick={() => onToggleConsole("sessions")}>
-            <SessionIcon />
-            <span className="sr-only">会话</span>
-          </button>
-          <button className={`utility-icon-button ${activeConsole === "context" ? "active" : ""}`} aria-label="上下文" title="上下文控制台，查看页面状态和采集结果" data-tooltip="上下文" onClick={() => onToggleConsole("context")}>
-            <ContextIcon />
-            <span className="sr-only">上下文</span>
-          </button>
-          <button className={`utility-icon-button ${activeConsole === "rules" ? "active" : ""}`} aria-label="规则" title="规则控制台，管理当前页面规则" data-tooltip="规则" onClick={() => onToggleConsole("rules")}>
-            <RulesIcon />
-            <span className="sr-only">规则</span>
-          </button>
-          {COMPOSER_PLACEHOLDER_CHIPS.map((chip) => (
+        <div className="chat-console-dock compact-icon-dock" aria-label="drawer icon bar">
+          {drawerItems.map((item) => (
             <button
-              key={chip.key}
-              className="utility-icon-button utility-icon-button-muted"
+              key={item.key}
               type="button"
-              aria-label={chip.label}
-              aria-disabled="true"
-              title={`${chip.label}：${chip.description}`}
-              data-tooltip={chip.label}
+              className={`utility-icon-button ${activeDrawer === item.key ? "active" : ""} ${item.status === "pending" ? "pending" : ""}`}
+              aria-label={item.label}
+              aria-pressed={activeDrawer === item.key}
+              title={item.description}
+              data-tooltip={item.label}
+              onClick={() => onToggleDrawer(item.key)}
             >
-              {chip.key === "attachment" ? <AttachmentIcon /> : null}
-              {chip.key === "page_context" ? <PageContextIcon /> : null}
-              {chip.key === "selection" ? <SelectionIcon /> : null}
-              <span className="sr-only">{chip.label}</span>
+              {iconByKey[item.key]}
+              {item.badge ? <span className="utility-icon-badge" aria-hidden="true">{item.badge}</span> : null}
+              <span className="sr-only">{item.label}</span>
             </button>
           ))}
-          <button className={`utility-icon-button ${state.status === "collecting" ? "pending" : ""}`} aria-label={state.status === "collecting" ? "采集中..." : "采集页面"} title="重新采集页面上下文。发送消息默认不会触发页面采集。" data-tooltip={state.status === "collecting" ? "采集中" : "采集页面"} disabled={isBusy} onClick={() => onCaptureOnly()}>
+          <button type="button" className={`utility-icon-button ${state.status === "collecting" ? "pending" : ""}`} aria-label={state.status === "collecting" ? "采集中..." : "采集页面"} title="重新采集页面上下文。发送消息默认不会触发页面采集。" data-tooltip={state.status === "collecting" ? "采集中" : "采集页面"} disabled={isBusy} onClick={() => onCaptureOnly()}>
             <CaptureIcon />
             <span className="sr-only">{state.status === "collecting" ? "采集中..." : "采集页面"}</span>
           </button>
         </div>
         <div className="conversation-composer-actions compact-composer-actions">
           <small className="detail-muted">用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
+          {sessionDrawerItem?.badge ? <small className="detail-muted">{sessionDrawerItem.badge} 个会话簇</small> : null}
         </div>
       </div>
     </div>

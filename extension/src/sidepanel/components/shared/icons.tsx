@@ -32,6 +32,15 @@ export function RulesIcon() {
   );
 }
 
+export function RunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="utility-icon">
+      <path d="M7 5.5h10M7 12h6M7 18.5h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="17" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 export function AttachmentIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="utility-icon">

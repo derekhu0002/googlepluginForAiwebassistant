@@ -1,4 +1,5 @@
 import type { ActiveTabContext, AssistantState } from "../../../shared/types";
+import type { OpenCodeReferenceInput } from "../../referenceMap";
 
 export function ContextPanel({
   active,
@@ -7,6 +8,7 @@ export function ContextPanel({
   errorDescription,
   errorTitle,
   onRequestPermission,
+  referenceInputs,
   requestingPermission,
   shouldShowPermissionCallout,
   state
@@ -17,6 +19,7 @@ export function ContextPanel({
   errorDescription: string;
   errorTitle: string | null;
   onRequestPermission: () => void | Promise<void>;
+  referenceInputs: readonly OpenCodeReferenceInput[];
   requestingPermission: boolean;
   shouldShowPermissionCallout: boolean;
   state: AssistantState;
@@ -77,6 +80,19 @@ export function ContextPanel({
           ) : (
             <p className="empty-state">尚未采集任何字段。</p>
           )}
+        </section>
+
+        <section className="status-card demoted-card">
+          <strong>参考摘要</strong>
+          <small>{referenceInputs.length} 个 OpenCode 输入</small>
+          <ul className="reference-rail-list context-reference-list">
+            {referenceInputs.slice(0, 4).map((reference) => (
+              <li key={reference.path}>
+                <span>{reference.zone}</span>
+                <small>{reference.path.split("/").slice(-2).join("/")}</small>
+              </li>
+            ))}
+          </ul>
         </section>
       </div>
     </section>

@@ -1366,7 +1366,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("等待补充信息");
   });
 
-  it("renders console actions and composer placeholder chips", async () => {
+  it("renders persistent icon bar entries for drawers", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: initialAssistantState
@@ -1380,9 +1380,150 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("会话");
     expect(container.textContent).toContain("上下文");
     expect(container.textContent).toContain("规则");
-    expect(container.textContent).toContain("附件");
-    expect(container.textContent).toContain("页面上下文");
-    expect(container.textContent).toContain("选中内容");
+    expect(container.textContent).toContain("运行");
+  });
+
+  it("keeps drawers collapsed by default", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.querySelector(".bottom-drawer")).toBeNull();
+    expect(container.textContent).not.toContain("会话抽屉");
+    expect(container.textContent).not.toContain("规则配置中心");
+  });
+
+  it("switches drawers with single-open behavior", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      rules: [{
+        id: "rule-1",
+        name: "Example rule",
+        hostnamePattern: "example.com",
+        pathPattern: "*",
+        enabled: true,
+        fields: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const sessionsButton = container.querySelector("button[aria-label='会话']");
+    const rulesButton = container.querySelector("button[aria-label='规则']");
+
+    await act(async () => {
+      sessionsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+    expect(container.textContent).toContain("会话抽屉");
+
+    await act(async () => {
+      rulesButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("规则配置中心");
+    expect(container.textContent).toContain("规则配置中心");
+    expect(container.textContent).not.toContain("历史会话、当前续聊与新草稿");
+  });
+
+  it("keeps composer draft when opening and closing drawers", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+    await act(async () => {
+      textarea.value = "draft preserved";
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await flushUi();
+
+    const contextButton = container.querySelector("button[aria-label='上下文']");
+    await act(async () => {
+      contextButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const closeButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("关闭"));
+    await act(async () => {
+      closeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect((container.querySelector("textarea") as HTMLTextAreaElement).value).toBe("draft preserved");
+  });
+
+  it("keeps main stage continuity while run drawer opens and closes", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "waiting_for_answer",
+        stream: {
+          runId: "run-1",
+          status: "waiting_for_answer",
+          pendingQuestionId: "q-1"
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "waiting_for_answer"
+        },
+        runEvents: [
+          createRunEvent(1, {
+            type: "question",
+            message: "请选择处理方式",
+            question: {
+              questionId: "q-1",
+              title: "需要确认",
+              message: "请选择处理方式",
+              options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+              allowFreeText: false
+            }
+          })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("请选择处理方式");
+
+    const runButton = container.querySelector("button[aria-label='运行']");
+    await act(async () => {
+      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("运行摘要");
+    expect(container.textContent).toContain("请选择处理方式");
+
+    await act(async () => {
+      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("请选择处理方式");
+    expect(container.querySelector(".bottom-drawer")).toBeNull();
   });
 
   it("stays on a blank draft session after clicking new session even when history exists", async () => {

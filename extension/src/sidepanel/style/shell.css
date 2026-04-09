@@ -1,7 +1,6 @@
 .app-shell {
   display: flex;
   flex-direction: column;
-  gap: 16px;
   min-height: 100dvh;
   height: 100dvh;
   padding: 16px;
@@ -11,10 +10,13 @@
 }
 
 .opencode-layout {
-  display: grid;
-  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(280px, 320px);
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
   flex: 1;
+  min-height: 0;
+}
+
+.opencode-layout-single {
   min-height: 0;
 }
 
@@ -33,10 +35,67 @@
 
 .opencode-zone-main {
   min-height: 0;
+  flex: 1;
 }
 
-.opencode-zone-right {
+.bottom-drawer-host {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.bottom-drawer-host.is-collapsed {
+  min-height: 0;
+}
+
+.bottom-drawer {
+  padding: 0;
   overflow: hidden;
+  max-height: min(44dvh, 420px);
+}
+
+.bottom-drawer-header {
+  padding: 14px 16px 0;
+}
+
+.bottom-drawer-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 16px 16px;
+}
+
+.bottom-drawer-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  padding: 0 8px;
+  color: var(--copilot-muted-2);
+}
+
+.run-drawer-panel,
+.run-drawer-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.run-drawer-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.run-drawer-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--cockpit-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .status-rail {
@@ -100,17 +159,12 @@
 }
 
 @media (max-width: 1200px) {
-  .opencode-layout {
-    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
-  }
-
-  .opencode-zone-right {
-    grid-column: 1 / -1;
+  .bottom-drawer {
+    max-height: min(48dvh, 460px);
   }
 }
 
 @media (max-width: 900px) {
-  .opencode-layout,
   .two-column {
     grid-template-columns: 1fr;
   }
