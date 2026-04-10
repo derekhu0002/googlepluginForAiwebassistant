@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "For ELM-002, redesign extension/src/sidepanel around an OpenCode-code-referenced shell: app-entry plus imported style entry, top header, primary conversation stage, auxiliary session/context/rule panels, docked composer, and compact status rail. Reuse existing sidepanel data seams (run orchestration, history, question state, reasoning projection) but split the monolithic App.tsx and styles.css into OpenCode-aligned ownership units. Treat anomalyco/opencode@dev packages/console/app/src and packages/web/src file paths as mandatory implementation references and deliver them to developers as an executable reference map."
+      "value": "For ELM-004, the approved design introduces an explicit main-agent preference across extension sidepanel, shared protocol, background run orchestration, and python adapter selection logic. The UI must expose a lower-left main-agent entry anchored in the composer utility strip and allow only two logical agent IDs: TARA_analyst and ThreatIntelliganceCommander. The recommended baseline default is TARA_analyst, seeded visibly in extension state and persisted locally in chrome.storage.local so the current preference survives sidepanel close/reopen. Every new run must explicitly send the selected logical agent to the adapter; switching affects only future runs and does not mutate in-flight runs. The adapter must stop auto-selecting an implicit canonical analyst agent and instead resolve the requested logical agent against remote /agent discovery using a server-side whitelist plus alias normalization. On success, start_run returns the final effective logical selectedAgent (and may internally track resolved remote canonical agent separately). The UI list remains fixed by product whitelist and is never populated directly from discovery. If the requested agent is not allowed, reject with VALIDATION_ERROR; if discovery succeeds but the requested agent is unavailable remotely, fail the run start explicitly without silent fallback; if discovery transport/payload/runtime evidence fails, surface ANALYSIS_ERROR. Historical runs should record the effective agent so later UI views remain accurate after the user changes the future-run preference."
     }
   ],
   "metadata": {
@@ -19,30 +19,30 @@
     "ai4pb": {
       "managedBy": "opencode",
       "counters": {
-        "ELM": 3
+        "ELM": 4
       },
       "designSummary": "",
       "designDecisions": [],
       "runtime": {
-        "activeGoal": "移除 sidepanel 中遮挡主内容的非功能性语义版块与装饰性状态区，例如“生成回答”“结果阅读”等额外语义包装/摘要卡片，仅保留完成任务所需的真实功能内容与必要状态提示，保证界面更简洁不遮挡。",
+        "activeGoal": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。",
         "validations": {
           "qa": {
             "status": "not_run",
             "summary": "QA not run for the current goal.",
-            "updatedAt": "2026-04-09T09:52:01.485Z"
+            "updatedAt": "2026-04-10T04:08:28.972Z"
           },
           "audit": {
             "status": "not_run",
             "summary": "Audit not run for the current goal.",
-            "updatedAt": "2026-04-09T09:52:01.485Z"
+            "updatedAt": "2026-04-10T04:08:28.972Z"
           }
         },
         "release": {
           "status": "not_started",
           "summary": "Release not prepared for the current goal.",
-          "updatedAt": "2026-04-09T09:52:01.485Z"
+          "updatedAt": "2026-04-10T04:08:28.972Z"
         },
-        "updatedAt": "2026-04-09T12:10:25.910Z"
+        "updatedAt": "2026-04-10T04:09:17.425Z"
       }
     }
   },
@@ -482,38 +482,52 @@
         ]
       },
       {
-        "identifier": "PROJECT-CURRENT",
-        "type": "WorkPackage",
+        "identifier": "ELM-004",
+        "type": "Requirement",
         "name": [
           {
-            "value": "移除 sidepanel 中遮挡主内容的非功能性语义版块与装饰性状态区，例如“生成回答”“结果阅读”等额外语义包装/摘要卡片，仅保留完成任务所需的真实功能内容与必要状态提示，保证界面更简洁不遮挡。"
+            "value": "Formal Requirement"
           }
         ],
         "documentation": [
           {
-            "value": "移除 sidepanel 中遮挡主内容的非功能性语义版块与装饰性状态区，例如“生成回答”“结果阅读”等额外语义包装/摘要卡片，仅保留完成任务所需的真实功能内容与必要状态提示，保证界面更简洁不遮挡。"
+            "value": "# Formal Requirement Draft\n\n## Goal\n让用户在 extension sidepanel 中显式看到并自行选择当前使用的“主 AGENT”，避免 adapter 虽已具备发现 TARA 的能力，但默认仍隐式连接到非用户期望的 primary agent。该能力需要覆盖 UI 展示、用户选择交互、adapter 请求/响应协议、默认值策略以及可选 agent 范围限制，并为后续架构分发提供可执行需求输入。\n\n## Scope\n### In Scope\n1. **UI 展示**\n   - 在 sidepanel 左下角现有底部 icon bar 区域新增“当前主 AGENT”入口。\n   - 入口默认显示当前选中的主 AGENT 名称。\n   - 用户点击后弹出可选菜单。\n\n2. **用户可选范围**\n   - 本轮可选 agent 严格限制为：\n     - `TARA_analyst`\n     - `ThreatIntelliganceCommander`\n\n3. **用户选择行为**\n   - 用户可以在菜单中切换当前要使用的主 AGENT。\n   - 用户切换后，后续新发起的 run 应按该选择执行。\n\n4. **adapter 协议扩展**\n   - `RunStartRequest` 需要支持显式传递所选 agent 字段。\n   - `start_run` 返回结果需要向前端回传最终生效的 selected agent 信息。\n   - 前端与 adapter 之间需要形成“前端显式选择 → adapter 接收 → adapter 执行/确认 → adapter 回传”的闭环。\n\n5. **默认值策略**\n   - 当用户尚未主动选择时，系统需有明确默认值策略。\n   - 默认策略应优先保证“可预测、可见、可解释”，即用户能够在 UI 中看到系统当前将使用哪个 agent，而不是依赖隐式 canonical remote agent 选择结果。\n\n6. **架构流转约束**\n   - 本需求先进入架构分析与任务拆分阶段，再分发开发；不得跳过架构环节直接要求开发实现。\n\n### Out of Scope\n1. 新增第三个或更多 agent。\n2. 修改远端 `/agent` 能力发现机制本身。\n3. 修改 canonical remote agent 发现算法本身，除非为兼容显式选择做必要适配。\n4. 复杂权限、租户、RBAC、组织级 agent 策略。\n5. 历史 run 的回溯重放与按历史 agent 重新执行。\n6. 与 OpenCode Web 完全一致的样式复刻；本轮只要求交互模式对齐。\n7. 模型级、提示词级或 agent 内部能力变更。\n\n## User Stories / Usage Scenarios\n1. **作为普通用户**\n   - 我希望在 sidepanel 底部直接看到当前主 AGENT，\n   - 这样我在发起任务前就知道消息会发给谁。\n\n2. **作为普通用户**\n   - 我希望点击当前主 AGENT 后可以从限定列表中切换，\n   - 这样我能按当前任务场景主动选择 `TARA_analyst` 或 `ThreatIntelliganceCommander`。\n\n3. **作为普通用户**\n   - 我希望我选择的 AGENT 会在后续新 run 中被显式带给 adapter，\n   - 这样系统不会继续因为默认 canonical 选择而偏离我的预期。\n\n4. **作为前端/adapter 集成方**\n   - 我希望 `start_run` 响应明确返回最终生效的 agent，\n   - 这样前端可以准确展示实际执行结果，并处理前后端状态一致性。\n\n5. **作为产品/架构负责人**\n   - 我希望本需求先经过架构分析与拆分，\n   - 这样开发接收到的是明确的模块边界、协议变更点与验收标准，而不是模糊指令。\n\n## Acceptance Criteria\n1. **当前主 AGENT 可见**\n   - 打开 sidepanel 后，用户可在左下角看到一个显示当前主 AGENT 名称的按钮/入口。\n   - 若当前已有选中值，则展示该值；若尚无用户显式选择，则展示默认生效值。\n\n2. **可选范围受限**\n   - 菜单中仅展示以下两个可选项：\n     - `TARA_analyst`\n     - `ThreatIntelliganceCommander`\n   - 不允许展示其他通过远端发现到的 agent。\n\n3. **可完成切换**\n   - 用户点击按钮后可打开菜单并选择其中一个 agent。\n   - 选择完成后，UI 上显示的当前主 AGENT 立即更新为用户新选择的值。\n\n4. **请求显式透传**\n   - 用户在选择 agent 后，后续新发起的 `RunStartRequest` 中包含显式 agent 字段。\n   - 该字段值与 UI 当前显示的选中项一致。\n\n5. **响应显式回传**\n   - `start_run` 响应中包含 selected agent 信息。\n   - 前端使用响应中的 selected agent 更新或确认显示状态。\n\n6. **默认值策略明确**\n   - 在用户首次使用、尚未显式选择 agent 的情况下，系统有定义清晰的默认 agent。\n   - 该默认 agent 必须在 UI 中可见，而不是仅在 adapter 内部隐式决定。\n   - 若本轮未新增额外配置来源，则默认值可基于产品预设或 adapter 返回值确定，但实现方案需在架构阶段落定并对前后端一致。\n\n7. **新 run 生效边界明确**\n   - agent 切换只要求对“切换后的新 run”生效。\n   - 已经启动中的 run 不要求在本轮中途切换 agent。\n\n8. **架构先行**\n   - 该需求输出后需先进入架构师分析/拆分，不直接进入编码实施环节。\n\n## Constraints\n1. 必须基于当前已有 extension sidepanel 结构实现，已有 composer 区与底部 icon bar 是已知承载位置。\n2. 必须兼容当前 python_adapter 已改为远端 `/agent` 能力发现的现状。\n3. 必须补足当前缺失的协议字段：\n   - `RunStartRequest.agent`\n   - `start_run.selected_agent`（字段名可在架构阶段规范化，但语义必须保留）\n4. 可选 agent 名单在本轮必须是固定白名单，不以远端发现结果直接驱动 UI 列表。\n5. 本需求是产品需求 formalization，不包含代码实现方案与具体技术选型。\n\n## Open Questions / Assumptions\n### Assumptions\n1. 本轮默认值策略按 **“有明确默认值且在 UI 可见”** 进行要求，但默认到底是固定预设某一项，还是首轮由 adapter/配置返回后前端展示，由架构阶段最终定稿。\n2. 本轮默认不要求定义跨浏览器/跨设备同步策略。\n3. 本轮默认不要求支持运行中动态切换 agent。\n4. 本轮默认不要求开放白名单配置给终端用户自行编辑。\n\n### Product Recommendation\n为减少不可预测性，建议架构阶段优先评估以下默认值策略作为推荐基线：\n- **推荐默认值：`TARA_analyst`**\n- 理由：满足“默认可预测、可解释、可见”，同时避免继续依赖隐式 canonical remote agent 选择。\n- 如果技术或业务上必须由 adapter 决定最终值，则前端仍必须在首次可见时展示该最终生效值，并在响应中确认。\n\n## Risks\n1. **前后端状态不一致风险**\n   - 若前端展示值与 adapter 最终执行值不一致，会导致用户误判消息发送对象。\n\n2. **默认值策略不清风险**\n   - 若未在架构阶段定死默认优先级（前端预设 / adapter 返回 / 本地缓存），实现容易产生歧义。\n\n3. **发现机制与白名单冲突风险**\n   - 远端 `/agent` 发现结果可能与前端白名单不一致，需明确当目标 agent 不可用时的降级/报错规则。\n\n4. **命名不一致风险**\n   - `ThreatIntelliganceCommander` 命名看起来可能存在拼写历史包袱；若前后端、远端服务或 UI 文案不一致，容易导致协议错误。\n\n5. **既有 run 生命周期边界风险**\n   - 若未明确“仅新 run 生效”，开发可能误做成运行中切换，增加复杂度与缺陷概率。\n\n6. **流程治理风险**\n   - 若未遵守“先架构后开发”，开发可能在协议、状态管理、UI 交互未统一前直接修改，造成返工。"
+          }
+        ]
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。"
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "移除 sidepanel 中遮挡主内容的非功能性语义版块与装饰性状态区，例如“生成回答”“结果阅读”等额外语义包装/摘要卡片，仅保留完成任务所需的真实功能内容与必要状态提示，保证界面更简洁不遮挡。",
+            "rawRequirement": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-030",
+        "identifier": "TASK-043",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "移除 sidepanel 中遮挡主内容的非功能性语义版块与装饰性状态区，例如“生成回答”“结果阅读”等额外语义包装/摘要卡片，仅保留完成任务所需的真实功能内容与必要状态提示，保证界面更简洁不遮挡。"
+            "value": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。"
           }
         ],
         "documentation": [
           {
-            "value": "Fast-track follow-up completed: removed collapsed drawer explanatory placeholder copy from extension/src/sidepanel/App.tsx without changing drawer mechanics. Verified with targeted sidepanel App tests."
+            "value": "Fast-track sidepanel main agent menu fix completed. Replaced composer-local clipped dropdown with overlay-hosted floating menu, preserved the two allowed agent options, added focused interaction coverage, and validated with sidepanel App tests plus extension typecheck."
           }
         ],
         "extensions": {
@@ -524,12 +538,12 @@
             "status": "Done",
             "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Fast-track follow-up completed: removed collapsed drawer explanatory placeholder copy from extension/src/sidepanel/App.tsx without changing drawer mechanics. Verified with targeted sidepanel App tests.",
-            "commitId": "e26a312427f45eff270b945c684330194972e4bb",
+            "summary": "Fast-track sidepanel main agent menu fix completed. Replaced composer-local clipped dropdown with overlay-hosted floating menu, preserved the two allowed agent options, added focused interaction coverage, and validated with sidepanel App tests plus extension typecheck.",
+            "commitId": "af57b1704f9b408a5dfacc787c07f85b65afe1d1",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-09T12:12:32.951Z"
+            "updatedAt": "2026-04-10T04:33:06.568Z"
           }
         }
       }
@@ -866,15 +880,15 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-030",
+        "identifier": "REL-PROJECT-TASK-043",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-030"
+            "value": "Project aggregates TASK-043"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-030",
+        "target": "TASK-043",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."

@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "activeGoal": "移除 sidepanel 中遮挡主内容的非功能性语义版块与装饰性状态区，例如“生成回答”“结果阅读”等额外语义包装/摘要卡片，仅保留完成任务所需的真实功能内容与必要状态提示，保证界面更简洁不遮挡。",
+  "activeGoal": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。",
   "designSummary": "",
   "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-030",
-      "title": "移除 sidepanel 中遮挡主内容的非功能性语义版块与装饰性状态区，例如“生成回答”“结果阅读”等额外语义包装/摘要卡片，仅保留完成任务所需的真实功能内容与必要状态提示，保证界面更简洁不遮挡。",
+      "id": "TASK-043",
+      "title": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。",
       "status": "done",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
-      "summary": "Fast-track follow-up completed: removed collapsed drawer explanatory placeholder copy from extension/src/sidepanel/App.tsx without changing drawer mechanics. Verified with targeted sidepanel App tests.",
-      "details": "Fast-track follow-up completed: removed collapsed drawer explanatory placeholder copy from extension/src/sidepanel/App.tsx without changing drawer mechanics. Verified with targeted sidepanel App tests.",
-      "createdAt": "2026-04-09T09:52:01.485Z",
-      "updatedAt": "2026-04-09T12:12:32.951Z",
-      "commitId": "e26a312427f45eff270b945c684330194972e4bb"
+      "summary": "Fast-track sidepanel main agent menu fix completed. Replaced composer-local clipped dropdown with overlay-hosted floating menu, preserved the two allowed agent options, added focused interaction coverage, and validated with sidepanel App tests plus extension typecheck.",
+      "details": "Fast-track sidepanel main agent menu fix completed. Replaced composer-local clipped dropdown with overlay-hosted floating menu, preserved the two allowed agent options, added focused interaction coverage, and validated with sidepanel App tests plus extension typecheck.",
+      "createdAt": "2026-04-10T04:08:28.972Z",
+      "updatedAt": "2026-04-10T04:33:06.568Z",
+      "commitId": "af57b1704f9b408a5dfacc787c07f85b65afe1d1"
     }
   ],
   "issues": [],
@@ -23,22 +23,22 @@
     "qa": {
       "status": "not_run",
       "summary": "QA not run for the current goal.",
-      "updatedAt": "2026-04-09T09:52:01.485Z"
+      "updatedAt": "2026-04-10T04:08:28.972Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-09T09:52:01.485Z"
+      "updatedAt": "2026-04-10T04:08:28.972Z"
     }
   },
   "release": {
     "status": "not_started",
     "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-09T09:52:01.485Z"
+    "updatedAt": "2026-04-10T04:08:28.972Z"
   },
   "counters": {
-    "task": 30,
+    "task": 43,
     "issue": 1
   },
-  "updatedAt": "2026-04-09T12:12:32.951Z"
+  "updatedAt": "2026-04-10T04:33:06.568Z"
 }
