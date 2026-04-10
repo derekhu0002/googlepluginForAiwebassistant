@@ -1436,6 +1436,48 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("当前 run 继续使用 TARA_analyst；切换只影响后续新 run。");
   });
 
+  it("shows the main agent menu in an overlay and closes after selection", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        mainAgentPreference: DEFAULT_MAIN_AGENT,
+        currentRun: {
+          ...createCurrentRun(),
+          selectedAgent: DEFAULT_MAIN_AGENT,
+          status: "streaming"
+        }
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const trigger = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes(`主 AGENT：${DEFAULT_MAIN_AGENT}`));
+    expect(trigger).toBeTruthy();
+
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const menu = document.body.querySelector(".main-agent-menu");
+    expect(menu).toBeTruthy();
+    expect(menu?.textContent).toContain("TARA_analyst");
+    expect(menu?.textContent).toContain("ThreatIntelliganceCommander");
+
+    const options = Array.from(menu?.querySelectorAll("button") ?? []);
+    expect(options).toHaveLength(2);
+
+    await act(async () => {
+      options[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(document.body.querySelector(".main-agent-menu")).toBeNull();
+  });
+
   it("keeps drawers collapsed by default", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],

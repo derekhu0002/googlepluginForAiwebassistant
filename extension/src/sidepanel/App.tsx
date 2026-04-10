@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { NormalizedRunEvent } from "../shared/protocol";
 import { Composer } from "./components/composer/Composer";
 import { ContextPanel } from "./components/panels/ContextPanel";
@@ -14,6 +14,7 @@ import { useSidepanelController, type DrawerKey } from "./useSidepanelController
 /** @ArchitectureID: ELM-APP-008A */
 export function App() {
   const controller = useSidepanelController();
+  const [mainAgentMenuHost, setMainAgentMenuHost] = useState<HTMLDivElement | null>(null);
 
   return (
     <main
@@ -115,8 +116,13 @@ export function App() {
             )}
           />
 
+          <div className="main-agent-overlay-layer">
+            <div ref={setMainAgentMenuHost} className="main-agent-overlay-root" />
+          </div>
+
           <Composer
             activeDrawer={controller.activeDrawer}
+            agentMenuHost={mainAgentMenuHost}
             drawerItems={controller.drawerItems}
             isBusy={controller.isBusy}
             isSendDisabled={controller.isSendDisabled}

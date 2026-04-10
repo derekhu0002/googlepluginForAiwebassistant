@@ -59,12 +59,26 @@
 }
 
 .main-agent-picker {
-  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 0 6px 0 0;
   flex: 0 0 auto;
+}
+
+.main-agent-overlay-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.main-agent-overlay-root {
+  position: relative;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 .main-agent-trigger {
@@ -84,9 +98,8 @@
 
 .main-agent-menu {
   position: absolute;
-  left: 0;
-  bottom: calc(100% + 8px);
   min-width: 240px;
+  max-width: min(320px, calc(100vw - 32px));
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -95,7 +108,8 @@
   border: 1px solid var(--copilot-border);
   background: var(--cockpit-surface-2);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
-  z-index: 5;
+  z-index: 1;
+  pointer-events: auto;
 }
 
 .main-agent-option {

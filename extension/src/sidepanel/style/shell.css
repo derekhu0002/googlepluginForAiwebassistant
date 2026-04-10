@@ -36,6 +36,7 @@
 .opencode-zone-main {
   min-height: 0;
   flex: 1;
+  position: relative;
 }
 
 .bottom-drawer-host {
