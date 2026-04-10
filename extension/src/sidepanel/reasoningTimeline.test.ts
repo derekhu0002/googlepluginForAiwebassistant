@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { NormalizedRunEvent } from "../shared/protocol";
 import {
   buildChatStreamItems,
+  buildTranscriptMessages,
+  buildTranscriptSummary,
   buildReasoningTimelineItems,
   collectAssistantResponseAggregation,
   collectRunAssistantResponseText,
@@ -25,6 +27,95 @@ function createEvent(sequence: number, overrides: Partial<NormalizedRunEvent> = 
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 describe("reasoning timeline fragment sequence", () => {
+  it("projects fragments into OpenCode-style messages to parts transcript contract", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "请继续",
+      status: "done",
+      pendingQuestionId: null,
+      answers: [{
+        id: "answer-1",
+        runId: "run-1",
+        questionId: "q-1",
+        answer: "继续执行",
+        choiceId: "resume",
+        submittedAt: "2026-04-02T00:00:02.500Z"
+      }],
+      events: [
+        createEvent(1, {
+          type: "question",
+          message: "请选择下一步",
+          question: {
+            questionId: "q-1",
+            title: "需要确认",
+            message: "请选择下一步",
+            options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+            allowFreeText: false
+          }
+        }),
+        createEvent(2, { type: "thinking", message: "我会根据你的选择继续处理。" }),
+        createEvent(3, { type: "result", message: "最终完成" })
+      ],
+      finalOutput: "最终完成",
+      updatedAt: "2026-04-02T00:00:03.000Z"
+    });
+
+    expect(messages.map((message) => `${message.role}:${message.parts.map((part) => part.kind).join(",")}`)).toEqual([
+      "user:prompt",
+      "assistant:question",
+      "user:answer",
+      "assistant:text"
+    ]);
+  });
+
+  it("keeps reasoning and output inside one assistant message when they share a transcript group", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "请回答",
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: "先看上下文",
+          semantic: {
+            channel: "reasoning",
+            emissionKind: "delta",
+            identity: "reasoning:msg-1:part-1",
+            messageId: "msg-1",
+            partId: "part-1"
+          }
+        }),
+        createEvent(2, { type: "result", message: "最终回答", data: { message_id: "msg-1" } })
+      ],
+      status: "done",
+      finalOutput: "最终回答"
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1]?.parts.map((part) => part.kind)).toEqual(["reasoning", "text"]);
+  });
+
+  it("builds transcript tail summary for pause resume and completion states", () => {
+    expect(buildTranscriptSummary({
+      events: [createEvent(1, { type: "question", message: "请选择处理方式" })],
+      runStatus: "waiting_for_answer",
+      streamStatus: "waiting_for_answer",
+      pendingQuestionId: "q-1"
+    })).toMatchObject({
+      label: "等待补充",
+      tone: "warning"
+    });
+
+    expect(buildTranscriptSummary({
+      events: [createEvent(2, { type: "result", message: "最终完成" })],
+      runStatus: "done",
+      streamStatus: "done",
+      finalOutput: "最终完成"
+    })).toMatchObject({
+      label: "已完成",
+      tone: "success"
+    });
+  });
+
   it("aggregates consecutive compact process events for reasoning drawer summaries", () => {
     const items = buildReasoningTimelineItems([
       createEvent(1, { message: "读取页面上下文" }),
@@ -170,6 +261,21 @@ describe("reasoning timeline fragment sequence", () => {
     expect(items[1]?.groupAnchorId).toBe("fragment-group:run-1:q-1");
     expect(items[2]?.groupAnchorId).toBe("fragment-group:run-1:q-1");
     expect(items[3]?.summary).toBe("最终完成");
+  });
+
+  it("keeps live and history transcript messages identical under one contract", () => {
+    const options = {
+      runId: "run-1",
+      prompt: "同一问题",
+      events: [
+        createEvent(1, { type: "thinking", message: "读取页面上下文" }),
+        createEvent(2, { type: "result", message: "一致结果" })
+      ],
+      status: "done" as const,
+      finalOutput: "一致结果"
+    };
+
+    expect(buildTranscriptMessages(options)).toEqual(buildTranscriptMessages(options));
   });
 
   it("binds process fragments and assistant output to the same fragment group anchor", () => {

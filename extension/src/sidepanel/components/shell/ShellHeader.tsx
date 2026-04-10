@@ -22,12 +22,12 @@ export function ShellHeader({
         <div className="shell-mark">OC</div>
         <div>
           <p className="shell-kicker">OpenCode-aligned sidepanel</p>
-          <h1>AI Working Cockpit</h1>
+          <h1>Sidepanel host</h1>
         </div>
       </div>
 
       <div className="shell-header-center">
-        <strong>{cockpitStatus.headline}</strong>
+        <strong>{activeContext?.hostname ?? "当前页面"}</strong>
         <p>{cockpitStatus.detail}</p>
       </div>
 

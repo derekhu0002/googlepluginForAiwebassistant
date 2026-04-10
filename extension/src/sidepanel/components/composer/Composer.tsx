@@ -145,7 +145,7 @@ export function Composer({
       {agentMenu}
       <div className="conversation-composer docked-composer opencode-composer-zone">
         <label className="composer-input-shell copilot-composer-shell">
-          <textarea ref={textareaRef} value={prompt} onChange={(event) => onPromptChange(event.target.value)} onInput={(event) => onPromptChange((event.target as HTMLTextAreaElement).value)} rows={4} placeholder="Ask AI Web Assistant anything about the current page…" />
+          <textarea ref={textareaRef} value={prompt} onChange={(event) => onPromptChange(event.target.value)} onInput={(event) => onPromptChange((event.target as HTMLTextAreaElement).value)} rows={4} placeholder={placeholderQuestionActive ? "继续补充当前问题，transcript 会在原处恢复…" : "Ask AI Web Assistant anything about the current page…"} />
           <button
             type="button"
             className="send-button"
@@ -196,6 +196,7 @@ export function Composer({
             </button>
           </div>
           <div className="conversation-composer-actions compact-composer-actions">
+            {placeholderQuestionActive ? <small className="detail-muted">当前为追问恢复输入，提交后会在同一 transcript 中继续。</small> : null}
             <small className="detail-muted">{nextRunAgentDescription}</small>
             <small className="detail-muted">用户名：{state.usernameContext?.username ?? "unknown"}（{state.usernameContext?.usernameSource ?? "pending"}）</small>
             {sessionDrawerItem?.badge ? <small className="detail-muted">{sessionDrawerItem.badge} 个会话簇</small> : null}

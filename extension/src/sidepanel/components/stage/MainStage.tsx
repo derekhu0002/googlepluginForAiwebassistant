@@ -78,7 +78,7 @@ export function MainStage({
 
       <div className="chat-primary-header section-header compact" data-component="header">
         <div>
-          <h2>AI Working Cockpit</h2>
+          <h2>Transcript</h2>
           <small>{selectedSessionItem ? deriveRunTitle(selectedSessionItem.latestRun) : (activeContext?.hostname ?? "当前对话")}</small>
         </div>
         <div className="chat-primary-meta">
@@ -121,7 +121,7 @@ export function MainStage({
         ) : (
           <div className="chat-empty-hero empty-state">
             <strong>开始一段新的会话</strong>
-            <p>发送 prompt 后，这里会切换成更接近 OpenCode Share 的主舞台：展示摘要、对话、追问、thinking 与 retry。</p>
+            <p>发送 prompt 后，这里会切换成基于 messages[] -&gt; parts[] 的 transcript 主舞台。</p>
           </div>
         )}
       </div>

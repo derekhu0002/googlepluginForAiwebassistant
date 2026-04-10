@@ -20,6 +20,10 @@
   padding: 18px 8px 14px 0;
 }
 
+.transcript-feed {
+  gap: 14px;
+}
+
 .conversation-thread {
   padding: 4px 6px 4px 0;
 }
@@ -86,6 +90,79 @@
   color: var(--copilot-text);
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.18);
   position: relative;
+}
+
+.transcript-message-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.transcript-message-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.transcript-part {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transcript-part + .transcript-part {
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.transcript-part-header,
+.transcript-part-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.transcript-part-header {
+  justify-content: space-between;
+}
+
+.transcript-part-muted {
+  color: var(--copilot-muted);
+}
+
+.transcript-summary {
+  margin-top: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.transcript-summary strong,
+.transcript-summary p {
+  margin: 0;
+}
+
+.transcript-summary p {
+  margin-top: 4px;
+  color: var(--copilot-muted);
+}
+
+.transcript-summary-success {
+  border-color: rgba(46, 160, 67, 0.28);
+}
+
+.transcript-summary-warning {
+  border-color: rgba(198, 144, 38, 0.28);
+}
+
+.transcript-summary-danger {
+  border-color: rgba(218, 54, 51, 0.28);
+}
+
+.transcript-summary-progress {
+  border-color: rgba(14, 99, 156, 0.28);
 }
 
 .assistant-thinking-panel {
@@ -245,30 +322,11 @@
   font-weight: 700;
 }
 
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.status-active { background: rgba(14, 99, 156, 0.2); color: #9cdcfe; }
-.status-complete { background: rgba(46, 160, 67, 0.2); color: #7ee787; }
-.status-waiting { background: rgba(198, 144, 38, 0.2); color: #f2cc60; }
-.status-attention { background: rgba(218, 54, 51, 0.16); color: #ff7b72; }
-
-.conversation-turn.is-active .conversation-bubble {
-  box-shadow: 0 0 0 1px rgba(14, 99, 156, 0.54), 0 20px 40px rgba(0, 0, 0, 0.24);
-}
-
-.conversation-turn.is-waiting .conversation-bubble {
+.turn-question .conversation-bubble {
   background: linear-gradient(180deg, rgba(78, 59, 22, 0.46) 0%, rgba(37, 37, 38, 1) 100%);
 }
 
-.conversation-turn.is-attention .conversation-bubble {
+.turn-error .conversation-bubble {
   background: linear-gradient(180deg, rgba(88, 30, 30, 0.48) 0%, rgba(37, 37, 38, 1) 100%);
 }
 

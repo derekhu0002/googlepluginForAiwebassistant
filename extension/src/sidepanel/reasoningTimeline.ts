@@ -144,6 +144,49 @@ export interface ChatStreamItemModel {
   feedbackState?: MessageFeedbackUiState;
 }
 
+export type TranscriptMessageRole = "user" | "assistant";
+export type TranscriptPartKind = "prompt" | "answer" | "text" | "reasoning" | "tool" | "question" | "error";
+
+export interface TranscriptPartModel {
+  id: string;
+  kind: TranscriptPartKind;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+  anchorId: string;
+  groupAnchorId: string;
+  originEventTypes: NormalizedEventType[];
+  badges: FragmentBadgeModel[];
+  question?: QuestionPayload;
+  answer?: AnswerRecord;
+  pendingQuestion?: boolean;
+}
+
+export interface TranscriptMessageModel {
+  id: string;
+  runId: string;
+  role: TranscriptMessageRole;
+  createdAt: string;
+  updatedAt: string;
+  anchorId: string;
+  groupAnchorId: string;
+  parts: TranscriptPartModel[];
+  sourceQuestionPrompt?: string;
+  supportsCopy: boolean;
+  supportsRetry: boolean;
+  supportsFeedback: boolean;
+  feedbackState?: MessageFeedbackUiState;
+  actionAnchorId?: string;
+}
+
+export interface TranscriptSummaryModel {
+  label: string;
+  detail: string;
+  tone: FragmentBadgeTone;
+  runId?: string | null;
+  updatedAt?: string | null;
+}
+
 export interface BuildChatStreamItemsOptions {
   runId?: string | null;
   prompt?: string | null;
@@ -1236,6 +1279,97 @@ function dedupeFragmentSequence(items: ChatStreamItemModel[]) {
   return deduped;
 }
 
+function getTranscriptRole(item: ChatStreamItemModel): TranscriptMessageRole {
+  return item.kind === "user_prompt" || item.kind === "user_answer" ? "user" : "assistant";
+}
+
+function getTranscriptPartKind(item: ChatStreamItemModel): TranscriptPartKind {
+  switch (item.kind) {
+    case "user_prompt":
+      return "prompt";
+    case "user_answer":
+      return "answer";
+    case "assistant_process":
+      return item.primaryType === "tool_call" ? "tool" : "reasoning";
+    case "assistant_question":
+      return "question";
+    case "assistant_error":
+      return "error";
+    default:
+      return "text";
+  }
+}
+
+function createTranscriptPart(item: ChatStreamItemModel): TranscriptPartModel {
+  return {
+    id: item.id,
+    kind: getTranscriptPartKind(item),
+    text: item.summary,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    anchorId: item.anchorId,
+    groupAnchorId: item.groupAnchorId,
+    originEventTypes: item.originEventTypes,
+    badges: item.badges,
+    question: item.question,
+    answer: item.answer,
+    pendingQuestion: item.pendingQuestion
+  };
+}
+
+function canMergeTranscriptMessage(current: TranscriptMessageModel | null, item: ChatStreamItemModel) {
+  if (!current) {
+    return false;
+  }
+
+  const role = getTranscriptRole(item);
+  if (current.role !== role || current.runId !== item.runId) {
+    return false;
+  }
+
+  if (role === "user") {
+    return false;
+  }
+
+  return current.groupAnchorId === item.groupAnchorId;
+}
+
+function createTranscriptMessage(item: ChatStreamItemModel): TranscriptMessageModel {
+  return {
+    id: `message:${item.runId}:${item.groupAnchorId}:${getTranscriptRole(item)}`,
+    runId: item.runId,
+    role: getTranscriptRole(item),
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    anchorId: item.anchorId,
+    groupAnchorId: item.groupAnchorId,
+    parts: [createTranscriptPart(item)],
+    sourceQuestionPrompt: item.sourceQuestionPrompt,
+    supportsCopy: item.supportsCopy,
+    supportsRetry: item.supportsRetry,
+    supportsFeedback: item.supportsFeedback,
+    feedbackState: item.feedbackState,
+    actionAnchorId: item.supportsCopy || item.supportsRetry || item.supportsFeedback ? item.anchorId : undefined
+  };
+}
+
+function mergeTranscriptMessage(current: TranscriptMessageModel, item: ChatStreamItemModel) {
+  const next: TranscriptMessageModel = {
+    ...current,
+    anchorId: current.anchorId || item.anchorId,
+    updatedAt: item.updatedAt,
+    parts: [...current.parts, createTranscriptPart(item)],
+    sourceQuestionPrompt: item.sourceQuestionPrompt ?? current.sourceQuestionPrompt,
+    supportsCopy: current.supportsCopy || item.supportsCopy,
+    supportsRetry: current.supportsRetry || item.supportsRetry,
+    supportsFeedback: current.supportsFeedback || item.supportsFeedback,
+    feedbackState: item.feedbackState ?? current.feedbackState,
+    actionAnchorId: item.supportsCopy || item.supportsRetry || item.supportsFeedback ? item.anchorId : current.actionAnchorId
+  };
+
+  return next;
+}
+
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildFragmentSequence(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
   const runId = options.runId ?? "standalone-run";
@@ -1485,6 +1619,109 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
 
 export function buildChatStreamItems(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
   return buildFragmentSequence(options);
+}
+
+/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+export function buildTranscriptMessages(options: BuildChatStreamItemsOptions): TranscriptMessageModel[] {
+  const fragments = buildFragmentSequence(options);
+  const messages: TranscriptMessageModel[] = [];
+
+  for (const item of fragments) {
+    const current = messages[messages.length - 1] ?? null;
+    if (canMergeTranscriptMessage(current, item)) {
+      messages[messages.length - 1] = mergeTranscriptMessage(current, item);
+      continue;
+    }
+
+    messages.push(createTranscriptMessage(item));
+  }
+
+  return messages;
+}
+
+/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
+export function buildTranscriptSummary(options: {
+  events: NormalizedRunEvent[];
+  runStatus?: TimelineRunStatus;
+  streamStatus?: TimelineStreamStatus;
+  finalOutput?: string | null;
+  errorMessage?: string | null;
+  pendingQuestionId?: string | null;
+  runId?: string | null;
+  updatedAt?: string | null;
+}): TranscriptSummaryModel {
+  const presentationState = resolveTimelinePresentationState(options);
+  const waitingForAnswer = Boolean(options.pendingQuestionId)
+    || presentationState.runStatus === "waiting_for_answer"
+    || presentationState.streamStatus === "waiting_for_answer";
+
+  if (presentationState.runStatus === "error" || presentationState.streamStatus === "error") {
+    return {
+      label: "已中断",
+      detail: trimTerminalText(options.errorMessage) || "本轮对话已中断，请查看失败提示后决定是否重试。",
+      tone: "danger",
+      runId: options.runId,
+      updatedAt: options.updatedAt
+    };
+  }
+
+  if (waitingForAnswer) {
+    return {
+      label: "等待补充",
+      detail: "当前 transcript 已暂停，等待补充信息后会在原位置继续。",
+      tone: "warning",
+      runId: options.runId,
+      updatedAt: options.updatedAt
+    };
+  }
+
+  if (presentationState.runStatus === "done") {
+    return {
+      label: "已完成",
+      detail: "本轮回答已就绪，可继续追问、复制结果或发起重试。",
+      tone: "success",
+      runId: options.runId,
+      updatedAt: options.updatedAt
+    };
+  }
+
+  if (presentationState.streamStatus === "reconnecting") {
+    return {
+      label: "重新连接中",
+      detail: "事件流正在恢复，transcript 会继续在底部追加。",
+      tone: "progress",
+      runId: options.runId,
+      updatedAt: options.updatedAt
+    };
+  }
+
+  if (presentationState.streamStatus === "connecting") {
+    return {
+      label: "连接中",
+      detail: "正在建立事件流连接，准备继续更新 transcript。",
+      tone: "progress",
+      runId: options.runId,
+      updatedAt: options.updatedAt
+    };
+  }
+
+  if (options.events.length > 0) {
+    return {
+      label: "进行中",
+      detail: "当前 transcript 正在继续生成，新的 message parts 会持续追加。",
+      tone: "progress",
+      runId: options.runId,
+      updatedAt: options.updatedAt
+    };
+  }
+
+  return {
+    label: "待开始",
+    detail: "发送新消息后，这里会按统一的 message-part transcript 合同开始展示。",
+    tone: "neutral",
+    runId: options.runId,
+    updatedAt: options.updatedAt
+  };
 }
 
 export function buildConversationTurns(events: NormalizedRunEvent[]): ConversationTurnModel[] {

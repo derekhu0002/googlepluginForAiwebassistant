@@ -433,7 +433,7 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "START_RUN", payload: { prompt: initialAssistantState.runPrompt, selectedAgent: DEFAULT_MAIN_AGENT, capturePageData: false } });
     expect(runtimeSendMessage).not.toHaveBeenCalledWith({ type: "RECAPTURE" });
     expect(mockCreateRunEventStream).toHaveBeenCalledWith("run-1", expect.objectContaining({ onEvent: expect.any(Function), onError: expect.any(Function) }));
-    expect(container.textContent).toContain("You");
+    expect(container.textContent).not.toContain("You");
     expect(container.textContent).toContain(initialAssistantState.runPrompt);
   });
 
@@ -589,14 +589,14 @@ describe("side panel host permission request flow", () => {
       throw new Error("expected createRunEventStream to be called");
     }
     const handlers = lastCall[1] as unknown as { onStatusChange?: (status: "connecting" | "streaming" | "reconnecting") => void; onError: (error: Error) => void };
-    expect(container.textContent).toContain("连接中…");
+    expect(container.textContent).toContain("连接中");
 
     await act(async () => {
       handlers.onStatusChange?.("reconnecting");
     });
     await flushUi();
 
-    expect(container.textContent).toContain("正在重新连接…");
+    expect(container.textContent).toContain("重新连接中");
     expect(container.textContent).not.toContain("SSE connection failed");
 
     await act(async () => {
@@ -871,8 +871,8 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("You");
-    expect(container.textContent).toContain("Assistant");
+    expect(container.textContent).not.toContain("You");
+    expect(container.textContent).not.toContain("Assistant");
     expect(container.textContent).toContain("最终结论");
     expect(container.textContent).not.toContain("读取页面上下文");
     expect(container.textContent).not.toContain("查询历史 SR");
@@ -1200,7 +1200,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("历史结果");
-    expect(container.textContent).toContain("You");
+    expect(container.textContent).not.toContain("You");
     expect(container.textContent).not.toContain("历史思考 1");
     expect(container.textContent).not.toContain("历史思考 2");
     expect(container.textContent).not.toContain("展开推理过程");
@@ -1308,7 +1308,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("AI Working Cockpit");
+    expect(container.textContent).toContain("Transcript");
     expect(container.querySelector("button[aria-label='会话']")).not.toBeNull();
     expect(container.textContent).toContain("个会话簇");
   });
@@ -1379,7 +1379,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("等待补充信息");
+    expect(container.textContent).toContain("当前为追问恢复输入");
   });
 
   it("renders persistent icon bar entries for drawers", async () => {
@@ -1609,7 +1609,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("运行摘要");
+    expect(container.textContent).toContain("Transcript 尾部摘要");
     expect(container.textContent).toContain("请选择处理方式");
 
     await act(async () => {
@@ -2063,5 +2063,86 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).not.toContain("正在检索相关信息");
     expect(container.textContent).not.toContain("token=123");
     expect(container.textContent).not.toContain("grep");
+  });
+
+  it("renders transcript summary at the tail instead of role labels or status chips", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          finalOutput: "最终回答",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [createRunEvent(1, { type: "result", message: "最终回答" })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("已完成");
+    expect(container.textContent).toContain("本轮回答已就绪");
+    expect(container.textContent).not.toContain("You");
+    expect(container.textContent).not.toContain("Assistant failed");
+  });
+
+  it("keeps pause resume follow-up inside the same transcript stream", async () => {
+    mockSubmitQuestionAnswer.mockResolvedValue({ ok: true });
+
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "waiting_for_answer",
+        stream: {
+          runId: "run-1",
+          status: "waiting_for_answer",
+          pendingQuestionId: "q-1"
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "waiting_for_answer",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [
+          createRunEvent(1, {
+            type: "question",
+            message: "请选择处理方式",
+            question: {
+              questionId: "q-1",
+              title: "需要确认",
+              message: "请选择处理方式",
+              options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+              allowFreeText: false
+            }
+          })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("请选择处理方式");
+    expect(container.textContent).toContain("当前 transcript 已暂停");
+
+    const submitButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("提交回答"));
+    await act(async () => {
+      submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("正在继续…");
   });
 });

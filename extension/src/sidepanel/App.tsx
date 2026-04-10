@@ -112,6 +112,7 @@ export function App() {
                 selectedThreadStatus={controller.selectedThreadStatus ?? controller.state.status}
                 selectedThreadStreamStatus={controller.selectedThreadStreamStatus ?? controller.state.stream.status}
                 questionMessage={controller.questionEvent?.question?.message ?? null}
+                transcriptSummary={controller.transcriptSummary}
               />
             )}
           />
@@ -210,7 +211,8 @@ function RunDrawerPanel({
   selectedThreadError,
   selectedThreadRunId,
   selectedThreadStatus,
-  selectedThreadStreamStatus
+  selectedThreadStreamStatus,
+  transcriptSummary
 }: {
   hasLivePendingQuestion: boolean;
   latestReasoningItems: NormalizedRunEvent[];
@@ -220,26 +222,28 @@ function RunDrawerPanel({
   selectedThreadRunId: string | null;
   selectedThreadStatus: string;
   selectedThreadStreamStatus: string;
+  transcriptSummary: { label: string; detail: string; };
 }) {
   return (
     <section className="run-drawer-panel">
       <div className="run-drawer-grid">
         <article className="status-card demoted-card">
-          <strong>当前运行</strong>
+          <strong>外围状态</strong>
           <small>状态：{selectedThreadStatus}</small>
           <small>流连接：{selectedThreadStreamStatus}</small>
           {selectedThreadRunId ? <small>Run：{selectedThreadRunId}</small> : null}
         </article>
         <article className="status-card demoted-card">
-          <strong>追问入口</strong>
+          <strong>暂停 / 恢复</strong>
           <small>{hasLivePendingQuestion ? (questionMessage ?? "等待回答当前追问") : "当前无待回答追问"}</small>
           <span className={`pill ${hasLivePendingQuestion ? "pill-warning" : "pill-muted"}`}>{hasLivePendingQuestion ? "追问待答" : "主舞台连续"}</span>
         </article>
       </div>
 
       <article className="status-card demoted-card">
-        <strong>运行摘要</strong>
-        <p>{selectedThreadError || latestRunSummary}</p>
+        <strong>Transcript 尾部摘要</strong>
+        <p>{transcriptSummary.label} · {transcriptSummary.detail}</p>
+        {selectedThreadError || latestRunSummary ? <small>{selectedThreadError || latestRunSummary}</small> : null}
       </article>
 
       <article className="status-card demoted-card">

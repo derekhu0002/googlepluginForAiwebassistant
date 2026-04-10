@@ -5,25 +5,17 @@ import { submitMessageFeedback } from "../shared/api";
 import type { AnswerRecord, MessageFeedbackValue, QuestionPayload, RunRecord } from "../shared/protocol";
 import type { MessageFeedbackUiState, StreamConnectionState } from "../shared/types";
 import {
-  buildChatStreamItems,
+  buildTranscriptMessages,
+  buildTranscriptSummary,
   getDefaultFeedbackMessage,
-  getTimelineCardStatus,
   resolveTimelinePresentationState,
   type BuildChatStreamItemsOptions,
-  type ChatStreamItemModel
+  type TranscriptMessageModel,
+  type TranscriptPartModel
 } from "./reasoningTimeline";
 
 const TYPEWRITER_INTERVAL_MS = 24;
 const GENERIC_STREAMING_COPY = "正在继续…";
-
-const CHAT_ITEM_SORT_RANK: Record<ChatStreamItemModel["kind"], number> = {
-  user_prompt: 0,
-  user_answer: 1,
-  assistant_process: 2,
-  assistant_output: 3,
-  assistant_question: 4,
-  assistant_error: 5
-};
 
 function isNearBottom(element: HTMLDivElement | null) {
   if (!element) {
@@ -91,19 +83,6 @@ function useBufferedTypewriter(text: string, enabled: boolean) {
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleTimeString();
-}
-
-function getStatusLabel(status: ReturnType<typeof getTimelineCardStatus>) {
-  switch (status) {
-    case "active":
-      return "进行中";
-    case "waiting":
-      return "待确认";
-    case "attention":
-      return "需处理";
-    default:
-      return "已记录";
-  }
 }
 
 function renderAnswerLabel(answer?: AnswerRecord) {
@@ -224,9 +203,77 @@ function InlineQuestionComposer({
   );
 }
 
-function ChatStreamTurn({
-  item,
-  status,
+function getMessageTone(message: TranscriptMessageModel) {
+  if (message.role === "user") {
+    return "user";
+  }
+
+  if (message.parts.some((part) => part.kind === "error")) {
+    return "error";
+  }
+
+  if (message.parts.some((part) => part.kind === "question" && part.pendingQuestion)) {
+    return "question";
+  }
+
+  return "assistant";
+}
+
+function TranscriptPartBlock({
+  part,
+  animate,
+  live,
+  onQuestionSubmit,
+  questionSubmitDisabled
+}: {
+  part: TranscriptPartModel;
+  animate: boolean;
+  live: boolean;
+  onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
+  questionSubmitDisabled?: boolean;
+}) {
+  const isUser = part.kind === "prompt" || part.kind === "answer";
+  const shouldAnimateSummary = animate && !isUser && Boolean(part.text) && part.text !== GENERIC_STREAMING_COPY;
+  const displayedSummary = useBufferedTypewriter(part.text, shouldAnimateSummary);
+  const messageText = isUser ? part.text : displayedSummary;
+  const showStreamingIndicator = live && part.kind === "text" && animate;
+  const messageClassName = [
+    "conversation-message transcript-part-message",
+    part.kind === "reasoning" || part.kind === "tool" ? "conversation-message-muted transcript-part-muted" : ""
+  ].filter(Boolean).join(" ");
+
+  return (
+    <div className={`transcript-part transcript-part-${part.kind} ${part.kind === "reasoning" ? "assistant-thinking-item" : ""}`} data-part-anchor={part.anchorId}>
+      <div className="transcript-part-header">
+        <div className="transcript-part-heading">
+          {showStreamingIndicator ? <span className="streaming-indicator">生成中</span> : null}
+          {part.kind === "answer" ? renderAnswerLabel(part.answer) : null}
+          {part.badges.length ? (
+            <span className="fragment-badge-list">
+              {part.badges.map((badge) => (
+                <span key={`${part.id}:${badge.label}`} className={`fragment-badge fragment-badge-${badge.tone}`}>{badge.label}</span>
+              ))}
+            </span>
+          ) : null}
+        </div>
+        <small>{formatTimestamp(part.updatedAt)}</small>
+      </div>
+
+      {messageText ? (
+        isUser
+          ? <p className={messageClassName}>{messageText}</p>
+          : <MarkdownMessage text={messageText} className={messageClassName} />
+      ) : null}
+
+      {part.kind === "question" && part.question && part.pendingQuestion && onQuestionSubmit ? (
+        <InlineQuestionComposer question={part.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
+      ) : null}
+    </div>
+  );
+}
+
+function TranscriptMessageCard({
+  message,
   animate,
   live,
   onRetry,
@@ -235,90 +282,70 @@ function ChatStreamTurn({
   onQuestionSubmit,
   questionSubmitDisabled
 }: {
-  item: ChatStreamItemModel;
-  status: ReturnType<typeof getTimelineCardStatus>;
+  message: TranscriptMessageModel;
   animate: boolean;
   live: boolean;
-  onRetry?: (item: ChatStreamItemModel) => void;
-  onCopy?: (item: ChatStreamItemModel) => void;
-  onFeedback?: (item: ChatStreamItemModel, feedback: MessageFeedbackValue) => void;
+  onRetry?: (message: TranscriptMessageModel) => void;
+  onCopy?: (message: TranscriptMessageModel) => void;
+  onFeedback?: (message: TranscriptMessageModel, feedback: MessageFeedbackValue) => void;
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
 }) {
-  const isUser = item.kind === "user_prompt" || item.kind === "user_answer";
-  const isThinkingProcess = item.kind === "assistant_process" && item.primaryType === "thinking";
-  const shouldAnimateSummary = animate && !isUser && Boolean(item.summary) && item.summary !== GENERIC_STREAMING_COPY;
-  const displayedSummary = useBufferedTypewriter(item.summary, shouldAnimateSummary);
-  const roleLabel = isUser ? "You" : item.kind === "assistant_error" ? "Assistant failed" : "Assistant";
-  const avatarLabel = item.kind === "assistant_question" ? "?" : item.kind === "assistant_error" ? "!" : isUser ? "你" : "AI";
-  const messageText = isUser ? item.summary : displayedSummary;
-  const showStreamingIndicator = live && item.kind === "assistant_output" && status === "active";
-  const feedbackMessage = item.feedbackState?.message || getDefaultFeedbackMessage(item.feedbackState?.status ?? "idle", item.feedbackState?.selected);
-  const messageClassName = [
-    "conversation-message",
-    item.kind === "assistant_process" ? "conversation-message-muted conversation-fragment-process-copy" : ""
-  ].filter(Boolean).join(" ");
+  const tone = getMessageTone(message);
+  const isUser = message.role === "user";
+  const avatarLabel = tone === "question" ? "?" : tone === "error" ? "!" : isUser ? "你" : "AI";
+  const feedbackMessage = message.feedbackState?.message || getDefaultFeedbackMessage(message.feedbackState?.status ?? "idle", message.feedbackState?.selected);
 
   return (
-    <article className={`conversation-turn conversation-fragment conversation-fragment-${item.kind} ${isThinkingProcess ? "assistant-thinking-item" : ""} ${isUser ? "turn-user" : item.kind === "assistant_error" ? "turn-error" : item.kind === "assistant_question" ? "turn-question" : "turn-assistant"} is-${status}`} data-fragment-anchor={item.anchorId} data-fragment-group-anchor={item.groupAnchorId}>
+    <article className={`conversation-turn transcript-message turn-${tone}`} data-message-anchor={message.anchorId} data-message-group-anchor={message.groupAnchorId}>
       <div className="conversation-avatar" aria-hidden="true">{avatarLabel}</div>
-      <div className={`conversation-bubble ${isUser ? "user-bubble" : ""}`}>
-        <div className="conversation-turn-header">
-          <div className="conversation-turn-heading">
-            <strong>{roleLabel}</strong>
-            {!isUser ? <span className={`status-chip status-${status}`}>{getStatusLabel(status)}</span> : null}
-            {showStreamingIndicator ? <span className="streaming-indicator">生成中</span> : null}
-            {item.kind === "user_answer" ? renderAnswerLabel(item.answer) : null}
-            {!isUser && item.badges.length ? (
-              <span className="fragment-badge-list">
-                {item.badges.map((badge) => (
-                  <span key={`${item.id}:${badge.label}`} className={`fragment-badge fragment-badge-${badge.tone}`}>{badge.label}</span>
-                ))}
-              </span>
-            ) : null}
-          </div>
-          <small>{formatTimestamp(item.updatedAt)}</small>
+      <div className={`conversation-bubble transcript-message-bubble ${isUser ? "user-bubble" : ""}`}>
+        <div className="transcript-message-parts">
+          {message.parts.map((part, index) => (
+            <TranscriptPartBlock
+              key={`${message.id}:${part.id}:${index}`}
+              part={part}
+              animate={animate && index === message.parts.length - 1}
+              live={live}
+              onQuestionSubmit={onQuestionSubmit}
+              questionSubmitDisabled={questionSubmitDisabled}
+            />
+          ))}
         </div>
-
-        {messageText ? (
-          isUser
-            ? <p className={messageClassName}>{messageText}</p>
-            : <MarkdownMessage text={messageText} className={messageClassName} />
-        ) : null}
 
         {!isUser ? (
           <div className="conversation-hover-actions" aria-label="message actions">
-            {item.supportsCopy ? (
-              <button type="button" className="icon-button" aria-label="复制" title="复制" onClick={() => onCopy?.(item)}>
+            {message.supportsCopy ? (
+              <button type="button" className="icon-button" aria-label="复制" title="复制" onClick={() => onCopy?.(message)}>
                 <CopyIcon />
               </button>
             ) : null}
-            {item.supportsFeedback ? (
+            {message.supportsFeedback ? (
               <>
                 <button
                   type="button"
-                  className={`icon-button ${item.feedbackState?.selected === "like" && item.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
+                  className={`icon-button ${message.feedbackState?.selected === "like" && message.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
                   aria-label="点赞"
                   title="点赞"
-                  disabled={item.feedbackState?.status === "submitting"}
-                  onClick={() => onFeedback?.(item, "like")}
+                  disabled={message.feedbackState?.status === "submitting"}
+                  onClick={() => onFeedback?.(message, "like")}
                 >
                   <LikeIcon />
                 </button>
                 <button
                   type="button"
-                  className={`icon-button ${item.feedbackState?.selected === "dislike" && item.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
+                  className={`icon-button ${message.feedbackState?.selected === "dislike" && message.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
                   aria-label="点踩"
                   title="点踩"
-                  disabled={item.feedbackState?.status === "submitting"}
-                  onClick={() => onFeedback?.(item, "dislike")}
+                  disabled={message.feedbackState?.status === "submitting"}
+                  onClick={() => onFeedback?.(message, "dislike")}
                 >
                   <DislikeIcon />
                 </button>
               </>
             ) : null}
-            {item.supportsRetry ? (
-              <button type="button" className="icon-button" aria-label="重试" title="重试" onClick={() => onRetry?.(item)}>
+            {message.supportsRetry ? (
+              <button type="button" className="icon-button" aria-label="重试" title="重试" onClick={() => onRetry?.(message)}>
                 <RetryIcon />
               </button>
             ) : null}
@@ -326,11 +353,7 @@ function ChatStreamTurn({
         ) : null}
 
         {!isUser && feedbackMessage ? (
-          <small className={`feedback-status feedback-${item.feedbackState?.status ?? "idle"}`}>{feedbackMessage}</small>
-        ) : null}
-
-        {item.kind === "assistant_question" && item.question && item.pendingQuestion && onQuestionSubmit ? (
-          <InlineQuestionComposer question={item.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
+          <small className={`feedback-status feedback-${message.feedbackState?.status ?? "idle"}`}>{feedbackMessage}</small>
         ) : null}
       </div>
     </article>
@@ -389,31 +412,8 @@ export function ReasoningTimeline({
     finalOutput,
     errorMessage
   }), [errorMessage, events, finalOutput, runStatus, streamStatus]);
-  const inlineStatusCopy = useMemo(() => {
-    if (presentationState.runStatus === "error" || presentationState.streamStatus === "error") {
-      return "本轮已中断，可直接重试。";
-    }
-
-    if (
-      pendingQuestionId
-      || assistantStatus === "waiting_for_answer"
-      || presentationState.runStatus === "waiting_for_answer"
-      || presentationState.streamStatus === "waiting_for_answer"
-    ) {
-      return "等待补充信息…";
-    }
-
-    if (presentationState.streamStatus === "reconnecting") {
-      return "正在重新连接…";
-    }
-
-    if (presentationState.streamStatus === "connecting") {
-      return "连接中…";
-    }
-
-    return "";
-  }, [assistantStatus, pendingQuestionId, presentationState.runStatus, presentationState.streamStatus]);
-  const items = useMemo(() => buildChatStreamItems({
+  const inlineStatusCopy = useMemo(() => "", [assistantStatus, pendingQuestionId, presentationState.runStatus, presentationState.streamStatus]);
+  const messages = useMemo(() => buildTranscriptMessages({
     runId,
     prompt,
     events,
@@ -425,15 +425,15 @@ export function ReasoningTimeline({
     updatedAt,
     pendingQuestionId
   }), [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runStatus, updatedAt]);
-  const mergedItems = useMemo(() => {
-    const fragments = runSegments?.length
+  const mergedMessages = useMemo(() => {
+    const merged = runSegments?.length
       ? runSegments
-        .flatMap((segment, segmentIndex) => buildChatStreamItems({
+        .flatMap((segment, segmentIndex) => buildTranscriptMessages({
           ...segment,
           feedbackByMessageId
-        }).map((item, itemIndex) => ({ item, segmentIndex, itemIndex })))
+        }).map((message, itemIndex) => ({ message, segmentIndex, itemIndex })))
         .sort((left, right) => {
-          const timestampDelta = new Date(left.item.createdAt).getTime() - new Date(right.item.createdAt).getTime();
+          const timestampDelta = new Date(left.message.createdAt).getTime() - new Date(right.message.createdAt).getTime();
           if (timestampDelta !== 0) {
             return timestampDelta;
           }
@@ -448,18 +448,23 @@ export function ReasoningTimeline({
             return itemDelta;
           }
 
-          const rankDelta = CHAT_ITEM_SORT_RANK[left.item.kind] - CHAT_ITEM_SORT_RANK[right.item.kind];
-          if (rankDelta !== 0) {
-            return rankDelta;
-          }
-
-          return left.item.id.localeCompare(right.item.id);
+          return left.message.id.localeCompare(right.message.id);
         })
-        .map(({ item }) => item)
-      : items;
+        .map(({ message }) => message)
+      : messages;
 
-    return fragments.length ? fragments : items;
-  }, [feedbackByMessageId, items, runSegments]);
+    return merged.length ? merged : messages;
+  }, [feedbackByMessageId, messages, runSegments]);
+  const transcriptSummary = useMemo(() => buildTranscriptSummary({
+    events,
+    runStatus,
+    streamStatus,
+    finalOutput,
+    errorMessage,
+    pendingQuestionId,
+    runId,
+    updatedAt
+  }), [errorMessage, events, finalOutput, pendingQuestionId, runId, runStatus, streamStatus, updatedAt]);
 
   useEffect(() => {
     setFeedbackByMessageId({});
@@ -470,7 +475,7 @@ export function ReasoningTimeline({
   }, [live]);
 
   useEffect(() => {
-    const signature = mergedItems.map((item) => `${item.id}:${item.summary.length}:${item.updatedAt}`).join("|");
+    const signature = mergedMessages.map((message) => `${message.id}:${message.parts.map((part) => part.text.length).join(",")}:${message.updatedAt}`).join("|");
     if (!live || !signature || signature === previousSignatureRef.current) {
       previousSignatureRef.current = signature;
       return;
@@ -485,12 +490,11 @@ export function ReasoningTimeline({
           containerRef.current.scrollTop = containerRef.current.scrollHeight;
         }
       });
-      return;
     }
-  }, [autoFollow, live, mergedItems]);
+  }, [autoFollow, live, mergedMessages]);
 
-  async function handleCopy(item: ChatStreamItemModel) {
-    const text = item.summary.trim();
+  async function handleCopy(message: TranscriptMessageModel) {
+    const text = message.parts.map((part) => part.text.trim()).filter(Boolean).join("\n\n");
     if (!text) {
       return;
     }
@@ -500,10 +504,11 @@ export function ReasoningTimeline({
     }
   }
 
-  async function handleFeedback(item: ChatStreamItemModel, feedback: MessageFeedbackValue) {
+  async function handleFeedback(message: TranscriptMessageModel, feedback: MessageFeedbackValue) {
+    const messageId = message.actionAnchorId ?? message.anchorId;
     setFeedbackByMessageId((current) => ({
       ...current,
-      [item.anchorId]: {
+      [messageId]: {
         status: "submitting",
         selected: feedback,
         message: getDefaultFeedbackMessage("submitting", feedback)
@@ -511,15 +516,15 @@ export function ReasoningTimeline({
     }));
 
     const response = await submitMessageFeedback({
-      runId: item.runId,
-      messageId: item.anchorId,
+      runId: message.runId,
+      messageId,
       feedback
     });
 
     if (!response.ok) {
       setFeedbackByMessageId((current) => ({
         ...current,
-        [item.anchorId]: {
+        [messageId]: {
           status: "error",
           selected: feedback,
           message: normalizeFeedbackFailureMessage(response.error.message)
@@ -530,7 +535,7 @@ export function ReasoningTimeline({
 
     setFeedbackByMessageId((current) => ({
       ...current,
-      [item.anchorId]: {
+      [messageId]: {
         status: "submitted",
         selected: response.data.feedback,
         message: getDefaultFeedbackMessage("submitted", response.data.feedback)
@@ -538,15 +543,15 @@ export function ReasoningTimeline({
     }));
   }
 
-  async function handleRetry(item: ChatStreamItemModel) {
-    if (!item.sourceQuestionPrompt || !item.runId || !onRetry) {
+  async function handleRetry(message: TranscriptMessageModel) {
+    if (!message.sourceQuestionPrompt || !message.runId || !onRetry) {
       return;
     }
 
     await onRetry({
-      prompt: item.sourceQuestionPrompt,
-      runId: item.runId,
-      messageId: item.anchorId
+      prompt: message.sourceQuestionPrompt,
+      runId: message.runId,
+      messageId: message.actionAnchorId ?? message.anchorId
     });
   }
 
@@ -554,36 +559,35 @@ export function ReasoningTimeline({
     <div className="timeline-shell conversation-timeline-shell chat-stream-shell">
       {inlineStatusCopy ? <p className="conversation-inline-status detail-muted" role="status" aria-live="polite">{inlineStatusCopy}</p> : null}
       <div
-        className="event-feed conversation-thread chat-stream-feed"
+        className="event-feed transcript-feed conversation-thread chat-stream-feed"
         ref={containerRef}
         onScroll={() => {
           const nearBottom = isNearBottom(containerRef.current);
           setAutoFollow(nearBottom);
         }}
       >
-        {mergedItems.length ? mergedItems.map((item, index) => (
-          <ChatStreamTurn
-            key={`${item.runId}:${item.id}`}
-            item={item}
-            status={getTimelineCardStatus({
-              type: item.primaryType === "user_prompt" || item.primaryType === "user_answer" ? "result" : item.primaryType,
-              isLast: index === mergedItems.length - 1,
-              live,
-              streamStatus: presentationState.streamStatus,
-              runStatus: presentationState.runStatus
-            })}
+        {mergedMessages.length ? mergedMessages.map((message, index) => (
+          <TranscriptMessageCard
+            key={`${message.runId}:${message.id}`}
+            message={message}
             animate={live
               && (presentationState.streamStatus === "connecting" || presentationState.streamStatus === "streaming" || presentationState.streamStatus === "reconnecting")
-              && index === mergedItems.length - 1
-              && item.kind === "assistant_output"}
+              && index === mergedMessages.length - 1
+              && message.role === "assistant"}
             live={live}
             onCopy={handleCopy}
             onFeedback={handleFeedback}
             onRetry={handleRetry}
-            onQuestionSubmit={item.kind === "assistant_question" ? onQuestionSubmit : undefined}
+            onQuestionSubmit={onQuestionSubmit}
             questionSubmitDisabled={questionSubmitDisabled}
           />
         )) : <p className="empty-state chat-empty-state">{emptyText}</p>}
+        {mergedMessages.length ? (
+          <footer className={`transcript-summary transcript-summary-${transcriptSummary.tone}`} data-component="summary">
+            <strong>{transcriptSummary.label}</strong>
+            <p>{transcriptSummary.detail}</p>
+          </footer>
+        ) : null}
       </div>
     </div>
   );
