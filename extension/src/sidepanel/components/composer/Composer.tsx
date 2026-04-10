@@ -169,7 +169,7 @@ export function Composer({
                 aria-controls={agentMenuOpen ? agentMenuId : undefined}
                 onClick={() => setAgentMenuOpen((current) => !current)}
               >
-                主 AGENT：{state.mainAgentPreference}
+                {state.mainAgentPreference}
               </button>
             </div>
             {drawerItems.map((item) => (
