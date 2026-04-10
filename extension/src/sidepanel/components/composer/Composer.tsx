@@ -6,6 +6,7 @@ import type { DrawerBarItem, DrawerKey } from "../../useSidepanelController";
 import { CaptureIcon, ContextIcon, RulesIcon, SendIcon, SessionIcon } from "../shared/icons";
 import { RunIcon } from "../shared/icons";
 
+/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
 export function Composer({
   activeDrawer,
   agentMenuHost,
@@ -167,9 +168,10 @@ export function Composer({
                 aria-haspopup="menu"
                 aria-expanded={agentMenuOpen}
                 aria-controls={agentMenuOpen ? agentMenuId : undefined}
+                aria-label={`主 AGENT：${state.mainAgentPreference}`}
                 onClick={() => setAgentMenuOpen((current) => !current)}
               >
-                {state.mainAgentPreference}
+                {`主 AGENT：${state.mainAgentPreference}`}
               </button>
             </div>
             {drawerItems.map((item) => (

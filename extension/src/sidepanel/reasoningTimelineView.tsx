@@ -19,9 +19,9 @@ const GENERIC_STREAMING_COPY = "正在继续…";
 const CHAT_ITEM_SORT_RANK: Record<ChatStreamItemModel["kind"], number> = {
   user_prompt: 0,
   user_answer: 1,
-  assistant_question: 2,
-  assistant_progress: 3,
-  assistant_result: 4,
+  assistant_process: 2,
+  assistant_output: 3,
+  assistant_question: 4,
   assistant_error: 5
 };
 
@@ -124,46 +124,6 @@ function MarkdownMessage({ text, className }: { text: string; className: string 
       <ReactMarkdown>{text}</ReactMarkdown>
     </div>
   );
-}
-
-function sanitizeThinkingDisplayText(text: string) {
-  const cleaned = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !/^(已复用当前\s+opencode\s+session|已创建\s+opencode\s+session|已连接当前会话|读取页面上下文|整理可用字段|查询历史|调用工具|模型正在推理。?|opencode\s+session\s+状态更新[:：]?.*)$/iu.test(line))
-    .filter((line) => !/\bsoftware_version=\(empty\)|\bselected_sr=\(empty\)|\bbusy\b/iu.test(line))
-    .join("\n")
-    .trim();
-
-  if (!cleaned) {
-    return "";
-  }
-
-  const blocks = cleaned
-    .split(/\n{1,2}/u)
-    .map((block) => block.trim())
-    .filter(Boolean);
-  const uniqueBlocks: string[] = [];
-  const seen = new Set<string>();
-
-  for (const block of blocks) {
-    const key = block.replace(/\s+/gu, " ").trim();
-    if (!key || seen.has(key)) {
-      continue;
-    }
-
-    if (uniqueBlocks.some((existingBlock) => {
-      const existingKey = existingBlock.replace(/\s+/gu, " ").trim();
-      return existingKey === key || existingKey.includes(key) || key.includes(existingKey);
-    })) {
-      continue;
-    }
-
-    seen.add(key);
-    uniqueBlocks.push(block);
-  }
-
-  return uniqueBlocks.join("\n\n").trim();
 }
 
 function CopyIcon() {
@@ -286,26 +246,21 @@ function ChatStreamTurn({
   questionSubmitDisabled?: boolean;
 }) {
   const isUser = item.kind === "user_prompt" || item.kind === "user_answer";
+  const isThinkingProcess = item.kind === "assistant_process" && item.primaryType === "thinking";
   const shouldAnimateSummary = animate && !isUser && Boolean(item.summary) && item.summary !== GENERIC_STREAMING_COPY;
   const displayedSummary = useBufferedTypewriter(item.summary, shouldAnimateSummary);
-  const thinkingItems = item.processItems
-    .map((processItem) => ({
-      ...processItem,
-      summary: sanitizeThinkingDisplayText(processItem.summary)
-    }))
-    .filter((processItem) => processItem.type === "thinking" && Boolean(processItem.summary.trim()));
   const roleLabel = isUser ? "You" : item.kind === "assistant_error" ? "Assistant failed" : "Assistant";
   const avatarLabel = item.kind === "assistant_question" ? "?" : item.kind === "assistant_error" ? "!" : isUser ? "你" : "AI";
   const messageText = isUser ? item.summary : displayedSummary;
-  const showStreamingIndicator = live && item.kind === "assistant_progress";
+  const showStreamingIndicator = live && item.kind === "assistant_output" && status === "active";
   const feedbackMessage = item.feedbackState?.message || getDefaultFeedbackMessage(item.feedbackState?.status ?? "idle", item.feedbackState?.selected);
   const messageClassName = [
     "conversation-message",
-    item.kind === "assistant_progress" ? "conversation-message-muted" : ""
+    item.kind === "assistant_process" ? "conversation-message-muted conversation-fragment-process-copy" : ""
   ].filter(Boolean).join(" ");
 
   return (
-    <article className={`conversation-turn ${isUser ? "turn-user" : item.kind === "assistant_error" ? "turn-error" : item.kind === "assistant_question" ? "turn-question" : "turn-assistant"} is-${status}`}>
+    <article className={`conversation-turn conversation-fragment conversation-fragment-${item.kind} ${isThinkingProcess ? "assistant-thinking-item" : ""} ${isUser ? "turn-user" : item.kind === "assistant_error" ? "turn-error" : item.kind === "assistant_question" ? "turn-question" : "turn-assistant"} is-${status}`} data-fragment-anchor={item.anchorId} data-fragment-group-anchor={item.groupAnchorId}>
       <div className="conversation-avatar" aria-hidden="true">{avatarLabel}</div>
       <div className={`conversation-bubble ${isUser ? "user-bubble" : ""}`}>
         <div className="conversation-turn-header">
@@ -314,24 +269,17 @@ function ChatStreamTurn({
             {!isUser ? <span className={`status-chip status-${status}`}>{getStatusLabel(status)}</span> : null}
             {showStreamingIndicator ? <span className="streaming-indicator">生成中</span> : null}
             {item.kind === "user_answer" ? renderAnswerLabel(item.answer) : null}
+            {!isUser && item.badges.length ? (
+              <span className="fragment-badge-list">
+                {item.badges.map((badge) => (
+                  <span key={`${item.id}:${badge.label}`} className={`fragment-badge fragment-badge-${badge.tone}`}>{badge.label}</span>
+                ))}
+              </span>
+            ) : null}
           </div>
           <small>{formatTimestamp(item.updatedAt)}</small>
         </div>
 
-        {!isUser && thinkingItems.length ? (
-          <section className="assistant-thinking-panel" aria-label="thinking panel">
-            <div className="assistant-thinking-panel-header">
-              <strong>Thinking</strong>
-            </div>
-            <div className="assistant-thinking-feed">
-              {thinkingItems.map((processItem) => (
-                <article key={processItem.id} className="assistant-thinking-item">
-                  <p>{processItem.summary}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        ) : null}
         {messageText ? (
           isUser
             ? <p className={messageClassName}>{messageText}</p>
@@ -478,39 +426,39 @@ export function ReasoningTimeline({
     pendingQuestionId
   }), [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runStatus, updatedAt]);
   const mergedItems = useMemo(() => {
-    if (!runSegments?.length) {
-      return items;
-    }
+    const fragments = runSegments?.length
+      ? runSegments
+        .flatMap((segment, segmentIndex) => buildChatStreamItems({
+          ...segment,
+          feedbackByMessageId
+        }).map((item, itemIndex) => ({ item, segmentIndex, itemIndex })))
+        .sort((left, right) => {
+          const timestampDelta = new Date(left.item.createdAt).getTime() - new Date(right.item.createdAt).getTime();
+          if (timestampDelta !== 0) {
+            return timestampDelta;
+          }
 
-    return runSegments
-      .flatMap((segment, segmentIndex) => buildChatStreamItems({
-        ...segment,
-        feedbackByMessageId
-      }).map((item, itemIndex) => ({ item, segmentIndex, itemIndex })))
-      .sort((left, right) => {
-        const timestampDelta = new Date(left.item.createdAt).getTime() - new Date(right.item.createdAt).getTime();
-        if (timestampDelta !== 0) {
-          return timestampDelta;
-        }
+          const segmentDelta = left.segmentIndex - right.segmentIndex;
+          if (segmentDelta !== 0) {
+            return segmentDelta;
+          }
 
-        const segmentDelta = left.segmentIndex - right.segmentIndex;
-        if (segmentDelta !== 0) {
-          return segmentDelta;
-        }
+          const itemDelta = left.itemIndex - right.itemIndex;
+          if (itemDelta !== 0) {
+            return itemDelta;
+          }
 
-        const itemDelta = left.itemIndex - right.itemIndex;
-        if (itemDelta !== 0) {
-          return itemDelta;
-        }
+          const rankDelta = CHAT_ITEM_SORT_RANK[left.item.kind] - CHAT_ITEM_SORT_RANK[right.item.kind];
+          if (rankDelta !== 0) {
+            return rankDelta;
+          }
 
-        const rankDelta = CHAT_ITEM_SORT_RANK[left.item.kind] - CHAT_ITEM_SORT_RANK[right.item.kind];
-        if (rankDelta !== 0) {
-          return rankDelta;
-        }
+          return left.item.id.localeCompare(right.item.id);
+        })
+        .map(({ item }) => item)
+      : items;
 
-        return left.item.id.localeCompare(right.item.id);
-      })
-      .map(({ item }) => item);
+    return fragments.length ? fragments : items;
   }, [feedbackByMessageId, items, runSegments]);
 
   useEffect(() => {
@@ -522,7 +470,7 @@ export function ReasoningTimeline({
   }, [live]);
 
   useEffect(() => {
-    const signature = mergedItems.map((item) => `${item.id}:${item.summary.length}:${item.processItems.length}:${item.updatedAt}`).join("|");
+    const signature = mergedItems.map((item) => `${item.id}:${item.summary.length}:${item.updatedAt}`).join("|");
     if (!live || !signature || signature === previousSignatureRef.current) {
       previousSignatureRef.current = signature;
       return;
@@ -555,7 +503,7 @@ export function ReasoningTimeline({
   async function handleFeedback(item: ChatStreamItemModel, feedback: MessageFeedbackValue) {
     setFeedbackByMessageId((current) => ({
       ...current,
-      [item.id]: {
+      [item.anchorId]: {
         status: "submitting",
         selected: feedback,
         message: getDefaultFeedbackMessage("submitting", feedback)
@@ -564,14 +512,14 @@ export function ReasoningTimeline({
 
     const response = await submitMessageFeedback({
       runId: item.runId,
-      messageId: item.id,
+      messageId: item.anchorId,
       feedback
     });
 
     if (!response.ok) {
       setFeedbackByMessageId((current) => ({
         ...current,
-        [item.id]: {
+        [item.anchorId]: {
           status: "error",
           selected: feedback,
           message: normalizeFeedbackFailureMessage(response.error.message)
@@ -582,7 +530,7 @@ export function ReasoningTimeline({
 
     setFeedbackByMessageId((current) => ({
       ...current,
-      [item.id]: {
+      [item.anchorId]: {
         status: "submitted",
         selected: response.data.feedback,
         message: getDefaultFeedbackMessage("submitted", response.data.feedback)
@@ -598,7 +546,7 @@ export function ReasoningTimeline({
     await onRetry({
       prompt: item.sourceQuestionPrompt,
       runId: item.runId,
-      messageId: item.id
+      messageId: item.anchorId
     });
   }
 
@@ -627,7 +575,7 @@ export function ReasoningTimeline({
             animate={live
               && (presentationState.streamStatus === "connecting" || presentationState.streamStatus === "streaming" || presentationState.streamStatus === "reconnecting")
               && index === mergedItems.length - 1
-              && (item.kind === "assistant_progress" || item.kind === "assistant_result")}
+              && item.kind === "assistant_output"}
             live={live}
             onCopy={handleCopy}
             onFeedback={handleFeedback}

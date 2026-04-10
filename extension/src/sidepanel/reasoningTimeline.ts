@@ -9,8 +9,8 @@ const DEFAULT_EVENT_TITLES: Record<NormalizedEventType, string> = {
   error: "运行失败"
 };
 
-const AGGREGATED_EVENT_TYPES = new Set<NormalizedEventType>(["thinking", "tool_call"]);
 const SMALL_EVENT_MESSAGE_LIMIT = 140;
+const AGGREGATED_EVENT_TYPES = new Set<NormalizedEventType>(["thinking", "tool_call"]);
 const ORCHESTRATION_NOISE_PATTERNS = [
   /^已创建\s+opencode\s+session/iu,
   /^已连接主分析代理/iu,
@@ -59,9 +59,18 @@ const INLINE_ANSWER_START_PATTERNS = [
   /(?:^|\n)\d+\.\s/u,
   /(?:^|\n)[#>*-]\s/u
 ];
+const GENERIC_STREAMING_COPY = "正在继续…";
 
 export type TimelineCardStatus = "active" | "complete" | "waiting" | "attention";
 export type ConversationTurnKind = "assistant" | "question" | "error";
+export type FragmentBadgeTone = "neutral" | "progress" | "warning" | "danger" | "success";
+export type ChatStreamItemKind =
+  | "user_prompt"
+  | "user_answer"
+  | "assistant_output"
+  | "assistant_process"
+  | "assistant_question"
+  | "assistant_error";
 
 export interface TimelineEventEntry {
   id: string;
@@ -107,16 +116,15 @@ export interface ReasoningSectionModel {
   summary: string;
 }
 
-export type ChatStreamItemKind =
-  | "user_prompt"
-  | "user_answer"
-  | "assistant_progress"
-  | "assistant_question"
-  | "assistant_result"
-  | "assistant_error";
+export interface FragmentBadgeModel {
+  label: string;
+  tone: FragmentBadgeTone;
+}
 
 export interface ChatStreamItemModel {
   id: string;
+  anchorId: string;
+  groupAnchorId: string;
   runId: string;
   kind: ChatStreamItemKind;
   title: string;
@@ -124,8 +132,8 @@ export interface ChatStreamItemModel {
   createdAt: string;
   updatedAt: string;
   primaryType: NormalizedEventType | "user_prompt" | "user_answer";
-  processItems: TimelineCardModel[];
-  processSummary: string;
+  badges: FragmentBadgeModel[];
+  originEventTypes: NormalizedEventType[];
   question?: QuestionPayload;
   answer?: AnswerRecord;
   pendingQuestion?: boolean;
@@ -136,12 +144,42 @@ export interface ChatStreamItemModel {
   feedbackState?: MessageFeedbackUiState;
 }
 
-const GENERIC_STREAMING_COPY = "正在继续…";
+export interface BuildChatStreamItemsOptions {
+  runId?: string | null;
+  prompt?: string | null;
+  events: NormalizedRunEvent[];
+  answers?: AnswerRecord[];
+  feedbackByMessageId?: Record<string, MessageFeedbackUiState>;
+  finalOutput?: string | null;
+  errorMessage?: string | null;
+  status?: RunRecord["status"];
+  updatedAt?: string | null;
+  pendingQuestionId?: string | null;
+}
+
+export interface AssistantResponseAggregation {
+  text: string;
+  firstResponseAt: string | null;
+  lastResponseAt: string | null;
+  preferredMessageId: string | null;
+  hasResponseEvent: boolean;
+}
+
+export type TimelineAssistantStatus = "idle" | "collecting" | "streaming" | "waiting_for_answer" | "done" | "error";
+type TimelineRunStatus = RunRecord["status"];
+type TimelineStreamStatus = "idle" | "connecting" | "streaming" | "reconnecting" | "waiting_for_answer" | "done" | "error";
+
+export interface CockpitStatusModel {
+  stageKey: "ready" | "collecting" | "connecting" | "working" | "awaiting_input" | "completed" | "error";
+  stageLabel: string;
+  modeLabel: string;
+  headline: string;
+  detail: string;
+  tone: "neutral" | "progress" | "warning" | "success" | "danger";
+}
 
 export function createIdleFeedbackState(): MessageFeedbackUiState {
-  return {
-    status: "idle"
-  };
+  return { status: "idle" };
 }
 
 export function getDefaultFeedbackMessage(status: MessageFeedbackUiState["status"], selected?: MessageFeedbackValue) {
@@ -176,85 +214,80 @@ function normalizeMessage(message: string) {
   return message.trim();
 }
 
-function isCompactEvent(event: NormalizedRunEvent) {
-  return AGGREGATED_EVENT_TYPES.has(event.type) && normalizeMessage(event.message).length <= SMALL_EVENT_MESSAGE_LIMIT;
+function trimTerminalText(value?: string | null) {
+  return value?.trim() || "";
 }
 
-function canAggregate(current: TimelineCardModel | null, event: NormalizedRunEvent) {
-  if (!current || !isCompactEvent(event) || !current.entries.length || current.type !== event.type) {
-    return false;
-  }
-
-  const lastEntry = current.entries[current.entries.length - 1];
-  return isCompactEvent({ ...event, message: lastEntry.message }) && current.runId === event.runId;
+function getEventDataValue(event: Pick<NormalizedRunEvent, "data">, key: string) {
+  return typeof event.data?.[key] === "string" ? event.data[key] as string : undefined;
 }
 
-function canMergeThinkingSnapshot(current: TimelineCardModel | null, event: NormalizedRunEvent) {
-  if (!current || current.type !== "thinking" || event.type !== "thinking" || current.runId !== event.runId) {
+function getEventSemanticIdentity(event: Pick<NormalizedRunEvent, "semantic">) {
+  return event.semantic?.identity?.trim() || undefined;
+}
+
+function getEventSemanticChannel(event: Pick<NormalizedRunEvent, "semantic">) {
+  return event.semantic?.channel;
+}
+
+function getTimelineCardSemanticIdentity(item: Pick<TimelineCardModel, "entries">) {
+  return item.entries.map((entry) => entry.semantic?.identity?.trim() || undefined).find(Boolean);
+}
+
+function getTimelineCardSemanticChannel(item: Pick<TimelineCardModel, "entries">) {
+  return item.entries.map((entry) => entry.semantic?.channel).find(Boolean);
+}
+
+function getAssistantResponseMessageId(event: Pick<NormalizedRunEvent, "id" | "data" | "semantic">) {
+  return event.semantic?.messageId?.trim() || getEventDataValue(event, "message_id") || event.id;
+}
+
+export function isAssistantResponseDeltaEvent(event: NormalizedRunEvent) {
+  if (event.type !== "thinking") {
     return false;
   }
 
-  const currentSemanticIdentity = getTimelineCardSemanticIdentity(current);
-  const nextSemanticIdentity = getEventSemanticIdentity(event);
-  const currentSemanticChannel = getTimelineCardSemanticChannel(current);
-  const nextSemanticChannel = getEventSemanticChannel(event);
-
-  if (currentSemanticIdentity && nextSemanticIdentity) {
-    return currentSemanticChannel === "reasoning"
-      && nextSemanticChannel === "reasoning"
-      && currentSemanticIdentity === nextSemanticIdentity;
-  }
-
-  const currentSummary = current.summary.trim();
-  const nextSummary = normalizeMessage(event.message);
-  if (!currentSummary || !nextSummary) {
-    return false;
-  }
-
-  if (currentSummary === nextSummary) {
+  if (getEventSemanticChannel(event) === "assistant_text") {
     return true;
   }
 
-  const currentComparable = currentSummary.replace(/\s+/gu, " ").trim();
-  const nextComparable = nextSummary.replace(/\s+/gu, " ").trim();
+  return getEventDataValue(event, "field") === "text";
+}
 
-  if (nextComparable.includes(currentComparable) || currentComparable.includes(nextComparable)) {
-    return true;
+function getAssistantResponseThinkingEmissionKind(event: NormalizedRunEvent) {
+  if (!isAssistantResponseDeltaEvent(event)) {
+    return undefined;
   }
 
-  const commonPrefixLength = getCommonPrefixLength(currentComparable, nextComparable);
-  const shorterLength = Math.min(currentComparable.length, nextComparable.length);
-  return shorterLength > 0 && commonPrefixLength / shorterLength >= 0.75;
+  return event.semantic?.emissionKind === "snapshot" ? "snapshot" : "delta";
 }
 
-function createTimelineEntry(event: NormalizedRunEvent): TimelineEventEntry {
-  return {
-    id: event.id,
-    type: event.type,
-    createdAt: event.createdAt,
-    message: normalizeMessage(event.question?.message ?? event.message),
-    title: getEventTitle(event),
-    data: event.data,
-    logData: event.logData,
-    question: event.question,
-    semantic: event.semantic
-  };
+export function isAssistantResponseSnapshotEvent(event: NormalizedRunEvent) {
+  return event.type === "result";
 }
 
-function summarizeEntries(entries: TimelineEventEntry[]) {
-  const uniqueMessages: string[] = [];
+function getTextOverlapLength(left: string, right: string) {
+  const maxOverlap = Math.min(left.length, right.length);
 
-  for (const entry of entries) {
-    if (!entry.message) {
-      continue;
-    }
-
-    if (uniqueMessages[uniqueMessages.length - 1] !== entry.message) {
-      uniqueMessages.push(entry.message);
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    if (left.slice(-size) === right.slice(0, size)) {
+      return size;
     }
   }
 
-  return uniqueMessages.join("\n");
+  return 0;
+}
+
+function getCommonPrefixLength(left: string, right: string) {
+  const maxPrefix = Math.min(left.length, right.length);
+
+  for (let index = 0; index < maxPrefix; index += 1) {
+    if (left[index] !== right[index]) {
+      return index;
+    }
+  }
+
+  return maxPrefix;
 }
 
 function joinUniqueParagraphs(parts: string[]) {
@@ -276,6 +309,62 @@ function hasSubstantialChineseContent(text: string) {
 
 function countLatinLetters(text: string) {
   return (text.match(/[A-Za-z]/gu)?.length ?? 0);
+}
+
+function normalizeMarkdownStructure(text: string) {
+  return text
+    .replace(/\r\n/gu, "\n")
+    .replace(/([^\n])(?=(#{1,6}\s))/gu, "$1\n\n")
+    .replace(/([^\n])(?=(\d+\.\s))/gu, "$1\n\n")
+    .replace(/\n(?=\d+\.\s)/gu, "\n\n")
+    .replace(/([^\n])(?=(-\s))/gu, "$1\n\n")
+    .replace(/\n{3,}/gu, "\n\n");
+}
+
+function splitMarkdownBlocks(text: string) {
+  return text.split(/\n{2,}/gu).map((block) => block.trim()).filter(Boolean);
+}
+
+function getComparableBlockKey(text: string) {
+  return text.replace(/\s+/gu, " ").trim();
+}
+
+function shouldTreatComparableTextsAsDuplicate(left: string, right: string) {
+  if (!left || !right) {
+    return false;
+  }
+
+  if (left === right || left.includes(right) || right.includes(left)) {
+    return true;
+  }
+
+  const commonPrefixLength = getCommonPrefixLength(left, right);
+  const shorterLength = Math.min(left.length, right.length);
+  return shorterLength > 0 && commonPrefixLength / shorterLength >= 0.75;
+}
+
+function dedupeMarkdownBlocks(blocks: string[]) {
+  const uniqueBlocks: string[] = [];
+
+  for (const block of blocks) {
+    const comparableKey = getComparableBlockKey(block);
+    if (!comparableKey) {
+      continue;
+    }
+
+    const duplicateIndex = uniqueBlocks.findIndex((candidate) => shouldTreatComparableTextsAsDuplicate(getComparableBlockKey(candidate), comparableKey));
+    if (duplicateIndex < 0) {
+      uniqueBlocks.push(block.trim());
+      continue;
+    }
+
+    const existingComparable = getComparableBlockKey(uniqueBlocks[duplicateIndex] ?? "");
+    if (comparableKey.length > existingComparable.length) {
+      uniqueBlocks[duplicateIndex] = block.trim();
+    }
+  }
+
+  return uniqueBlocks;
 }
 
 function findInlineAnswerStartIndex(text: string) {
@@ -329,128 +418,13 @@ function isLikelyLeakedReasoningLine(line: string) {
   return LEAKED_REASONING_PREFIX_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
-function normalizeMarkdownStructure(text: string) {
-  return text
-    .replace(/\r\n/gu, "\n")
-    .replace(/([^\n])(?=(#{1,6}\s))/gu, "$1\n\n")
-    .replace(/([^\n])(?=(\d+\.\s))/gu, "$1\n\n")
-    .replace(/\n(?=\d+\.\s)/gu, "\n\n")
-    .replace(/([^\n])(?=(-\s))/gu, "$1\n\n")
-    .replace(/\n{3,}/gu, "\n\n");
-}
-
-function splitMarkdownBlocks(text: string) {
-  return text
-    .split(/\n{2,}/gu)
-    .map((block) => block.trim())
-    .filter(Boolean);
-}
-
-function getComparableBlockKey(text: string) {
-  return text.replace(/\s+/gu, " ").trim();
-}
-
-function shouldTreatComparableTextsAsDuplicate(left: string, right: string) {
-  if (!left || !right) {
-    return false;
-  }
-
-  if (left === right || left.includes(right) || right.includes(left)) {
-    return true;
-  }
-
-  const commonPrefixLength = getCommonPrefixLength(left, right);
-  const shorterLength = Math.min(left.length, right.length);
-  return shorterLength > 0 && commonPrefixLength / shorterLength >= 0.75;
-}
-
 function isLikelyLeakedReasoningBlock(block: string) {
-  const lines = block
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
+  const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
   if (!lines.length) {
     return false;
   }
 
   return lines.every((line) => isLikelyLeakedReasoningLine(line)) || isLikelyLeakedReasoningLine(lines[0]);
-}
-
-function dedupeMarkdownBlocks(blocks: string[]) {
-  const uniqueBlocks: string[] = [];
-
-  for (const block of blocks) {
-    const comparableKey = getComparableBlockKey(block);
-    if (!comparableKey) {
-      continue;
-    }
-
-    const duplicateIndex = uniqueBlocks.findIndex((candidate) => shouldTreatComparableTextsAsDuplicate(
-      getComparableBlockKey(candidate),
-      comparableKey
-    ));
-
-    if (duplicateIndex < 0) {
-      uniqueBlocks.push(block.trim());
-      continue;
-    }
-
-    const existingComparable = getComparableBlockKey(uniqueBlocks[duplicateIndex] ?? "");
-    if (comparableKey.length > existingComparable.length) {
-      uniqueBlocks[duplicateIndex] = block.trim();
-    }
-  }
-
-  return uniqueBlocks;
-}
-
-function dedupeProcessItems(items: TimelineCardModel[]) {
-  const uniqueItems: TimelineCardModel[] = [];
-
-  for (const item of items) {
-    const semanticIdentity = getTimelineCardSemanticIdentity(item);
-    if (semanticIdentity) {
-      const semanticMatchIndex = uniqueItems.findIndex((candidate) => getTimelineCardSemanticIdentity(candidate) === semanticIdentity);
-      if (semanticMatchIndex >= 0) {
-        const existingItem = uniqueItems[semanticMatchIndex];
-        const existingSummary = getComparableBlockKey(normalizeMarkdownStructure(existingItem.summary));
-        const comparableSummary = getComparableBlockKey(normalizeMarkdownStructure(item.summary));
-        if (comparableSummary.length >= existingSummary.length) {
-          uniqueItems[semanticMatchIndex] = item;
-        }
-        continue;
-      }
-    }
-
-    const comparableSummary = getComparableBlockKey(normalizeMarkdownStructure(item.summary));
-    if (!comparableSummary) {
-      continue;
-    }
-
-    const duplicateIndex = uniqueItems.findIndex((candidate) => {
-      if (candidate.type !== item.type) {
-        return false;
-      }
-
-      return shouldTreatComparableTextsAsDuplicate(
-        getComparableBlockKey(normalizeMarkdownStructure(candidate.summary)),
-        comparableSummary
-      );
-    });
-
-    if (duplicateIndex < 0) {
-      uniqueItems.push(item);
-      continue;
-    }
-
-    const existingComparable = getComparableBlockKey(normalizeMarkdownStructure(uniqueItems[duplicateIndex]?.summary ?? ""));
-    if (comparableSummary.length > existingComparable.length) {
-      uniqueItems[duplicateIndex] = item;
-    }
-  }
-
-  return uniqueItems;
 }
 
 function isLikelyOrchestrationNoiseLine(line: string) {
@@ -473,6 +447,35 @@ function isLikelyOrchestrationNoiseLine(line: string) {
     || /\bbusy\b/iu.test(normalized);
 }
 
+function hasReasoningSignals(message: string) {
+  return REASONING_SIGNAL_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+function isMeaningfulThinkingMessage(message: string) {
+  const normalized = normalizeMessage(message).replace(/\s+/gu, " ");
+  if (!normalized) {
+    return false;
+  }
+
+  if (ORCHESTRATION_NOISE_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return false;
+  }
+
+  if (/^(called\s+|已?调用[:：]?)/iu.test(normalized)) {
+    return false;
+  }
+
+  if (normalized.length <= 18 && !hasReasoningSignals(normalized)) {
+    return false;
+  }
+
+  if (PROCESS_PREFIX_PATTERN.test(normalized) && !hasReasoningSignals(normalized)) {
+    return false;
+  }
+
+  return true;
+}
+
 function sanitizeAssistantThinkingText(text: string, answerText?: string | null) {
   const normalized = normalizeMarkdownStructure(text).trim();
   if (!normalized) {
@@ -481,7 +484,6 @@ function sanitizeAssistantThinkingText(text: string, answerText?: string | null)
 
   const answerBlocks = dedupeMarkdownBlocks(splitMarkdownBlocks(normalizeMarkdownStructure(answerText?.trim() || "")));
   const comparableAnswerBlocks = answerBlocks.map((block) => getComparableBlockKey(block)).filter(Boolean);
-
   const filteredBlocks = splitMarkdownBlocks(normalized)
     .map((block) => block
       .split("\n")
@@ -505,7 +507,6 @@ function sanitizeAssistantThinkingText(text: string, answerText?: string | null)
 function subtractAnswerTextFromThinking(thinkingText: string, answerText?: string | null) {
   const normalizedThinking = normalizeMarkdownStructure(thinkingText).trim();
   const normalizedAnswer = normalizeMarkdownStructure(answerText?.trim() || "").trim();
-
   if (!normalizedThinking || !normalizedAnswer) {
     return normalizedThinking;
   }
@@ -519,19 +520,14 @@ function subtractAnswerTextFromThinking(thinkingText: string, answerText?: strin
     return normalizedThinking.slice(0, directIndex).trim();
   }
 
-  const answerLines = normalizedAnswer
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const answerLines = normalizedAnswer.split("\n").map((line) => line.trim()).filter(Boolean);
   const firstAnswerLine = answerLines[0];
-
   if (!firstAnswerLine) {
     return normalizedThinking;
   }
 
   const thinkingLines = normalizedThinking.split("\n");
   const answerStartIndex = thinkingLines.findIndex((line) => line.trim() === firstAnswerLine);
-
   if (answerStartIndex >= 0) {
     return thinkingLines.slice(0, answerStartIndex).join("\n").trim();
   }
@@ -551,9 +547,7 @@ function sanitizeAssistantDisplayText(text: string) {
   }
 
   const containsChineseContent = hasSubstantialChineseContent(normalized);
-  const dedupedBlocks = dedupeMarkdownBlocks(
-    splitMarkdownBlocks(normalized).filter((block) => !(containsChineseContent && isLikelyLeakedReasoningBlock(block)))
-  );
+  const dedupedBlocks = dedupeMarkdownBlocks(splitMarkdownBlocks(normalized).filter((block) => !(containsChineseContent && isLikelyLeakedReasoningBlock(block))));
   const cleaned = dedupedBlocks.join("\n\n").trim() || normalized;
   const inlineAnswerStartIndex = findInlineAnswerStartIndex(cleaned);
 
@@ -567,7 +561,6 @@ function sanitizeAssistantDisplayText(text: string) {
 
   const lines = cleaned.split("\n");
   let firstAnswerLineIndex = 0;
-
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]?.trim() ?? "";
     if (!line) {
@@ -634,232 +627,6 @@ function collectLatestAssistantResultText(events: NormalizedRunEvent[]) {
   }
 
   return sanitizeAssistantDisplayText(resultEvents[resultEvents.length - 1]?.message ?? "");
-}
-
-function createSyntheticThinkingItem(options: {
-  runId?: string | null;
-  preferredMessageId?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  summary: string;
-}): TimelineCardModel {
-  const timestamp = options.updatedAt ?? options.createdAt ?? new Date().toISOString();
-  const id = `synthetic-thinking-${options.preferredMessageId ?? options.runId ?? "standalone"}`;
-
-  return {
-    id,
-    runId: options.runId ?? "standalone-run",
-    type: "thinking",
-    title: "Thinking",
-    summary: options.summary,
-    createdAt: options.createdAt ?? timestamp,
-    updatedAt: timestamp,
-    entries: [
-      {
-        id,
-        type: "thinking",
-        createdAt: options.createdAt ?? timestamp,
-        message: options.summary,
-        title: "Thinking"
-      }
-    ],
-    isAggregated: false
-  };
-}
-
-function hasReasoningSignals(message: string) {
-  return REASONING_SIGNAL_PATTERNS.some((pattern) => pattern.test(message));
-}
-
-function isMeaningfulThinkingMessage(message: string) {
-  const normalized = normalizeMessage(message).replace(/\s+/gu, " ");
-
-  if (!normalized) {
-    return false;
-  }
-
-  if (ORCHESTRATION_NOISE_PATTERNS.some((pattern) => pattern.test(normalized))) {
-    return false;
-  }
-
-  if (/^(called\s+|已?调用[:：]?)/iu.test(normalized)) {
-    return false;
-  }
-
-  if (normalized.length <= 18 && !hasReasoningSignals(normalized)) {
-    return false;
-  }
-
-  if (PROCESS_PREFIX_PATTERN.test(normalized) && !hasReasoningSignals(normalized)) {
-    return false;
-  }
-
-  return true;
-}
-
-function getVisibleThinkingSummary(item: TimelineCardModel) {
-  return joinUniqueParagraphs(item.entries.map((entry) => entry.message).filter(isMeaningfulThinkingMessage));
-}
-
-function createAssistantTurn(item: TimelineCardModel, summary: string): ConversationTurnModel {
-  return {
-    id: item.id,
-    runId: item.runId,
-    kind: "assistant",
-    primaryType: item.type,
-    title: "Assistant",
-    summary,
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt,
-    processItems: [],
-    processSummary: ""
-  };
-}
-
-function describeReasoningItem(item: TimelineCardModel) {
-  if (item.type === "tool_call") {
-    return item.title || DEFAULT_EVENT_TITLES[item.type];
-  }
-
-  if (item.type === "thinking") {
-    return getVisibleThinkingSummary(item) || item.title || DEFAULT_EVENT_TITLES[item.type];
-  }
-
-  return item.summary || item.title || DEFAULT_EVENT_TITLES[item.type];
-}
-
-function createReasoningSummary(items: TimelineCardModel[]) {
-  const parts = items
-    .map((item) => describeReasoningItem(item).trim())
-    .filter(Boolean);
-
-  if (!parts.length) {
-    return "已记录推理过程";
-  }
-
-  return `已记录 ${parts.length} 条推理过程`;
-}
-
-function createQuestionSummary(item: TimelineCardModel) {
-  return item.question?.message?.trim() || item.summary || item.title || DEFAULT_EVENT_TITLES.question;
-}
-
-function sortAnswers(answers: AnswerRecord[]) {
-  return [...answers].sort((left, right) => new Date(left.submittedAt).getTime() - new Date(right.submittedAt).getTime());
-}
-
-export interface BuildChatStreamItemsOptions {
-  runId?: string | null;
-  prompt?: string | null;
-  events: NormalizedRunEvent[];
-  answers?: AnswerRecord[];
-  feedbackByMessageId?: Record<string, MessageFeedbackUiState>;
-  finalOutput?: string | null;
-  errorMessage?: string | null;
-  status?: RunRecord["status"];
-  updatedAt?: string | null;
-  pendingQuestionId?: string | null;
-}
-
-export interface AssistantResponseAggregation {
-  text: string;
-  firstResponseAt: string | null;
-  lastResponseAt: string | null;
-  preferredMessageId: string | null;
-  hasResponseEvent: boolean;
-}
-
-export type TimelineAssistantStatus = "idle" | "collecting" | "streaming" | "waiting_for_answer" | "done" | "error";
-type TimelineRunStatus = RunRecord["status"];
-type TimelineStreamStatus = "idle" | "connecting" | "streaming" | "reconnecting" | "waiting_for_answer" | "done" | "error";
-
-export interface CockpitStatusModel {
-  stageKey: "ready" | "collecting" | "connecting" | "working" | "awaiting_input" | "completed" | "error";
-  stageLabel: string;
-  modeLabel: string;
-  headline: string;
-  detail: string;
-  tone: "neutral" | "progress" | "warning" | "success" | "danger";
-}
-
-function trimTerminalText(value?: string | null) {
-  return value?.trim() || "";
-}
-
-function getEventDataValue(event: Pick<NormalizedRunEvent, "data">, key: string) {
-  return typeof event.data?.[key] === "string" ? event.data[key] as string : undefined;
-}
-
-function getEventSemanticIdentity(event: Pick<NormalizedRunEvent, "semantic">) {
-  return event.semantic?.identity?.trim() || undefined;
-}
-
-function getEventSemanticChannel(event: Pick<NormalizedRunEvent, "semantic">) {
-  return event.semantic?.channel;
-}
-
-function getTimelineCardSemanticIdentity(item: Pick<TimelineCardModel, "entries">) {
-  return item.entries
-    .map((entry) => entry.semantic?.identity?.trim() || undefined)
-    .find(Boolean);
-}
-
-function getTimelineCardSemanticChannel(item: Pick<TimelineCardModel, "entries">) {
-  return item.entries
-    .map((entry) => entry.semantic?.channel)
-    .find(Boolean);
-}
-
-function getAssistantResponseMessageId(event: Pick<NormalizedRunEvent, "id" | "data" | "semantic">) {
-  return event.semantic?.messageId?.trim() || getEventDataValue(event, "message_id") || event.id;
-}
-
-export function isAssistantResponseDeltaEvent(event: NormalizedRunEvent) {
-  if (event.type !== "thinking") {
-    return false;
-  }
-
-  if (getEventSemanticChannel(event) === "assistant_text") {
-    return true;
-  }
-
-  return getEventDataValue(event, "field") === "text";
-}
-
-function getAssistantResponseThinkingEmissionKind(event: NormalizedRunEvent) {
-  if (!isAssistantResponseDeltaEvent(event)) {
-    return undefined;
-  }
-
-  return event.semantic?.emissionKind === "snapshot" ? "snapshot" : "delta";
-}
-
-export function isAssistantResponseSnapshotEvent(event: NormalizedRunEvent) {
-  return event.type === "result";
-}
-
-function getTextOverlapLength(left: string, right: string) {
-  const maxOverlap = Math.min(left.length, right.length);
-
-  for (let size = maxOverlap; size > 0; size -= 1) {
-    if (left.slice(-size) === right.slice(0, size)) {
-      return size;
-    }
-  }
-
-  return 0;
-}
-
-function getCommonPrefixLength(left: string, right: string) {
-  const maxPrefix = Math.min(left.length, right.length);
-
-  for (let index = 0; index < maxPrefix; index += 1) {
-    if (left[index] !== right[index]) {
-      return index;
-    }
-  }
-
-  return maxPrefix;
 }
 
 function mergeAssistantResponseDelta(current: string, delta: string) {
@@ -958,6 +725,143 @@ function mergeAssistantResponseSnapshot(current: string, snapshot: string) {
   return joinUniqueParagraphs([existingComparable, nextComparable]);
 }
 
+function createTimelineEntry(event: NormalizedRunEvent): TimelineEventEntry {
+  return {
+    id: event.id,
+    type: event.type,
+    createdAt: event.createdAt,
+    message: normalizeMessage(event.question?.message ?? event.message),
+    title: getEventTitle(event),
+    data: event.data,
+    logData: event.logData,
+    question: event.question,
+    semantic: event.semantic
+  };
+}
+
+function summarizeEntries(entries: TimelineEventEntry[]) {
+  const uniqueMessages: string[] = [];
+
+  for (const entry of entries) {
+    if (!entry.message) {
+      continue;
+    }
+
+    if (uniqueMessages[uniqueMessages.length - 1] !== entry.message) {
+      uniqueMessages.push(entry.message);
+    }
+  }
+
+  return uniqueMessages.join("\n");
+}
+
+function isCompactEvent(event: NormalizedRunEvent) {
+  return AGGREGATED_EVENT_TYPES.has(event.type) && normalizeMessage(event.message).length <= SMALL_EVENT_MESSAGE_LIMIT;
+}
+
+function canAggregate(current: TimelineCardModel | null, event: NormalizedRunEvent) {
+  if (!current || !isCompactEvent(event) || !current.entries.length || current.type !== event.type) {
+    return false;
+  }
+
+  const lastEntry = current.entries[current.entries.length - 1];
+  return isCompactEvent({ ...event, message: lastEntry.message }) && current.runId === event.runId;
+}
+
+function canMergeThinkingSnapshot(current: TimelineCardModel | null, event: NormalizedRunEvent) {
+  if (!current || current.type !== "thinking" || event.type !== "thinking" || current.runId !== event.runId) {
+    return false;
+  }
+
+  const currentSemanticIdentity = getTimelineCardSemanticIdentity(current);
+  const nextSemanticIdentity = getEventSemanticIdentity(event);
+  const currentSemanticChannel = getTimelineCardSemanticChannel(current);
+  const nextSemanticChannel = getEventSemanticChannel(event);
+
+  if (currentSemanticIdentity && nextSemanticIdentity) {
+    return currentSemanticChannel === "reasoning"
+      && nextSemanticChannel === "reasoning"
+      && currentSemanticIdentity === nextSemanticIdentity;
+  }
+
+  const currentSummary = current.summary.trim();
+  const nextSummary = normalizeMessage(event.message);
+  if (!currentSummary || !nextSummary) {
+    return false;
+  }
+
+  if (currentSummary === nextSummary) {
+    return true;
+  }
+
+  const currentComparable = currentSummary.replace(/\s+/gu, " ").trim();
+  const nextComparable = nextSummary.replace(/\s+/gu, " ").trim();
+  if (nextComparable.includes(currentComparable) || currentComparable.includes(nextComparable)) {
+    return true;
+  }
+
+  const commonPrefixLength = getCommonPrefixLength(currentComparable, nextComparable);
+  const shorterLength = Math.min(currentComparable.length, nextComparable.length);
+  return shorterLength > 0 && commonPrefixLength / shorterLength >= 0.75;
+}
+
+export function buildReasoningTimelineItems(events: NormalizedRunEvent[]): TimelineCardModel[] {
+  const items: TimelineCardModel[] = [];
+
+  for (const event of events) {
+    const entry = createTimelineEntry(event);
+    const current = items[items.length - 1] ?? null;
+
+    if (canMergeThinkingSnapshot(current, event)) {
+      current.updatedAt = entry.createdAt;
+      current.summary = mergeAssistantResponseSnapshot(current.summary, entry.message);
+      current.title = entry.title;
+      current.entries = [{ ...entry, message: current.summary }];
+      continue;
+    }
+
+    if (canAggregate(current, event)) {
+      current.entries.push(entry);
+      current.updatedAt = entry.createdAt;
+      current.summary = summarizeEntries(current.entries);
+      current.title = entry.title;
+      continue;
+    }
+
+    items.push({
+      id: event.id,
+      runId: event.runId,
+      type: event.type,
+      title: entry.title,
+      summary: entry.message,
+      createdAt: event.createdAt,
+      updatedAt: event.createdAt,
+      entries: [entry],
+      isAggregated: false,
+      question: event.question
+    });
+  }
+
+  for (const item of items) {
+    item.isAggregated = item.entries.length > 1;
+  }
+
+  return items;
+}
+
+function createReasoningSummary(items: TimelineCardModel[]) {
+  const parts = items.map((item) => item.summary.trim()).filter(Boolean);
+  if (!parts.length) {
+    return "已记录推理过程";
+  }
+
+  return `已记录 ${parts.length} 条推理过程`;
+}
+
+function sortAnswers(answers: AnswerRecord[]) {
+  return [...answers].sort((left, right) => new Date(left.submittedAt).getTime() - new Date(right.submittedAt).getTime());
+}
+
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 export function collectAssistantResponseAggregation(events: NormalizedRunEvent[], finalOutput?: string | null): AssistantResponseAggregation {
   let aggregatedText = "";
@@ -1005,26 +909,17 @@ export function collectRunAssistantResponseText(events: NormalizedRunEvent[], fi
   return resolveAssistantDisplayText(collectAssistantResponseAggregation(events, finalOutput).text, finalOutput);
 }
 
-export function hasTerminalResultEvidence(options: {
-  events: NormalizedRunEvent[];
-  finalOutput?: string | null;
-}) {
+export function hasTerminalResultEvidence(options: { events: NormalizedRunEvent[]; finalOutput?: string | null; }) {
   return options.events.some((event) => event.type === "result") || Boolean(trimTerminalText(options.finalOutput));
 }
 
-export function hasTerminalErrorEvidence(options: {
-  events: NormalizedRunEvent[];
-  errorMessage?: string | null;
-}) {
+export function hasTerminalErrorEvidence(options: { events: NormalizedRunEvent[]; errorMessage?: string | null; }) {
   return options.events.some((event) => event.type === "error") || Boolean(trimTerminalText(options.errorMessage));
 }
 
 function resolveTerminalStatus<TStatus extends TimelineRunStatus | TimelineStreamStatus | undefined>(
   status: TStatus,
-  options: {
-    hasResultEvidence: boolean;
-    hasErrorEvidence: boolean;
-  }
+  options: { hasResultEvidence: boolean; hasErrorEvidence: boolean; }
 ): TStatus | "streaming" {
   if (status === "done") {
     return options.hasResultEvidence ? status : "streaming";
@@ -1112,9 +1007,7 @@ export function resolveCockpitStatusModel(options: {
       stageLabel: "结果已就绪",
       modeLabel: "结构化阅读",
       headline: "最终回答已经落定，可继续阅读、复制、反馈或同会话追问。",
-      detail: presentationState.hasTerminalEvidence
-        ? "阶段只在存在结果或错误证据时进入完成态。"
-        : "当前仍按运行中保守处理。",
+      detail: presentationState.hasTerminalEvidence ? "阶段只在存在结果或错误证据时进入完成态。" : "当前仍按运行中保守处理。",
       tone: "success"
     };
   }
@@ -1151,35 +1044,227 @@ export function resolveCockpitStatusModel(options: {
   };
 }
 
+function createBadge(label: string, tone: FragmentBadgeTone): FragmentBadgeModel {
+  return { label, tone };
+}
+
+function getProcessBadge(primaryType: NormalizedEventType) {
+  if (primaryType === "tool_call") {
+    return [createBadge("工具", "progress")];
+  }
+
+  return [createBadge("分析", "neutral")];
+}
+
+function getQuestionBadges(pending: boolean) {
+  return [createBadge("需要确认", pending ? "warning" : "neutral")];
+}
+
+function getErrorBadges() {
+  return [createBadge("运行失败", "danger")];
+}
+
+function getAssistantOutputBadges(options: { terminal: boolean; hasResultEvent: boolean; hasStreamingText: boolean; }) {
+  if (options.terminal && options.hasResultEvent) {
+    return [createBadge("输出", "success")];
+  }
+
+  if (options.hasStreamingText) {
+    return [createBadge("流式输出", "progress")];
+  }
+
+  return [createBadge("处理中", "neutral")];
+}
+
+function createBaseItem(options: {
+  id: string;
+  anchorId?: string;
+  groupAnchorId?: string;
+  runId: string;
+  kind: ChatStreamItemKind;
+  title: string;
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+  primaryType: ChatStreamItemModel["primaryType"];
+  badges?: FragmentBadgeModel[];
+  originEventTypes?: NormalizedEventType[];
+  question?: QuestionPayload;
+  answer?: AnswerRecord;
+  pendingQuestion?: boolean;
+  sourceQuestionPrompt?: string;
+  supportsCopy?: boolean;
+  supportsRetry?: boolean;
+  supportsFeedback?: boolean;
+  feedbackState?: MessageFeedbackUiState;
+}): ChatStreamItemModel {
+  return {
+    id: options.id,
+    anchorId: options.anchorId ?? options.id,
+    groupAnchorId: options.groupAnchorId ?? options.id,
+    runId: options.runId,
+    kind: options.kind,
+    title: options.title,
+    summary: options.summary,
+    createdAt: options.createdAt,
+    updatedAt: options.updatedAt,
+    primaryType: options.primaryType,
+    badges: options.badges ?? [],
+    originEventTypes: options.originEventTypes ?? [],
+    question: options.question,
+    answer: options.answer,
+    pendingQuestion: options.pendingQuestion,
+    sourceQuestionPrompt: options.sourceQuestionPrompt,
+    supportsCopy: options.supportsCopy ?? false,
+    supportsRetry: options.supportsRetry ?? false,
+    supportsFeedback: options.supportsFeedback ?? false,
+    feedbackState: options.feedbackState
+  };
+}
+
+function createPromptItem(options: { runId: string; prompt: string; createdAt: string; updatedAt: string; }) {
+  return createBaseItem({
+    id: `user-prompt-${options.runId}`,
+    runId: options.runId,
+    kind: "user_prompt",
+    title: "You",
+    summary: options.prompt,
+    createdAt: options.createdAt,
+    updatedAt: options.updatedAt,
+    primaryType: "user_prompt",
+    supportsCopy: true,
+    sourceQuestionPrompt: options.prompt
+  });
+}
+
+function getReasoningOnlyText(events: NormalizedRunEvent[]) {
+  return joinUniqueParagraphs(events
+    .filter((event) => event.type === "thinking" && !isAssistantResponseDeltaEvent(event))
+    .map((event) => event.message));
+}
+
+function getOutputAnchorId(options: { runId: string; assistantResponse: AssistantResponseAggregation; firstOutputEvent?: NormalizedRunEvent; }) {
+  return options.assistantResponse.preferredMessageId
+    || (options.firstOutputEvent ? getAssistantResponseMessageId(options.firstOutputEvent) : undefined)
+    || `assistant-output:${options.runId}:active`;
+}
+
+function shouldDisplayThinkingFragment(summary: string, assistantDisplayText: string, status?: RunRecord["status"], hasResultEvent?: boolean) {
+  if (!summary) {
+    return false;
+  }
+
+  if (hasSubstantialChineseContent(summary)) {
+    return Boolean(assistantDisplayText) && !hasResultEvent && status === "streaming";
+  }
+
+  return true;
+}
+
+function normalizeProcessFragment(item: ChatStreamItemModel, assistantDisplayText: string, status?: RunRecord["status"], hasResultEvent?: boolean) {
+  if (item.kind !== "assistant_process") {
+    return item;
+  }
+
+  if (item.primaryType === "thinking") {
+    const trimmed = sanitizeAssistantThinkingText(item.summary, assistantDisplayText);
+    const visible = joinUniqueParagraphs(trimmed.split(/\n{2,}/gu).filter(isMeaningfulThinkingMessage));
+    if (!shouldDisplayThinkingFragment(visible, assistantDisplayText, status, hasResultEvent)) {
+      return null;
+    }
+
+    return {
+      ...item,
+      summary: visible
+    };
+  }
+
+  const sanitized = normalizeMarkdownStructure(item.summary)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !isLikelyOrchestrationNoiseLine(line))
+    .join("\n")
+    .trim();
+
+  if (!sanitized) {
+    return null;
+  }
+
+  return {
+    ...item,
+    summary: sanitized
+  };
+}
+
+function dedupeFragmentSequence(items: ChatStreamItemModel[]) {
+  const deduped: ChatStreamItemModel[] = [];
+
+  for (const item of items) {
+    const previous = deduped[deduped.length - 1];
+    if (!previous) {
+      deduped.push(item);
+      continue;
+    }
+
+    if (item.kind === "assistant_process"
+      && previous.kind === "assistant_process"
+      && item.runId === previous.runId
+      && item.primaryType === previous.primaryType
+      && (item.anchorId === previous.anchorId || shouldTreatComparableTextsAsDuplicate(getComparableBlockKey(previous.summary), getComparableBlockKey(item.summary)))) {
+      if (item.summary.length >= previous.summary.length) {
+        deduped[deduped.length - 1] = {
+          ...previous,
+          ...item,
+          badges: previous.badges,
+          originEventTypes: [...new Set([...previous.originEventTypes, ...item.originEventTypes])]
+        };
+      }
+      continue;
+    }
+
+    if (item.kind === "assistant_question"
+      && previous.kind === "assistant_question"
+      && item.question?.questionId
+      && item.question.questionId === previous.question?.questionId) {
+      deduped[deduped.length - 1] = { ...previous, ...item };
+      continue;
+    }
+
+    deduped.push(item);
+  }
+
+  return deduped;
+}
+
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
-/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
-export function buildChatStreamItems(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
-  const streamItems: ChatStreamItemModel[] = [];
-  const assistantResponse = collectAssistantResponseAggregation(options.events, options.finalOutput);
-  const latestResultText = collectLatestAssistantResultText(options.events);
-  const reasoningItems = buildReasoningTimelineItems(options.events.filter((event) => !isAssistantResponseDeltaEvent(event)));
-  const reasoningOnlyText = joinUniqueParagraphs(
-    reasoningItems
-      .filter((item) => item.type === "thinking")
-      .map((item) => item.summary)
-  );
+export function buildFragmentSequence(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
+  const runId = options.runId ?? "standalone-run";
+  const prompt = options.prompt?.trim() || "";
+  const events = options.events;
+  const answersByQuestionId = new Map<string, AnswerRecord[]>();
+  const consumedQuestionAnswerIds = new Set<string>();
+  const items: ChatStreamItemModel[] = [];
+  const fallbackTimestamp = options.updatedAt ?? events[events.length - 1]?.createdAt ?? "1970-01-01T00:00:00.000Z";
+  const assistantResponse = collectAssistantResponseAggregation(events, options.finalOutput);
+  const latestResultText = collectLatestAssistantResultText(events);
+  const reasoningOnlyText = getReasoningOnlyText(events);
   const assistantDisplayText = resolveAssistantDisplayText(assistantResponse.text, options.finalOutput)
     || latestResultText
     || deriveAssistantDisplayTextFromReasoning(reasoningOnlyText);
-  const answersByQuestionId = new Map<string, AnswerRecord[]>();
-  const prompt = options.prompt?.trim() || "";
-  const errorMessage = options.errorMessage?.trim() || "";
-  const fallbackTimestamp = options.updatedAt ?? reasoningItems[reasoningItems.length - 1]?.updatedAt ?? "1970-01-01T00:00:00.000Z";
+  const errorMessage = trimTerminalText(options.errorMessage);
   const presentationState = resolveTimelinePresentationState({
-    events: options.events,
+    events,
     runStatus: options.status,
     finalOutput: assistantDisplayText,
     errorMessage
   });
-  const hasResultEvent = options.events.some((event) => event.type === "result");
-  const hasConcreteAnswer = Boolean(assistantDisplayText);
-  let hasErrorItem = false;
-  let pendingProcessItems: TimelineCardModel[] = [];
+  const hasResultEvent = events.some((event) => event.type === "result");
+  const hasOutputSourceEvent = events.some((event) => isAssistantResponseDeltaEvent(event) || event.type === "result");
+  const firstOutputEvent = events.find((event) => isAssistantResponseDeltaEvent(event) || event.type === "result");
+  const outputAnchorId = getOutputAnchorId({ runId, assistantResponse, firstOutputEvent });
+  const outputGroupAnchorId = `fragment-group:${runId}:${outputAnchorId}`;
+  let outputInserted = false;
+  let outputIndex = -1;
 
   for (const answer of sortAnswers(options.answers ?? [])) {
     const bucket = answersByQuestionId.get(answer.questionId) ?? [];
@@ -1188,368 +1273,240 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
   }
 
   if (prompt) {
-    streamItems.push({
-      id: `user-prompt-${options.runId ?? "standalone"}`,
-      runId: options.runId ?? "standalone-run",
-      kind: "user_prompt",
-      title: "You",
-      summary: prompt,
-      createdAt: reasoningItems[0]?.createdAt ?? fallbackTimestamp,
-      updatedAt: reasoningItems[0]?.createdAt ?? fallbackTimestamp,
-      primaryType: "user_prompt",
-      processItems: [],
-      processSummary: "",
-      sourceQuestionPrompt: prompt,
-      supportsCopy: true,
-      supportsRetry: false,
-      supportsFeedback: false
-    });
-  }
-
-  for (const item of reasoningItems) {
-    if (item.type === "thinking" || item.type === "tool_call") {
-      pendingProcessItems.push(item);
-      continue;
-    }
-
-    if (item.type === "question") {
-      streamItems.push({
-        id: item.id,
-        runId: item.runId,
-        kind: "assistant_question",
-        title: item.title || "Assistant",
-        summary: createQuestionSummary(item),
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-        primaryType: "question",
-        processItems: pendingProcessItems,
-        processSummary: createReasoningSummary(pendingProcessItems),
-        question: item.question,
-        pendingQuestion: item.question?.questionId === options.pendingQuestionId,
-      sourceQuestionPrompt: prompt,
-      supportsCopy: true,
-      supportsRetry: true,
-      supportsFeedback: true,
-      feedbackState: options.feedbackByMessageId?.[item.id] ?? createIdleFeedbackState()
-      });
-      pendingProcessItems = [];
-
-      for (const answer of answersByQuestionId.get(item.question?.questionId ?? "") ?? []) {
-        streamItems.push({
-          id: answer.id,
-          runId: item.runId,
-          kind: "user_answer",
-          title: "You",
-        summary: answer.answer,
-          createdAt: answer.submittedAt,
-          updatedAt: answer.submittedAt,
-          primaryType: "user_answer",
-          processItems: [],
-          processSummary: "",
-        answer,
-        supportsCopy: true,
-        supportsRetry: false,
-        supportsFeedback: false
-      });
-      }
-      continue;
-    }
-
-    if (item.type === "result") {
-      continue;
-    }
-
-    hasErrorItem = true;
-    streamItems.push({
-      id: item.id,
-      runId: item.runId,
-      kind: "assistant_error",
-      title: "Assistant",
-      summary: item.summary || errorMessage,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      primaryType: "error",
-      processItems: pendingProcessItems,
-      processSummary: createReasoningSummary(pendingProcessItems),
-      sourceQuestionPrompt: prompt,
-      supportsCopy: true,
-      supportsRetry: true,
-      supportsFeedback: false
-    });
-    pendingProcessItems = [];
-  }
-
-  const normalizedAssistantProcessItems = pendingProcessItems
-    .map((item) => {
-      if (item.type !== "thinking") {
-        return item;
-      }
-
-      const trimmedSummary = sanitizeAssistantThinkingText(item.summary, assistantDisplayText);
-      if (!trimmedSummary) {
-        return null;
-      }
-
-      return {
-        ...item,
-        summary: trimmedSummary,
-        entries: item.entries.map((entry) => ({
-          ...entry,
-          message: trimmedSummary
-        }))
-      };
-    })
-    .filter((item): item is TimelineCardModel => Boolean(item));
-
-  const syntheticThinkingSummary = sanitizeAssistantThinkingText(assistantResponse.text, assistantDisplayText);
-  if (syntheticThinkingSummary) {
-    normalizedAssistantProcessItems.push(createSyntheticThinkingItem({
-      runId: options.runId,
-      preferredMessageId: assistantResponse.preferredMessageId,
-      createdAt: assistantResponse.firstResponseAt,
-      updatedAt: assistantResponse.lastResponseAt,
-      summary: syntheticThinkingSummary
+    items.push(createPromptItem({
+      runId,
+      prompt,
+      createdAt: events[0]?.createdAt ?? fallbackTimestamp,
+      updatedAt: events[0]?.createdAt ?? fallbackTimestamp
     }));
   }
 
-  const assistantProcessItems = dedupeProcessItems(normalizedAssistantProcessItems);
-  const allowVisibleThinkingInAssistantBubble = Boolean(assistantDisplayText)
-    && !hasResultEvent
-    && presentationState.runStatus === "streaming";
-
-  const visibleAssistantProcessItems = assistantProcessItems
-    .map((item) => {
-      if (item.type !== "thinking") {
-        return item;
+  for (const event of events) {
+    if (isAssistantResponseDeltaEvent(event) || event.type === "result") {
+      if (!outputInserted) {
+        items.push(createBaseItem({
+          id: outputAnchorId,
+          anchorId: outputAnchorId,
+          groupAnchorId: outputGroupAnchorId,
+          runId,
+          kind: "assistant_output",
+          title: "Assistant",
+          summary: assistantDisplayText || GENERIC_STREAMING_COPY,
+          createdAt: assistantResponse.firstResponseAt ?? event.createdAt,
+          updatedAt: assistantResponse.lastResponseAt ?? event.createdAt,
+          primaryType: presentationState.runStatus === "done" ? "result" : "thinking",
+          badges: getAssistantOutputBadges({
+            terminal: presentationState.runStatus === "done",
+            hasResultEvent,
+            hasStreamingText: assistantResponse.hasResponseEvent
+          }),
+          originEventTypes: [...new Set(events.filter((candidate) => isAssistantResponseDeltaEvent(candidate) || candidate.type === "result").map((candidate) => candidate.type))],
+          sourceQuestionPrompt: prompt,
+          supportsCopy: Boolean(assistantDisplayText || GENERIC_STREAMING_COPY),
+          supportsRetry: presentationState.runStatus === "done",
+          supportsFeedback: presentationState.runStatus === "done",
+          feedbackState: presentationState.runStatus === "done"
+            ? options.feedbackByMessageId?.[outputAnchorId] ?? createIdleFeedbackState()
+            : undefined
+        }));
+        outputInserted = true;
+        outputIndex = items.length - 1;
+      } else if (outputIndex >= 0) {
+        items[outputIndex] = {
+          ...items[outputIndex],
+          summary: assistantDisplayText || GENERIC_STREAMING_COPY,
+          updatedAt: assistantResponse.lastResponseAt ?? event.createdAt
+        };
       }
+      continue;
+    }
 
-      const visibleSummary = getVisibleThinkingSummary(item);
-      if (!visibleSummary) {
-        return null;
+    if (event.type === "question") {
+      const questionId = event.question?.questionId ?? event.id;
+      const anchorId = questionId;
+      items.push(createBaseItem({
+        id: `question:${anchorId}`,
+        anchorId,
+        groupAnchorId: `fragment-group:${runId}:${anchorId}`,
+        runId,
+        kind: "assistant_question",
+        title: event.question?.title || "Assistant",
+        summary: event.question?.message?.trim() || event.message.trim(),
+        createdAt: event.createdAt,
+        updatedAt: event.createdAt,
+        primaryType: "question",
+        badges: getQuestionBadges(event.question?.questionId === options.pendingQuestionId),
+        originEventTypes: ["question"],
+        question: event.question,
+        pendingQuestion: event.question?.questionId === options.pendingQuestionId,
+        sourceQuestionPrompt: prompt,
+        supportsCopy: true,
+        supportsRetry: true,
+        supportsFeedback: true,
+        feedbackState: options.feedbackByMessageId?.[anchorId] ?? createIdleFeedbackState()
+      }));
+
+      for (const answer of answersByQuestionId.get(questionId) ?? []) {
+        consumedQuestionAnswerIds.add(answer.id);
+        items.push(createBaseItem({
+          id: answer.id,
+          anchorId: answer.id,
+          groupAnchorId: `fragment-group:${runId}:${questionId}`,
+          runId,
+          kind: "user_answer",
+          title: "You",
+          summary: answer.answer,
+          createdAt: answer.submittedAt,
+          updatedAt: answer.submittedAt,
+          primaryType: "user_answer",
+          badges: answer.choiceId ? [createBadge("已回答", "success")] : [],
+          answer,
+          supportsCopy: true
+        }));
       }
+      continue;
+    }
 
-      if (hasSubstantialChineseContent(visibleSummary) && !allowVisibleThinkingInAssistantBubble) {
-        return null;
-      }
+    if (event.type === "error") {
+      items.push(createBaseItem({
+        id: `error:${event.id}`,
+        anchorId: event.id,
+        groupAnchorId: `fragment-group:${runId}:${event.id}`,
+        runId,
+        kind: "assistant_error",
+        title: "Assistant",
+        summary: event.message.trim() || errorMessage,
+        createdAt: event.createdAt,
+        updatedAt: event.createdAt,
+        primaryType: "error",
+        badges: getErrorBadges(),
+        originEventTypes: ["error"],
+        sourceQuestionPrompt: prompt,
+        supportsCopy: true,
+        supportsRetry: true
+      }));
+      continue;
+    }
 
-      return {
-        ...item,
-        summary: visibleSummary,
-        entries: item.entries.map((entry) => ({
-          ...entry,
-          message: visibleSummary
-        }))
-      };
-    })
-    .filter((item): item is TimelineCardModel => Boolean(item));
-
-  const shouldRenderProcessOnlyAssistantItem = !assistantDisplayText
-    && visibleAssistantProcessItems.length > 0
-    && visibleAssistantProcessItems.every((item) => !hasSubstantialChineseContent(item.summary));
-
-  const shouldRenderGenericStreamingItem = !assistantDisplayText
-    && !hasErrorItem
-    && presentationState.runStatus === "streaming";
-
-  if (assistantDisplayText || shouldRenderProcessOnlyAssistantItem || shouldRenderGenericStreamingItem) {
-    const shouldRenderAsFinalResult = hasResultEvent || presentationState.runStatus === "done";
-    const assistantMessageSummary = hasConcreteAnswer ? assistantDisplayText : GENERIC_STREAMING_COPY;
-    streamItems.push({
-      id: assistantResponse.preferredMessageId ?? `synthetic-result-${options.runId ?? "standalone"}`,
-      runId: options.runId ?? visibleAssistantProcessItems[0]?.runId ?? "standalone-run",
-      kind: shouldRenderAsFinalResult ? "assistant_result" : "assistant_progress",
-      title: "Assistant",
-      summary: assistantMessageSummary,
-      createdAt: assistantResponse.firstResponseAt ?? visibleAssistantProcessItems[0]?.createdAt ?? options.updatedAt ?? new Date().toISOString(),
-      updatedAt: assistantResponse.lastResponseAt ?? visibleAssistantProcessItems[visibleAssistantProcessItems.length - 1]?.updatedAt ?? options.updatedAt ?? new Date().toISOString(),
-      primaryType: shouldRenderAsFinalResult ? "result" : visibleAssistantProcessItems[visibleAssistantProcessItems.length - 1]?.type ?? "thinking",
-      processItems: visibleAssistantProcessItems,
-      processSummary: createReasoningSummary(visibleAssistantProcessItems),
-      sourceQuestionPrompt: prompt,
-      supportsCopy: Boolean(assistantMessageSummary),
-      supportsRetry: shouldRenderAsFinalResult,
-      supportsFeedback: shouldRenderAsFinalResult,
-      feedbackState: shouldRenderAsFinalResult
-        ? options.feedbackByMessageId?.[assistantResponse.preferredMessageId ?? `synthetic-result-${options.runId ?? "standalone"}`] ?? createIdleFeedbackState()
-        : undefined
-    });
-    pendingProcessItems = [];
+    if (event.type === "thinking" || event.type === "tool_call") {
+      items.push(createBaseItem({
+        id: `process:${event.id}`,
+        anchorId: getEventSemanticIdentity(event) || event.id,
+        groupAnchorId: outputGroupAnchorId,
+        runId,
+        kind: "assistant_process",
+        title: getEventTitle(event),
+        summary: event.message.trim(),
+        createdAt: event.createdAt,
+        updatedAt: event.createdAt,
+        primaryType: event.type,
+        badges: getProcessBadge(event.type),
+        originEventTypes: [event.type],
+        sourceQuestionPrompt: prompt,
+        supportsCopy: true
+      }));
+    }
   }
 
-  if (!hasErrorItem && presentationState.runStatus === "error" && errorMessage) {
-    streamItems.push({
-      id: `synthetic-error-${options.runId ?? "standalone"}`,
-      runId: options.runId ?? "standalone-run",
+  for (const answer of sortAnswers(options.answers ?? [])) {
+    if (consumedQuestionAnswerIds.has(answer.id)) {
+      continue;
+    }
+
+    items.push(createBaseItem({
+      id: answer.id,
+      anchorId: answer.id,
+      groupAnchorId: `fragment-group:${runId}:${answer.questionId}`,
+      runId,
+      kind: "user_answer",
+      title: "You",
+      summary: answer.answer,
+      createdAt: answer.submittedAt,
+      updatedAt: answer.submittedAt,
+      primaryType: "user_answer",
+      badges: answer.choiceId ? [createBadge("已回答", "success")] : [],
+      answer,
+      supportsCopy: true
+    }));
+  }
+
+  if (!outputInserted && (assistantDisplayText || (!errorMessage && presentationState.runStatus === "streaming"))) {
+    items.push(createBaseItem({
+      id: outputAnchorId,
+      anchorId: outputAnchorId,
+      groupAnchorId: outputGroupAnchorId,
+      runId,
+      kind: "assistant_output",
+      title: "Assistant",
+      summary: assistantDisplayText || GENERIC_STREAMING_COPY,
+      createdAt: assistantResponse.firstResponseAt ?? fallbackTimestamp,
+      updatedAt: assistantResponse.lastResponseAt ?? fallbackTimestamp,
+      primaryType: presentationState.runStatus === "done" ? "result" : "thinking",
+      badges: getAssistantOutputBadges({
+        terminal: presentationState.runStatus === "done",
+        hasResultEvent,
+        hasStreamingText: assistantResponse.hasResponseEvent
+      }),
+      originEventTypes: hasOutputSourceEvent ? ["thinking", ...(hasResultEvent ? ["result" as const] : [])] : [],
+      sourceQuestionPrompt: prompt,
+      supportsCopy: true,
+      supportsRetry: presentationState.runStatus === "done",
+      supportsFeedback: presentationState.runStatus === "done",
+      feedbackState: presentationState.runStatus === "done"
+        ? options.feedbackByMessageId?.[outputAnchorId] ?? createIdleFeedbackState()
+        : undefined
+    }));
+  }
+
+  if (!items.some((item) => item.kind === "assistant_error") && presentationState.runStatus === "error" && errorMessage) {
+    items.push(createBaseItem({
+      id: `error:${runId}:synthetic`,
+      anchorId: outputAnchorId,
+      groupAnchorId: outputGroupAnchorId,
+      runId,
       kind: "assistant_error",
       title: "Assistant",
       summary: errorMessage,
       createdAt: fallbackTimestamp,
       updatedAt: fallbackTimestamp,
       primaryType: "error",
-      processItems: [],
-      processSummary: "",
+      badges: getErrorBadges(),
+      originEventTypes: ["error"],
       sourceQuestionPrompt: prompt,
       supportsCopy: true,
-      supportsRetry: true,
-      supportsFeedback: false
-    });
+      supportsRetry: true
+    }));
   }
 
-  return streamItems;
+  return dedupeFragmentSequence(items
+    .map((item) => normalizeProcessFragment(item, assistantDisplayText, presentationState.runStatus, hasResultEvent))
+    .filter((item): item is ChatStreamItemModel => Boolean(item)));
 }
 
-/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
-export function buildReasoningTimelineItems(events: NormalizedRunEvent[]): TimelineCardModel[] {
-  const items: TimelineCardModel[] = [];
-
-  for (const event of events) {
-    const entry = createTimelineEntry(event);
-    const current = items[items.length - 1] ?? null;
-
-    if (canMergeThinkingSnapshot(current, event)) {
-      current.updatedAt = entry.createdAt;
-      current.summary = mergeAssistantResponseSnapshot(current.summary, entry.message);
-      current.title = entry.title;
-      current.entries = [{
-        ...entry,
-        message: current.summary
-      }];
-      continue;
-    }
-
-    if (canAggregate(current, event)) {
-      current.entries.push(entry);
-      current.updatedAt = entry.createdAt;
-      current.summary = summarizeEntries(current.entries);
-      current.title = entry.title;
-      continue;
-    }
-
-    items.push({
-      id: event.id,
-      runId: event.runId,
-      type: event.type,
-      title: entry.title,
-      summary: entry.message,
-      createdAt: event.createdAt,
-      updatedAt: event.createdAt,
-      entries: [entry],
-      isAggregated: false,
-      question: event.question
-    });
-  }
-
-  for (const item of items) {
-    item.isAggregated = item.entries.length > 1;
-  }
-
-  return items;
+export function buildChatStreamItems(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
+  return buildFragmentSequence(options);
 }
 
-/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildConversationTurns(events: NormalizedRunEvent[]): ConversationTurnModel[] {
-  const items = buildReasoningTimelineItems(events);
-  const turns: ConversationTurnModel[] = [];
-  let currentAssistantTurn: ConversationTurnModel | null = null;
-  let currentAssistantTurnVisible = false;
-
-  for (const item of items) {
-    if (item.type === "tool_call") {
-      if (!currentAssistantTurn) {
-        currentAssistantTurn = createAssistantTurn(item, "");
-        currentAssistantTurnVisible = false;
-      } else {
-        currentAssistantTurn.updatedAt = item.updatedAt;
-      }
-      continue;
-    }
-
-    if (item.type === "thinking") {
-      const visibleSummary = getVisibleThinkingSummary(item);
-
-      if (!visibleSummary) {
-        if (!currentAssistantTurn) {
-          currentAssistantTurn = createAssistantTurn(item, "");
-          currentAssistantTurnVisible = false;
-        } else {
-          currentAssistantTurn.updatedAt = item.updatedAt;
-        }
-        continue;
-      }
-
-      if (!currentAssistantTurn) {
-        currentAssistantTurn = createAssistantTurn(item, visibleSummary);
-        turns.push(currentAssistantTurn);
-        currentAssistantTurnVisible = true;
-      } else {
-        currentAssistantTurn.primaryType = "thinking";
-        currentAssistantTurn.summary = joinUniqueParagraphs([currentAssistantTurn.summary, visibleSummary]);
-        currentAssistantTurn.updatedAt = item.updatedAt;
-        if (!currentAssistantTurnVisible) {
-          turns.push(currentAssistantTurn);
-          currentAssistantTurnVisible = true;
-        }
-      }
-
-      continue;
-    }
-
-    if (item.type === "result") {
-      turns.push(createAssistantTurn(item, item.summary));
-      currentAssistantTurn = null;
-      currentAssistantTurnVisible = false;
-      continue;
-    }
-
-    if (item.type === "question") {
-      turns.push({
-        id: item.id,
-        runId: item.runId,
-        kind: "question",
-        primaryType: "question",
-        title: item.title,
-        summary: item.summary,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-        processItems: [],
-        processSummary: "",
-        question: item.question
-      });
-      currentAssistantTurn = null;
-      currentAssistantTurnVisible = false;
-      continue;
-    }
-
-    turns.push({
+  return buildFragmentSequence({ events })
+    .filter((item) => item.kind === "assistant_output" || item.kind === "assistant_question" || item.kind === "assistant_error")
+    .map((item) => ({
       id: item.id,
       runId: item.runId,
-      kind: "error",
-      primaryType: "error",
+      kind: item.kind === "assistant_question" ? "question" : item.kind === "assistant_error" ? "error" : "assistant",
+      primaryType: item.primaryType === "user_prompt" || item.primaryType === "user_answer" ? "result" : item.primaryType,
       title: item.title,
       summary: item.summary,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       processItems: [],
-      processSummary: ""
-    });
-    currentAssistantTurn = null;
-    currentAssistantTurnVisible = false;
-  }
-
-  if (currentAssistantTurn && !currentAssistantTurnVisible) {
-    turns.push(currentAssistantTurn);
-  }
-
-  return turns.map((turn) => ({
-    ...turn,
-    summary: turn.summary || turn.processSummary || ""
-  }));
+      processSummary: "",
+      question: item.question
+    }));
 }
 
-/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildReasoningSection(events: NormalizedRunEvent[]): ReasoningSectionModel {
   const items = buildReasoningTimelineItems(events).filter((item) => item.type === "thinking" || item.type === "tool_call");
-
   return {
     items,
     summary: createReasoningSummary(items)
@@ -1560,8 +1517,8 @@ export function getTimelineCardStatus(options: {
   type: NormalizedEventType;
   isLast: boolean;
   live: boolean;
-   streamStatus?: TimelineStreamStatus;
-   runStatus?: TimelineRunStatus;
+  streamStatus?: TimelineStreamStatus;
+  runStatus?: TimelineRunStatus;
 }) {
   const { type, isLast, live, streamStatus, runStatus } = options;
   const isWaitingForAnswer = streamStatus === "waiting_for_answer" || runStatus === "waiting_for_answer";
