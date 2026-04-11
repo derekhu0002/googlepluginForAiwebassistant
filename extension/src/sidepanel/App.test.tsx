@@ -833,7 +833,9 @@ describe("side panel host permission request flow", () => {
 
     await flushAllTimers();
 
-    expect(container.textContent).toContain("正在继续…");
+    expect(container.querySelector(".conversation-inline-status")).toBeNull();
+    expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']")).toHaveLength(1);
+    expect(container.querySelector(".transcript-part[data-part-kind='summary']")?.textContent).toContain("进行中");
     expect(container.textContent).not.toContain("event 1");
 
     mockRunHistoryState.history = [{
@@ -847,7 +849,9 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("正在继续…");
+    expect(container.querySelector(".conversation-inline-status")).toBeNull();
+    expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']")).toHaveLength(1);
+    expect(container.querySelector(".transcript-part[data-part-kind='summary']")?.textContent).toContain("进行中");
     expect(container.textContent).not.toContain("event 1");
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
@@ -1920,7 +1924,9 @@ describe("side panel host permission request flow", () => {
       answer: "继续执行",
       choiceId: "resume"
     }));
-    expect(container.textContent).toContain("正在继续…");
+    expect(container.querySelector(".conversation-inline-status")).toBeNull();
+    expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']")).toHaveLength(1);
+    expect(container.querySelector(".transcript-part[data-part-kind='summary']")?.textContent).toContain("进行中");
     expect(container.textContent).not.toContain("待确认");
     expect(container.querySelector(".question-card")).toBeNull();
   });
@@ -2238,7 +2244,90 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("正在继续…");
+    expect(container.querySelector(".conversation-inline-status")).toBeNull();
+    expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']")).toHaveLength(1);
+    expect(container.querySelector(".transcript-part[data-part-kind='summary']")?.textContent).toContain("进行中");
+  });
+
+  it("does not render feed-external status nodes for live history and follow-up transcripts", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "waiting_for_answer",
+        stream: {
+          runId: "run-1",
+          status: "waiting_for_answer",
+          pendingQuestionId: "q-1"
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "waiting_for_answer",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [
+          createRunEvent(1, {
+            type: "question",
+            message: "请选择处理方式",
+            question: {
+              questionId: "q-1",
+              title: "需要确认",
+              message: "请选择处理方式",
+              options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+              allowFreeText: false
+            }
+          })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.querySelector(".conversation-inline-status")).toBeNull();
+    expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']").length).toBeGreaterThan(0);
+    expect(container.textContent).toContain("等待补充");
+
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        currentRun: {
+          ...createCurrentRun(),
+          status: "streaming",
+          updatedAt: "2026-04-02T00:00:03.000Z",
+          finalOutput: ""
+        },
+        runEvents: [createRunEvent(1, { type: "tool_call", message: "查询上下文" })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.querySelector(".conversation-inline-status")).toBeNull();
+    expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']").length).toBeGreaterThan(0);
+
+    mockRunHistoryState.selectedHistoryDetail = {
+      run: {
+        ...createCurrentRun(),
+        status: "done",
+        finalOutput: "历史结果",
+        updatedAt: "2026-04-02T00:00:03.000Z"
+      },
+      events: [createRunEvent(1, { type: "result", message: "历史结果" })],
+      answers: []
+    };
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.querySelector(".conversation-inline-status")).toBeNull();
+    expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']").length).toBeGreaterThan(0);
   });
 
   it("renders tool content inline before answer and keeps follow-up output later in the same flat stream", async () => {

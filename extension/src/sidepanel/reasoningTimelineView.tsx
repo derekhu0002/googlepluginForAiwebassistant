@@ -12,8 +12,6 @@ import {
   type TranscriptPartModel
 } from "./reasoningTimeline";
 
-const GENERIC_STREAMING_COPY = "正在继续…";
-
 function isNearBottom(element: HTMLDivElement | null) {
   if (!element) {
     return true;
@@ -342,24 +340,6 @@ export function ReasoningTimeline({
     return merged.length ? merged : base;
   }, [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runSegments, runStatus, streamStatus, updatedAt]);
 
-  const inlineStatusCopy = useMemo(() => {
-    const hasAssistantTextPart = parts.some((part) => part.role === "assistant" && part.kind === "text" && part.text.trim());
-
-    if (!live || hasAssistantTextPart) {
-      return "";
-    }
-
-    if (presentationState.runStatus === "waiting_for_answer" || presentationState.streamStatus === "waiting_for_answer" || pendingQuestionId) {
-      return "";
-    }
-
-    if (presentationState.runStatus === "streaming" || presentationState.streamStatus === "connecting" || presentationState.streamStatus === "streaming" || presentationState.streamStatus === "reconnecting") {
-      return GENERIC_STREAMING_COPY;
-    }
-
-    return "";
-  }, [live, parts, pendingQuestionId, presentationState.runStatus, presentationState.streamStatus]);
-
   useEffect(() => {
     setFeedbackByMessageId({});
   }, [runId]);
@@ -451,7 +431,6 @@ export function ReasoningTimeline({
 
   return (
     <div className="timeline-shell conversation-timeline-shell chat-stream-shell">
-      {inlineStatusCopy ? <p className="conversation-inline-status detail-muted" role="status" aria-live="polite">{inlineStatusCopy}</p> : null}
       <div
         className="event-feed transcript-feed chat-stream-feed"
         ref={containerRef}
