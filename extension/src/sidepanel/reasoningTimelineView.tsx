@@ -187,8 +187,6 @@ function PartActions({
 
 function TranscriptPartBlock({
   part,
-  animate,
-  live,
   onCopy,
   onRetry,
   onFeedback,
@@ -196,8 +194,6 @@ function TranscriptPartBlock({
   questionSubmitDisabled
 }: {
   part: TranscriptPartModel;
-  animate: boolean;
-  live: boolean;
   onCopy: (part: TranscriptPartModel) => void | Promise<void>;
   onRetry?: (part: TranscriptPartModel) => void | Promise<void>;
   onFeedback?: (part: TranscriptPartModel, feedback: MessageFeedbackValue) => void | Promise<void>;
@@ -205,7 +201,6 @@ function TranscriptPartBlock({
   questionSubmitDisabled?: boolean;
 }) {
   const isUser = part.role === "user";
-  const showStreamingIndicator = live && part.kind === "text" && animate;
   const feedbackMessage = part.feedbackState?.message || getDefaultFeedbackMessage(part.feedbackState?.status ?? "idle", part.feedbackState?.selected);
   const messageClassName = [
     "transcript-part-copy",
@@ -236,7 +231,6 @@ function TranscriptPartBlock({
           </>
         ) : (
           <>
-            {showStreamingIndicator ? <span className="streaming-indicator">生成中</span> : null}
             {toolLabel ? <span className="transcript-part-label">{toolLabel}</span> : null}
             {part.text ? (
               isUser
@@ -443,12 +437,6 @@ export function ReasoningTimeline({
           <TranscriptPartBlock
             key={`${part.runId}:${part.id}:${index}`}
             part={part}
-            animate={live
-              && (presentationState.streamStatus === "connecting" || presentationState.streamStatus === "streaming" || presentationState.streamStatus === "reconnecting")
-              && index === parts.length - 2
-              && part.role === "assistant"
-              && part.kind === "text"}
-            live={live}
             onCopy={handleCopy}
             onFeedback={handleFeedback}
             onRetry={handleRetry}

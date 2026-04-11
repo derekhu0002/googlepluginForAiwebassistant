@@ -2121,7 +2121,9 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("第一段");
-    expect(container.querySelector(".streaming-indicator")).toBeTruthy();
+    expect(container.querySelector(".streaming-indicator")).toBeNull();
+    expect(container.querySelector(".transcript-part[data-part-kind='summary']")?.textContent).toContain("进行中");
+    expect(container.querySelector(".transcript-part[data-part-kind='text']")?.textContent ?? "").not.toContain("生成中");
 
     await act(async () => {
       await handlers.onEvent?.(createRunEvent(2, {
