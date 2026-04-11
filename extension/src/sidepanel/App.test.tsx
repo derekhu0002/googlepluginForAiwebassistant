@@ -856,7 +856,7 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
-  it("renders the final assistant answer with tool content inline while hiding reasoning logs", async () => {
+  it("renders the final assistant answer while hiding tool and reasoning logs", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -889,11 +889,12 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).not.toContain("Assistant");
     expect(container.textContent).toContain("最终结论");
     expect(container.textContent).not.toContain("读取页面上下文");
-    expect(container.textContent).toContain("工具");
+    expect(container.textContent).not.toContain("工具");
+    expect(container.textContent).not.toContain("查询历史 SR");
     expect(container.textContent).not.toContain("展开推理过程");
   });
 
-  it("shows persisted final output while keeping tool content inline even when reasoning is hidden", async () => {
+  it("shows persisted final output while keeping tool content hidden", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -922,7 +923,8 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("来自持久化状态的回复");
-    expect(container.textContent).toContain("工具");
+    expect(container.textContent).not.toContain("工具");
+    expect(container.textContent).not.toContain("查询历史 SR");
     expect(container.textContent).not.toContain("展开推理过程");
     expect(container.textContent).not.toContain("读取页面上下文");
   });
@@ -1114,7 +1116,7 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
-  it("shows tool content inline while only tool-call payloads exist and keeps raw payloads hidden", async () => {
+  it("hides tool-call-only transcript blocks while still hiding raw payloads", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1132,11 +1134,11 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("工具");
+    expect(container.textContent).not.toContain("工具");
     expect(container.textContent).not.toContain("prepare_context");
     expect(container.textContent).not.toContain("secret");
     expect(container.querySelector("pre")).toBeNull();
-    expect(container.querySelector("[data-part-kind='tool']")).toBeTruthy();
+    expect(container.querySelector("[data-part-kind='tool']")).toBeNull();
     expect(container.querySelector("[data-part-kind='text']")).toBeNull();
   });
 
@@ -2137,7 +2139,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("第一段第二段");
   });
 
-  it("keeps tool-only streaming state out of transcript body and hides raw tool details", async () => {
+  it("keeps tool-only streaming state out of transcript body and hides tool details entirely", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -2157,7 +2159,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.querySelector("[data-part-kind='text']")).toBeNull();
-    expect(container.textContent).toContain("工具");
+    expect(container.textContent).not.toContain("工具");
     expect(container.textContent).not.toContain("token=123");
     expect(container.textContent).not.toContain("grep");
   });
@@ -2332,7 +2334,7 @@ describe("side panel host permission request flow", () => {
     expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']").length).toBeGreaterThan(0);
   });
 
-  it("renders tool content inline before answer and keeps follow-up output later in the same flat stream", async () => {
+  it("keeps follow-up output in the same flat stream while hiding tool insertions", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -2381,11 +2383,11 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     const streamParts = Array.from(container.querySelectorAll(".transcript-part[data-section='part']"));
-    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "tool", "text", "question", "answer", "text", "summary"]);
-    expect(streamParts[1]?.textContent ?? "").toContain("查询历史 SR");
-    expect(streamParts[2]?.textContent ?? "").toContain("第一段");
-    expect(streamParts[3]?.textContent ?? "").toContain("请选择处理方式");
-    expect(streamParts[5]?.textContent ?? "").toContain("第二段");
+    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "text", "question", "answer", "text", "summary"]);
+    expect(container.textContent).not.toContain("查询历史 SR");
+    expect(streamParts[1]?.textContent ?? "").toContain("第一段");
+    expect(streamParts[2]?.textContent ?? "").toContain("请选择处理方式");
+    expect(streamParts[4]?.textContent ?? "").toContain("第二段");
   });
 
   it("keeps newer live assistant body when stale final output exists in active run state", async () => {

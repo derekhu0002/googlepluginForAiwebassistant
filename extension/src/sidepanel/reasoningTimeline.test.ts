@@ -63,7 +63,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.at(-1)?.text).toBe("已完成");
   });
 
-  it("keeps tool and answer parts inline without chat-card-only contracts", () => {
+  it("hides tool-call parts from the default transcript stream while keeping the answer", () => {
     const parts = buildTranscriptPartStream({
       runId: "run-1",
       prompt: "请回答",
@@ -73,6 +73,22 @@ describe("reasoning timeline share-aligned transcript contract", () => {
       ],
       status: "done",
       finalOutput: "最终回答"
+    });
+
+    expect(parts.map((part) => part.kind)).toEqual(["prompt", "text", "summary"]);
+  });
+
+  it("can still project tool-call parts when explicitly requested for non-transcript consumers", () => {
+    const parts = buildTranscriptPartStream({
+      runId: "run-1",
+      prompt: "请回答",
+      events: [
+        createEvent(1, { type: "tool_call", message: "读取历史记录" }),
+        createEvent(2, { type: "result", message: "最终回答", data: { message_id: "msg-1" } })
+      ],
+      status: "done",
+      finalOutput: "最终回答",
+      includeToolCallParts: true
     });
 
     expect(parts.map((part) => part.kind)).toEqual(["prompt", "tool", "text", "summary"]);

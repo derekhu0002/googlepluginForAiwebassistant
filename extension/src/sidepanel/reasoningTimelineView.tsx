@@ -207,7 +207,7 @@ function TranscriptPartBlock({
     "markdown-body",
     part.kind === "reasoning" ? "transcript-part-muted" : ""
   ].filter(Boolean).join(" ");
-  const toolLabel = part.kind === "tool" ? "工具" : part.kind === "reasoning" ? "分析" : null;
+  const toolLabel = part.kind === "reasoning" ? "分析" : null;
 
   return (
     <section
@@ -318,7 +318,8 @@ export function ReasoningTimeline({
       runStatus,
       streamStatus,
       updatedAt,
-      pendingQuestionId
+      pendingQuestionId,
+      includeToolCallParts: false
     });
 
     const merged = runSegments?.length
@@ -327,7 +328,8 @@ export function ReasoningTimeline({
         feedbackByMessageId,
         runStatus: segment.status,
         streamStatus: segment.runId === runId ? streamStatus : undefined,
-        includeSummary: index === runSegments.length - 1
+        includeSummary: index === runSegments.length - 1,
+        includeToolCallParts: false
       }))
       : base;
 

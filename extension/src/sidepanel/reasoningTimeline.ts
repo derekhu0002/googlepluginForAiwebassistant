@@ -206,6 +206,7 @@ export interface BuildChatStreamItemsOptions {
   status?: RunRecord["status"];
   updatedAt?: string | null;
   pendingQuestionId?: string | null;
+  includeToolCallParts?: boolean;
 }
 
 export interface AssistantResponseAggregation {
@@ -1456,7 +1457,10 @@ export function buildTranscriptPartStream(options: BuildChatStreamItemsOptions &
   runStatus?: TimelineRunStatus;
   includeSummary?: boolean;
 }) {
-  const messages = buildTranscriptMessages(options);
+  const messages = buildTranscriptMessages({
+    ...options,
+    includeToolCallParts: options.includeToolCallParts ?? false
+  });
   const parts = flattenTranscriptMessages(messages);
 
   if (!messages.length || options.includeSummary === false) {
@@ -1480,6 +1484,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
   const runId = options.runId ?? "standalone-run";
   const prompt = options.prompt?.trim() || "";
   const events = options.events;
+  const includeToolCallParts = options.includeToolCallParts ?? true;
   const answersByQuestionId = new Map<string, AnswerRecord[]>();
   const consumedQuestionAnswerIds = new Set<string>();
   const items: ChatStreamItemModel[] = [];
@@ -1656,6 +1661,10 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
 
     if (event.type === "thinking" || event.type === "tool_call") {
       if (event.type === "tool_call") {
+        if (!includeToolCallParts) {
+          continue;
+        }
+
         closeCurrentOutputSegment();
       }
 
@@ -1784,7 +1793,10 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildTranscriptMessages(options: BuildChatStreamItemsOptions): TranscriptMessageModel[] {
-  const fragments = buildFragmentSequence(options);
+  const fragments = buildFragmentSequence({
+    ...options,
+    includeToolCallParts: options.includeToolCallParts ?? false
+  });
   const messages: TranscriptMessageModel[] = [];
 
   for (const item of fragments) {
