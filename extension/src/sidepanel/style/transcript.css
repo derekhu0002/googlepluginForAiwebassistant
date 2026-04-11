@@ -1,3 +1,4 @@
+/* @ArchitectureID: ELM-APP-EXT-SIDEPANEL-DESIGN-SYSTEM */
 .event-feed {
   display: flex;
   flex-direction: column;
@@ -36,6 +37,14 @@
   padding: 0 0 6px;
 }
 
+.transcript-message[data-message-role="user"] {
+  justify-content: flex-end;
+}
+
+.transcript-message[data-message-role="assistant"] {
+  justify-content: flex-start;
+}
+
 .transcript-message-parts,
 .transcript-summary-content {
   flex: 1 1 auto;
@@ -46,6 +55,15 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-width: min(100%, 720px);
+}
+
+.transcript-message[data-message-role="user"] .transcript-message-parts {
+  align-items: flex-end;
+}
+
+.transcript-message[data-message-role="assistant"] .transcript-message-parts {
+  align-items: flex-start;
 }
 
 .transcript-part,
@@ -57,6 +75,16 @@
   display: flex;
   gap: 10px;
   align-items: flex-start;
+}
+
+.transcript-message[data-message-role="user"] .transcript-part {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.transcript-message[data-message-role="assistant"] .transcript-part {
+  flex-direction: row;
+  text-align: left;
 }
 
 .transcript-part-decoration,
@@ -119,6 +147,14 @@
   padding: 0 0 0.375rem;
 }
 
+.transcript-message[data-message-role="user"] .transcript-part-body {
+  align-items: flex-end;
+}
+
+.transcript-message[data-message-role="assistant"] .transcript-part-body {
+  align-items: flex-start;
+}
+
 .transcript-part-header,
 .transcript-part-heading {
   display: flex;
@@ -129,6 +165,25 @@
 
 .transcript-part-header {
   justify-content: space-between;
+}
+
+.transcript-message[data-message-role="user"] .transcript-part-header,
+.transcript-message[data-message-role="user"] .transcript-part-heading,
+.transcript-message[data-message-role="user"] .transcript-part-copy,
+.transcript-message[data-message-role="user"] .markdown-body {
+  text-align: right;
+}
+
+.transcript-message[data-message-role="assistant"] .transcript-part-header,
+.transcript-message[data-message-role="assistant"] .transcript-part-heading,
+.transcript-message[data-message-role="assistant"] .transcript-part-copy,
+.transcript-message[data-message-role="assistant"] .markdown-body {
+  text-align: left;
+}
+
+.transcript-message[data-message-role="user"] .transcript-part-header,
+.transcript-message[data-message-role="user"] .transcript-part-heading {
+  justify-content: flex-end;
 }
 
 .transcript-part-copy {
@@ -166,6 +221,15 @@
   transition: opacity 120ms ease, transform 120ms ease;
   margin-left: 6px;
   padding-top: 2px;
+}
+
+.transcript-message[data-message-role="assistant"] .transcript-message-actions,
+.transcript-message[data-message-role="assistant"] .feedback-status {
+  margin-left: 6px;
+}
+
+.transcript-message[data-message-role="user"] .feedback-status {
+  display: none;
 }
 
 .transcript-message:hover .transcript-message-actions,

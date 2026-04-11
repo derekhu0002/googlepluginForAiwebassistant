@@ -14,7 +14,6 @@ import {
   type TranscriptPartModel
 } from "./reasoningTimeline";
 
-const TYPEWRITER_INTERVAL_MS = 24;
 const GENERIC_STREAMING_COPY = "正在继续…";
 
 function isNearBottom(element: HTMLDivElement | null) {
@@ -23,62 +22,6 @@ function isNearBottom(element: HTMLDivElement | null) {
   }
 
   return element.scrollHeight - element.scrollTop - element.clientHeight <= 32;
-}
-
-function useBufferedTypewriter(text: string, enabled: boolean) {
-  const [displayedText, setDisplayedText] = useState(enabled ? "" : text);
-  const displayedRef = useRef(displayedText);
-
-  useEffect(() => {
-    displayedRef.current = displayedText;
-  }, [displayedText]);
-
-  useEffect(() => {
-    if (!enabled) {
-      displayedRef.current = text;
-      setDisplayedText(text);
-      return;
-    }
-
-    let cancelled = false;
-    let timer: number | undefined;
-    let nextLength = text.startsWith(displayedRef.current) ? displayedRef.current.length : 0;
-
-    displayedRef.current = text.slice(0, nextLength);
-    setDisplayedText(displayedRef.current);
-
-    if (nextLength >= text.length) {
-      return;
-    }
-
-    const tick = () => {
-      if (cancelled) {
-        return;
-      }
-
-      const remaining = text.length - nextLength;
-      const chunkSize = Math.max(1, Math.ceil(remaining / 12));
-      nextLength = Math.min(text.length, nextLength + chunkSize);
-      const nextValue = text.slice(0, nextLength);
-      displayedRef.current = nextValue;
-      setDisplayedText(nextValue);
-
-      if (nextLength < text.length) {
-        timer = window.setTimeout(tick, TYPEWRITER_INTERVAL_MS);
-      }
-    };
-
-    timer = window.setTimeout(tick, TYPEWRITER_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, [enabled, text]);
-
-  return displayedText;
 }
 
 function formatTimestamp(value: string) {
@@ -226,9 +169,7 @@ function TranscriptPartBlock({
   questionSubmitDisabled?: boolean;
 }) {
   const isUser = part.kind === "prompt" || part.kind === "answer";
-  const shouldAnimateSummary = animate && !isUser && Boolean(part.text) && part.text !== GENERIC_STREAMING_COPY;
-  const displayedSummary = useBufferedTypewriter(part.text, shouldAnimateSummary);
-  const messageText = isUser ? part.text : displayedSummary;
+  const messageText = part.text;
   const showStreamingIndicator = live && part.kind === "text" && animate;
   const messageClassName = [
     "transcript-part-copy",

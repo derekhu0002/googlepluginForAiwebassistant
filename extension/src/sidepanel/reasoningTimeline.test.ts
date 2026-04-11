@@ -407,6 +407,73 @@ describe("reasoning timeline fragment sequence", () => {
     expect(aggregation.preferredMessageId).toBe("msg-1");
   });
 
+  /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
+  it("keeps current history and follow-up turns on the same user/assistant role contract", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续原问题",
+      events: [
+        createEvent(1, {
+          type: "question",
+          message: "请选择处理方式",
+          question: {
+            questionId: "q-1",
+            title: "需要确认",
+            message: "请选择处理方式",
+            options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+            allowFreeText: false
+          }
+        }),
+        createEvent(2, { type: "result", message: "继续完成" })
+      ],
+      answers: [{
+        id: "answer-1",
+        runId: "run-1",
+        questionId: "q-1",
+        answer: "继续执行",
+        choiceId: "resume",
+        submittedAt: "2026-04-02T00:00:02.500Z"
+      }],
+      status: "done",
+      finalOutput: "继续完成"
+    });
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
+    expect(messages.map((message) => message.parts.map((part) => part.kind))).toEqual([
+      ["prompt"],
+      ["question"],
+      ["answer"],
+      ["text"]
+    ]);
+  });
+
+  it("treats assistant text deltas as direct incremental transcript content", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: "第一段",
+          data: { field: "text", message_id: "msg-1" }
+        }),
+        createEvent(2, {
+          type: "thinking",
+          message: "第二段",
+          data: { field: "text", message_id: "msg-1" }
+        })
+      ],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1]?.role).toBe("assistant");
+    expect(messages[1]?.parts).toHaveLength(1);
+    expect(messages[1]?.parts[0]?.kind).toBe("text");
+    expect(messages[1]?.parts[0]?.text).toBe("第一段第二段");
+  });
+
   it("prefers terminal answer text when leaked reasoning blocks are mixed into response deltas", () => {
     const finalOutput = "当前主要风险\n\n1. 数据最小化风险。\n\n2. 访问边界需要补强。";
     const events = [

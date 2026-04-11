@@ -2040,6 +2040,82 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("标题");
   });
 
+  /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
+  it("renders transcript role hooks for user-right assistant-left alignment", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          updatedAt: "2026-04-02T00:00:02.000Z",
+          finalOutput: "最终回答"
+        },
+        runEvents: [createRunEvent(1, { type: "result", message: "最终回答" })]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const roleSequence = Array.from(container.querySelectorAll(".transcript-message")).map((element) => element.getAttribute("data-message-role"));
+    expect(roleSequence).toEqual(["user", "assistant"]);
+    expect(container.querySelector(".transcript-message[data-message-role='user'] [data-part-kind='prompt']")).toBeTruthy();
+    expect(container.querySelector(".transcript-message[data-message-role='assistant'] [data-part-kind='text']")).toBeTruthy();
+  });
+
+  it("updates assistant streaming text directly from transcript events without buffered typing", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = container.querySelector("button[aria-label='发送消息']");
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
+    const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void> };
+
+    await act(async () => {
+      await handlers.onEvent?.(createRunEvent(1, {
+        type: "thinking",
+        message: "第一段",
+        data: { field: "text", message_id: "msg-1" }
+      }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("第一段");
+    expect(container.querySelector(".streaming-indicator")).toBeTruthy();
+
+    await act(async () => {
+      await handlers.onEvent?.(createRunEvent(2, {
+        type: "thinking",
+        message: "第二段",
+        data: { field: "text", message_id: "msg-1" }
+      }));
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("第一段第二段");
+  });
+
   it("renders generic streaming copy without raw tool details", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
