@@ -119,10 +119,16 @@ export function MainStage({
             questionSubmitDisabled={questionSubmitDisabled}
           />
         ) : (
-          <div className="chat-empty-hero empty-state">
-            <strong>开始一段新的会话</strong>
-            <p>发送 prompt 后，这里会切换成基于 messages[] -&gt; parts[] 的 transcript 主舞台。</p>
-          </div>
+          <section className="transcript-empty-state empty-state" data-component="summary">
+            <div className="transcript-summary-decoration" data-section="decoration" aria-hidden="true">
+              <span className="transcript-summary-status transcript-summary-status-neutral" />
+              <span className="transcript-part-rail" />
+            </div>
+            <div className="transcript-summary-content" data-section="content">
+              <strong>开始一段新的会话</strong>
+              <p>发送 prompt 后，这里会切换成基于 messages[] -&gt; parts[] 的 transcript 主舞台。</p>
+            </div>
+          </section>
         )}
       </div>
     </section>

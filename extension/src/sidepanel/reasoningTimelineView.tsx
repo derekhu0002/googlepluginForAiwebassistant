@@ -97,6 +97,15 @@ function normalizeFeedbackFailureMessage(message: string) {
   return message.trim() || "反馈提交失败";
 }
 
+function SummaryStatusDecoration({ tone }: { tone: "neutral" | "progress" | "warning" | "success" | "danger" }) {
+  return (
+    <div className="transcript-summary-decoration" data-section="decoration" aria-hidden="true">
+      <span className={`transcript-summary-status transcript-summary-status-${tone}`} />
+      <span className="transcript-part-rail" />
+    </div>
+  );
+}
+
 function MarkdownMessage({ text, className }: { text: string; className: string }) {
   return (
     <div className={`${className} markdown-body`}>
@@ -203,22 +212,6 @@ function InlineQuestionComposer({
   );
 }
 
-function getMessageTone(message: TranscriptMessageModel) {
-  if (message.role === "user") {
-    return "user";
-  }
-
-  if (message.parts.some((part) => part.kind === "error")) {
-    return "error";
-  }
-
-  if (message.parts.some((part) => part.kind === "question" && part.pendingQuestion)) {
-    return "question";
-  }
-
-  return "assistant";
-}
-
 function TranscriptPartBlock({
   part,
   animate,
@@ -238,37 +231,49 @@ function TranscriptPartBlock({
   const messageText = isUser ? part.text : displayedSummary;
   const showStreamingIndicator = live && part.kind === "text" && animate;
   const messageClassName = [
-    "conversation-message transcript-part-message",
-    part.kind === "reasoning" || part.kind === "tool" ? "conversation-message-muted transcript-part-muted" : ""
+    "transcript-part-copy",
+    "markdown-body",
+    part.kind === "reasoning" || part.kind === "tool" ? "transcript-part-muted" : ""
   ].filter(Boolean).join(" ");
 
   return (
-    <div className={`transcript-part transcript-part-${part.kind} ${part.kind === "reasoning" ? "assistant-thinking-item" : ""}`} data-part-anchor={part.anchorId}>
-      <div className="transcript-part-header">
-        <div className="transcript-part-heading">
-          {showStreamingIndicator ? <span className="streaming-indicator">生成中</span> : null}
-          {part.kind === "answer" ? renderAnswerLabel(part.answer) : null}
-          {part.badges.length ? (
-            <span className="fragment-badge-list">
-              {part.badges.map((badge) => (
-                <span key={`${part.id}:${badge.label}`} className={`fragment-badge fragment-badge-${badge.tone}`}>{badge.label}</span>
-              ))}
-            </span>
-          ) : null}
-        </div>
-        <small>{formatTimestamp(part.updatedAt)}</small>
+    <section
+      className={`transcript-part transcript-part-${part.kind}`}
+      data-section="part"
+      data-part-kind={part.kind}
+      data-part-anchor={part.anchorId}
+    >
+      <div className="transcript-part-decoration" data-section="decoration" aria-hidden="true">
+        <span className="transcript-part-anchor" />
+        <span className="transcript-part-rail" />
       </div>
+      <div className="transcript-part-body" data-section="content">
+        <div className="transcript-part-header">
+          <div className="transcript-part-heading">
+            {showStreamingIndicator ? <span className="streaming-indicator">生成中</span> : null}
+            {part.kind === "answer" ? renderAnswerLabel(part.answer) : null}
+            {part.badges.length ? (
+              <span className="fragment-badge-list">
+                {part.badges.map((badge) => (
+                  <span key={`${part.id}:${badge.label}`} className={`fragment-badge fragment-badge-${badge.tone}`}>{badge.label}</span>
+                ))}
+              </span>
+            ) : null}
+          </div>
+          <small>{formatTimestamp(part.updatedAt)}</small>
+        </div>
 
-      {messageText ? (
-        isUser
-          ? <p className={messageClassName}>{messageText}</p>
-          : <MarkdownMessage text={messageText} className={messageClassName} />
-      ) : null}
+        {messageText ? (
+          isUser
+            ? <p className="transcript-part-copy">{messageText}</p>
+            : <MarkdownMessage text={messageText} className={messageClassName} />
+        ) : null}
 
-      {part.kind === "question" && part.question && part.pendingQuestion && onQuestionSubmit ? (
-        <InlineQuestionComposer question={part.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
-      ) : null}
-    </div>
+        {part.kind === "question" && part.question && part.pendingQuestion && onQuestionSubmit ? (
+          <InlineQuestionComposer question={part.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -291,70 +296,66 @@ function TranscriptMessageCard({
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
 }) {
-  const tone = getMessageTone(message);
   const isUser = message.role === "user";
   const feedbackMessage = message.feedbackState?.message || getDefaultFeedbackMessage(message.feedbackState?.status ?? "idle", message.feedbackState?.selected);
 
   return (
-    <article className={`conversation-turn transcript-message turn-${tone}`} data-message-anchor={message.anchorId} data-message-group-anchor={message.groupAnchorId}>
-      <div className="conversation-avatar" aria-hidden="true" />
-      <div className={`conversation-bubble transcript-message-bubble ${isUser ? "user-bubble" : ""}`}>
-        <div className="transcript-message-parts">
-          {message.parts.map((part, index) => (
-            <TranscriptPartBlock
-              key={`${message.id}:${part.id}:${index}`}
-              part={part}
-              animate={animate && index === message.parts.length - 1}
-              live={live}
-              onQuestionSubmit={onQuestionSubmit}
-              questionSubmitDisabled={questionSubmitDisabled}
-            />
-          ))}
-        </div>
-
-        {!isUser ? (
-          <div className="conversation-hover-actions" aria-label="message actions">
-            {message.supportsCopy ? (
-              <button type="button" className="icon-button" aria-label="复制" title="复制" onClick={() => onCopy?.(message)}>
-                <CopyIcon />
-              </button>
-            ) : null}
-            {message.supportsFeedback ? (
-              <>
-                <button
-                  type="button"
-                  className={`icon-button ${message.feedbackState?.selected === "like" && message.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
-                  aria-label="点赞"
-                  title="点赞"
-                  disabled={message.feedbackState?.status === "submitting"}
-                  onClick={() => onFeedback?.(message, "like")}
-                >
-                  <LikeIcon />
-                </button>
-                <button
-                  type="button"
-                  className={`icon-button ${message.feedbackState?.selected === "dislike" && message.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
-                  aria-label="点踩"
-                  title="点踩"
-                  disabled={message.feedbackState?.status === "submitting"}
-                  onClick={() => onFeedback?.(message, "dislike")}
-                >
-                  <DislikeIcon />
-                </button>
-              </>
-            ) : null}
-            {message.supportsRetry ? (
-              <button type="button" className="icon-button" aria-label="重试" title="重试" onClick={() => onRetry?.(message)}>
-                <RetryIcon />
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {!isUser && feedbackMessage ? (
-          <small className={`feedback-status feedback-${message.feedbackState?.status ?? "idle"}`}>{feedbackMessage}</small>
-        ) : null}
+    <article className="transcript-message" data-message-anchor={message.anchorId} data-message-group-anchor={message.groupAnchorId} data-message-role={message.role}>
+      <div className="transcript-message-parts">
+        {message.parts.map((part, index) => (
+          <TranscriptPartBlock
+            key={`${message.id}:${part.id}:${index}`}
+            part={part}
+            animate={animate && index === message.parts.length - 1}
+            live={live}
+            onQuestionSubmit={onQuestionSubmit}
+            questionSubmitDisabled={questionSubmitDisabled}
+          />
+        ))}
       </div>
+
+      {!isUser ? (
+        <div className="transcript-message-actions" aria-label="message actions">
+          {message.supportsCopy ? (
+            <button type="button" className="icon-button" aria-label="复制" title="复制" onClick={() => onCopy?.(message)}>
+              <CopyIcon />
+            </button>
+          ) : null}
+          {message.supportsFeedback ? (
+            <>
+              <button
+                type="button"
+                className={`icon-button ${message.feedbackState?.selected === "like" && message.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
+                aria-label="点赞"
+                title="点赞"
+                disabled={message.feedbackState?.status === "submitting"}
+                onClick={() => onFeedback?.(message, "like")}
+              >
+                <LikeIcon />
+              </button>
+              <button
+                type="button"
+                className={`icon-button ${message.feedbackState?.selected === "dislike" && message.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
+                aria-label="点踩"
+                title="点踩"
+                disabled={message.feedbackState?.status === "submitting"}
+                onClick={() => onFeedback?.(message, "dislike")}
+              >
+                <DislikeIcon />
+              </button>
+            </>
+          ) : null}
+          {message.supportsRetry ? (
+            <button type="button" className="icon-button" aria-label="重试" title="重试" onClick={() => onRetry?.(message)}>
+              <RetryIcon />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!isUser && feedbackMessage ? (
+        <small className={`feedback-status feedback-${message.feedbackState?.status ?? "idle"}`}>{feedbackMessage}</small>
+      ) : null}
     </article>
   );
 }
@@ -558,7 +559,7 @@ export function ReasoningTimeline({
     <div className="timeline-shell conversation-timeline-shell chat-stream-shell">
       {inlineStatusCopy ? <p className="conversation-inline-status detail-muted" role="status" aria-live="polite">{inlineStatusCopy}</p> : null}
       <div
-        className="event-feed transcript-feed conversation-thread chat-stream-feed"
+        className="event-feed transcript-feed chat-stream-feed"
         ref={containerRef}
         onScroll={() => {
           const nearBottom = isNearBottom(containerRef.current);
@@ -583,8 +584,11 @@ export function ReasoningTimeline({
         )) : <p className="empty-state chat-empty-state">{emptyText}</p>}
         {mergedMessages.length ? (
           <footer className={`transcript-summary transcript-summary-${transcriptSummary.tone}`} data-component="summary">
-            <strong>{transcriptSummary.label}</strong>
-            <p>{transcriptSummary.detail}</p>
+            <SummaryStatusDecoration tone={transcriptSummary.tone} />
+            <div className="transcript-summary-content" data-section="content">
+              <strong>{transcriptSummary.label}</strong>
+              <p>{transcriptSummary.detail}</p>
+            </div>
           </footer>
         ) : null}
       </div>

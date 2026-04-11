@@ -66,6 +66,7 @@ describe("reasoning timeline fragment sequence", () => {
       "user:answer",
       "assistant:text"
     ]);
+    expect(messages.every((message) => message.parts.length >= 1)).toBe(true);
   });
 
   it("keeps reasoning and output inside one assistant message when they share a transcript group", () => {
@@ -92,6 +93,48 @@ describe("reasoning timeline fragment sequence", () => {
 
     expect(messages).toHaveLength(2);
     expect(messages[1]?.parts.map((part) => part.kind)).toEqual(["reasoning", "text"]);
+  });
+
+  it("keeps question, history, and follow-up rendering on the same message-to-parts contract", () => {
+    const options = {
+      runId: "run-1",
+      prompt: "继续原问题",
+      events: [
+        createEvent(1, {
+          type: "question",
+          message: "请选择处理方式",
+          question: {
+            questionId: "q-1",
+            title: "需要确认",
+            message: "请选择处理方式",
+            options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+            allowFreeText: false
+          }
+        }),
+        createEvent(2, { type: "result", message: "继续完成" })
+      ],
+      answers: [{
+        id: "answer-1",
+        runId: "run-1",
+        questionId: "q-1",
+        answer: "继续执行",
+        choiceId: "resume",
+        submittedAt: "2026-04-02T00:00:02.500Z"
+      }],
+      status: "done" as const,
+      finalOutput: "继续完成"
+    };
+
+    const liveMessages = buildTranscriptMessages(options);
+    const historyMessages = buildTranscriptMessages(options);
+
+    expect(liveMessages).toEqual(historyMessages);
+    expect(liveMessages.map((message) => message.parts.map((part) => part.kind))).toEqual([
+      ["prompt"],
+      ["question"],
+      ["answer"],
+      ["text"]
+    ]);
   });
 
   it("builds transcript tail summary for pause resume and completion states", () => {
@@ -304,6 +347,22 @@ describe("reasoning timeline fragment sequence", () => {
     const output = items.find((item) => item.kind === "assistant_output");
     expect(process?.groupAnchorId).toBe(output?.groupAnchorId);
     expect(output?.anchorId).toBe("msg-1");
+  });
+
+  it("does not reintroduce role shell markers into the transcript message model", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "请回答",
+      events: [createEvent(1, { type: "result", message: "最终回答" })],
+      status: "done",
+      finalOutput: "最终回答"
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(messages.every((message) => Array.isArray(message.parts) && message.parts.length > 0)).toBe(true);
+    expect(messages.some((message) => message.parts.some((part) => part.kind === "text"))).toBe(true);
+    expect(messages[1]).not.toHaveProperty("avatar");
+    expect(messages[1]).not.toHaveProperty("icon");
   });
 
   it("shows a placeholder assistant_output fragment while only process logs exist", () => {

@@ -44,12 +44,42 @@ export const OPENCODE_REFERENCE_INPUTS: OpenCodeReferenceInput[] = [
   {
     path: "anomalyco/opencode@dev/packages/web/src/components/Share.tsx",
     zone: "stage",
-    adaptation: "Used the share view's header + parts + summary structure to organize the transcript main stage."
+    adaptation: "Used as the primary contract for header -> message list -> summary stage framing and for keeping transcript rendering centered on messages[] with nested parts[]."
   },
   {
     path: "anomalyco/opencode@dev/packages/web/src/components/share.module.css",
     zone: "transcript",
-    adaptation: "Borrowed spacing density, data-component semantics, and stacked message part framing."
+    adaptation: "Used as the primary styling contract for stacked part framing, decoration gutters, and summary-tail density without restoring role shells."
+  },
+  {
+    path: "anomalyco/opencode@dev/packages/web/src/components/share/part.tsx",
+    zone: "transcript",
+    adaptation: "Used as the primary rendering contract for keeping part decoration inside each message and avoiding any avatar or side-swapped chat shell."
+  },
+  {
+    path: "anomalyco/opencode@dev/packages/web/src/components/share/common.tsx",
+    zone: "transcript",
+    adaptation: "Used as the primary contract for lightweight decoration utilities and compact footer conventions adapted to the sidepanel width."
+  },
+  {
+    path: "anomalyco/opencode@dev/packages/console/app/src/component/dropdown.tsx",
+    zone: "panels",
+    adaptation: "Used as a secondary reference for dense overlay action affordances and trigger spacing, without changing transcript message-part structure."
+  },
+  {
+    path: "anomalyco/opencode@dev/packages/console/app/src/component/dropdown.css",
+    zone: "styles",
+    adaptation: "Used as a secondary reference for compact interactive density and menu-trigger hover treatment."
+  },
+  {
+    path: "anomalyco/opencode@dev/packages/console/app/src/component/header.tsx",
+    zone: "header",
+    adaptation: "Used as a secondary reference for dense metadata grouping around the stage header while leaving Share.tsx as the transcript contract."
+  },
+  {
+    path: "anomalyco/opencode@dev/packages/console/app/src/component/spotlight.tsx",
+    zone: "visual",
+    adaptation: "Used as a secondary reference for restrained panel atmosphere only, not for transcript structure."
   },
   {
     path: "anomalyco/opencode@dev/packages/web/src/assets/lander/*",

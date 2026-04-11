@@ -664,9 +664,9 @@ describe("side panel host permission request flow", () => {
     await flushUi();
     await flushAllTimers();
 
-    const thinkingItems = container.querySelectorAll(".assistant-thinking-item");
-    expect(thinkingItems).toHaveLength(1);
-    expect(thinkingItems[0]?.textContent).toContain("Summarizing SR risks and actions");
+    const reasoningParts = container.querySelectorAll("[data-part-kind='reasoning']");
+    expect(reasoningParts).toHaveLength(1);
+    expect(reasoningParts[0]?.textContent).toContain("Summarizing SR risks and actions");
     expect(mockSaveEvent).toHaveBeenNthCalledWith(1, replayedThinkingEvent);
     expect(mockSaveEvent).toHaveBeenNthCalledWith(2, replayedThinkingEvent);
   });
@@ -712,10 +712,10 @@ describe("side panel host permission request flow", () => {
     await flushUi();
     await flushAllTimers();
 
-    const thinkingItems = container.querySelectorAll(".assistant-thinking-item");
-    expect(thinkingItems).toHaveLength(1);
-    expect(thinkingItems[0]?.textContent).toContain("I need to provide an answer in Chinese about the current SR risks.");
-    expect(thinkingItems[0]?.textContent).not.toBe("Summarizing project risks in Chinese");
+    const reasoningParts = container.querySelectorAll("[data-part-kind='reasoning']");
+    expect(reasoningParts).toHaveLength(1);
+    expect(reasoningParts[0]?.textContent).toContain("I need to provide an answer in Chinese about the current SR risks.");
+    expect(reasoningParts[0]?.textContent).not.toBe("Summarizing project risks in Chinese");
   });
 
   it("still syncs background state for a different run", () => {
@@ -1609,7 +1609,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("Transcript 尾部摘要");
+    expect(container.querySelector("[data-component='summary']")?.textContent).toContain("等待补充");
     expect(container.textContent).toContain("请选择处理方式");
 
     await act(async () => {
@@ -2034,9 +2034,9 @@ describe("side panel host permission request flow", () => {
     await flushUi();
     await flushAllTimers();
 
-    expect(container.querySelectorAll(".turn-assistant")).toHaveLength(1);
-    expect(container.querySelector(".turn-assistant .conversation-message.markdown-body")).toBeTruthy();
-    expect(container.querySelectorAll(".turn-assistant h1")).toHaveLength(1);
+    expect(container.querySelectorAll(".transcript-message[data-message-role='assistant']")).toHaveLength(1);
+    expect(container.querySelector(".transcript-message[data-message-role='assistant'] .transcript-part-copy.markdown-body")).toBeTruthy();
+    expect(container.querySelectorAll(".transcript-message[data-message-role='assistant'] h1")).toHaveLength(1);
     expect(container.textContent).toContain("标题");
   });
 
@@ -2196,5 +2196,10 @@ describe("side panel host permission request flow", () => {
     expect(transcriptText).not.toContain("!");
     expect(transcriptText).not.toContain("You");
     expect(transcriptText).not.toContain("Assistant");
+    expect(container.querySelector(".conversation-avatar")).toBeNull();
+    expect(container.querySelector(".turn-user")).toBeNull();
+    expect(container.querySelector(".conversation-bubble")).toBeNull();
+    expect(container.querySelectorAll(".transcript-message").length).toBeGreaterThan(0);
+    expect(container.querySelectorAll(".transcript-message [data-section='part']").length).toBeGreaterThan(0);
   });
 });
