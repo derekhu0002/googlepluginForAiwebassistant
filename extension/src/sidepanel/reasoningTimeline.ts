@@ -143,12 +143,16 @@ export interface ChatStreamItemModel {
 }
 
 export type TranscriptMessageRole = "user" | "assistant";
-export type TranscriptPartKind = "prompt" | "answer" | "text" | "reasoning" | "tool" | "question" | "error";
+export type TranscriptPartKind = "prompt" | "answer" | "text" | "reasoning" | "tool" | "question" | "error" | "summary";
 
 export interface TranscriptPartModel {
   id: string;
   kind: TranscriptPartKind;
+  role: TranscriptMessageRole;
+  runId: string;
   text: string;
+  detail?: string;
+  tone?: FragmentBadgeTone;
   createdAt: string;
   updatedAt: string;
   anchorId: string;
@@ -158,6 +162,12 @@ export interface TranscriptPartModel {
   question?: QuestionPayload;
   answer?: AnswerRecord;
   pendingQuestion?: boolean;
+  sourceQuestionPrompt?: string;
+  supportsCopy: boolean;
+  supportsRetry: boolean;
+  supportsFeedback: boolean;
+  feedbackState?: MessageFeedbackUiState;
+  actionAnchorId?: string;
 }
 
 export interface TranscriptMessageModel {
@@ -1341,6 +1351,8 @@ function createTranscriptPart(item: ChatStreamItemModel): TranscriptPartModel {
   return {
     id: item.id,
     kind: getTranscriptPartKind(item),
+    role: getTranscriptRole(item),
+    runId: item.runId,
     text: item.summary,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
@@ -1350,7 +1362,13 @@ function createTranscriptPart(item: ChatStreamItemModel): TranscriptPartModel {
     badges: item.badges,
     question: item.question,
     answer: item.answer,
-    pendingQuestion: item.pendingQuestion
+    pendingQuestion: item.pendingQuestion,
+    sourceQuestionPrompt: item.sourceQuestionPrompt,
+    supportsCopy: item.supportsCopy,
+    supportsRetry: item.supportsRetry,
+    supportsFeedback: item.supportsFeedback,
+    feedbackState: item.feedbackState,
+    actionAnchorId: item.supportsCopy || item.supportsRetry || item.supportsFeedback ? item.anchorId : undefined
   };
 }
 
@@ -1405,6 +1423,56 @@ function mergeTranscriptMessage(current: TranscriptMessageModel, item: ChatStrea
   };
 
   return next;
+}
+
+export function flattenTranscriptMessages(messages: TranscriptMessageModel[]) {
+  return messages.flatMap((message) => message.parts);
+}
+
+function createTranscriptSummaryPart(summary: TranscriptSummaryModel): TranscriptPartModel {
+  return {
+    id: `summary:${summary.runId ?? "transcript"}:${summary.updatedAt ?? "pending"}`,
+    kind: "summary",
+    role: "assistant",
+    runId: summary.runId ?? "transcript",
+    text: summary.label,
+    detail: summary.detail,
+    tone: summary.tone,
+    createdAt: summary.updatedAt ?? "1970-01-01T00:00:00.000Z",
+    updatedAt: summary.updatedAt ?? "1970-01-01T00:00:00.000Z",
+    anchorId: `summary:${summary.runId ?? "transcript"}`,
+    groupAnchorId: `summary:${summary.runId ?? "transcript"}`,
+    originEventTypes: [],
+    badges: [],
+    supportsCopy: false,
+    supportsRetry: false,
+    supportsFeedback: false
+  };
+}
+
+/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+export function buildTranscriptPartStream(options: BuildChatStreamItemsOptions & {
+  streamStatus?: TimelineStreamStatus;
+  runStatus?: TimelineRunStatus;
+  includeSummary?: boolean;
+}) {
+  const messages = buildTranscriptMessages(options);
+  const parts = flattenTranscriptMessages(messages);
+
+  if (!messages.length || options.includeSummary === false) {
+    return parts;
+  }
+
+  return [...parts, createTranscriptSummaryPart(buildTranscriptSummary({
+    events: options.events,
+    runStatus: options.runStatus ?? options.status,
+    streamStatus: options.streamStatus,
+    finalOutput: options.finalOutput,
+    errorMessage: options.errorMessage,
+    pendingQuestionId: options.pendingQuestionId,
+    runId: options.runId,
+    updatedAt: options.updatedAt
+  }))];
 }
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */

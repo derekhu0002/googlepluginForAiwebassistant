@@ -5,12 +5,10 @@ import { submitMessageFeedback } from "../shared/api";
 import type { AnswerRecord, MessageFeedbackValue, QuestionPayload, RunRecord } from "../shared/protocol";
 import type { MessageFeedbackUiState, StreamConnectionState } from "../shared/types";
 import {
-  buildTranscriptMessages,
-  buildTranscriptSummary,
+  buildTranscriptPartStream,
   getDefaultFeedbackMessage,
   resolveTimelinePresentationState,
   type BuildChatStreamItemsOptions,
-  type TranscriptMessageModel,
   type TranscriptPartModel
 } from "./reasoningTimeline";
 
@@ -24,29 +22,8 @@ function isNearBottom(element: HTMLDivElement | null) {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= 32;
 }
 
-function formatTimestamp(value: string) {
-  return new Date(value).toLocaleTimeString();
-}
-
-function renderAnswerLabel(answer?: AnswerRecord) {
-  if (!answer?.choiceId) {
-    return null;
-  }
-
-  return <span className="inline-answer-pill">已选择</span>;
-}
-
 function normalizeFeedbackFailureMessage(message: string) {
   return message.trim() || "反馈提交失败";
-}
-
-function SummaryStatusDecoration({ tone }: { tone: "neutral" | "progress" | "warning" | "success" | "danger" }) {
-  return (
-    <div className="transcript-summary-decoration" data-section="decoration" aria-hidden="true">
-      <span className={`transcript-summary-status transcript-summary-status-${tone}`} />
-      <span className="transcript-part-rail" />
-    </div>
-  );
 }
 
 function MarkdownMessage({ text, className }: { text: string; className: string }) {
@@ -155,27 +132,89 @@ function InlineQuestionComposer({
   );
 }
 
+function PartActions({
+  part,
+  onCopy,
+  onRetry,
+  onFeedback
+}: {
+  part: TranscriptPartModel;
+  onCopy: (part: TranscriptPartModel) => void | Promise<void>;
+  onRetry?: (part: TranscriptPartModel) => void | Promise<void>;
+  onFeedback?: (part: TranscriptPartModel, feedback: MessageFeedbackValue) => void | Promise<void>;
+}) {
+  if (!part.supportsCopy && !part.supportsRetry && !part.supportsFeedback) {
+    return null;
+  }
+
+  return (
+    <div className="transcript-part-footer-actions" aria-label="part actions">
+      {part.supportsCopy ? (
+        <button type="button" className="icon-button" aria-label="复制" title="复制" onClick={() => onCopy(part)}>
+          <CopyIcon />
+        </button>
+      ) : null}
+      {part.supportsFeedback ? (
+        <>
+          <button
+            type="button"
+            className={`icon-button ${part.feedbackState?.selected === "like" && part.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
+            aria-label="点赞"
+            title="点赞"
+            disabled={part.feedbackState?.status === "submitting"}
+            onClick={() => onFeedback?.(part, "like")}
+          >
+            <LikeIcon />
+          </button>
+          <button
+            type="button"
+            className={`icon-button ${part.feedbackState?.selected === "dislike" && part.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
+            aria-label="点踩"
+            title="点踩"
+            disabled={part.feedbackState?.status === "submitting"}
+            onClick={() => onFeedback?.(part, "dislike")}
+          >
+            <DislikeIcon />
+          </button>
+        </>
+      ) : null}
+      {part.supportsRetry ? (
+        <button type="button" className="icon-button" aria-label="重试" title="重试" onClick={() => onRetry?.(part)}>
+          <RetryIcon />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function TranscriptPartBlock({
   part,
   animate,
   live,
+  onCopy,
+  onRetry,
+  onFeedback,
   onQuestionSubmit,
   questionSubmitDisabled
 }: {
   part: TranscriptPartModel;
   animate: boolean;
   live: boolean;
+  onCopy: (part: TranscriptPartModel) => void | Promise<void>;
+  onRetry?: (part: TranscriptPartModel) => void | Promise<void>;
+  onFeedback?: (part: TranscriptPartModel, feedback: MessageFeedbackValue) => void | Promise<void>;
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
 }) {
-  const isUser = part.kind === "prompt" || part.kind === "answer";
-  const messageText = part.text;
+  const isUser = part.role === "user";
   const showStreamingIndicator = live && part.kind === "text" && animate;
+  const feedbackMessage = part.feedbackState?.message || getDefaultFeedbackMessage(part.feedbackState?.status ?? "idle", part.feedbackState?.selected);
   const messageClassName = [
     "transcript-part-copy",
     "markdown-body",
-    part.kind === "reasoning" || part.kind === "tool" ? "transcript-part-muted" : ""
+    part.kind === "reasoning" ? "transcript-part-muted" : ""
   ].filter(Boolean).join(" ");
+  const toolLabel = part.kind === "tool" ? "工具" : part.kind === "reasoning" ? "分析" : null;
 
   return (
     <section
@@ -183,121 +222,42 @@ function TranscriptPartBlock({
       data-section="part"
       data-part-kind={part.kind}
       data-part-anchor={part.anchorId}
+      data-part-role={part.role}
+      data-part-type={part.kind === "summary" ? "summary" : undefined}
+      data-component={part.kind === "summary" ? "summary" : undefined}
     >
       <div className="transcript-part-decoration" data-section="decoration" aria-hidden="true">
-        <span className="transcript-part-anchor" />
+        <span className="transcript-part-anchor" data-tone={part.tone ?? undefined} />
         <span className="transcript-part-rail" />
       </div>
       <div className="transcript-part-body" data-section="content">
-        <div className="transcript-part-header">
-          <div className="transcript-part-heading">
+        {part.kind === "summary" ? (
+          <>
+            <p className="transcript-part-copy transcript-part-summary-copy" data-section="copy">{part.text}</p>
+            {part.detail ? <p className="transcript-part-detail">{part.detail}</p> : null}
+          </>
+        ) : (
+          <>
             {showStreamingIndicator ? <span className="streaming-indicator">生成中</span> : null}
-            {part.kind === "answer" ? renderAnswerLabel(part.answer) : null}
-            {part.badges.length ? (
-              <span className="fragment-badge-list">
-                {part.badges.map((badge) => (
-                  <span key={`${part.id}:${badge.label}`} className={`fragment-badge fragment-badge-${badge.tone}`}>{badge.label}</span>
-                ))}
-              </span>
+            {toolLabel ? <span className="transcript-part-label">{toolLabel}</span> : null}
+            {part.text ? (
+              isUser
+                ? <p className="transcript-part-copy">{part.text}</p>
+                : <MarkdownMessage text={part.text} className={messageClassName} />
             ) : null}
-          </div>
-          <small>{formatTimestamp(part.updatedAt)}</small>
-        </div>
 
-        {messageText ? (
-          isUser
-            ? <p className="transcript-part-copy">{messageText}</p>
-            : <MarkdownMessage text={messageText} className={messageClassName} />
-        ) : null}
+            {part.kind === "question" && part.question && part.pendingQuestion && onQuestionSubmit ? (
+              <InlineQuestionComposer question={part.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
+            ) : null}
 
-        {part.kind === "question" && part.question && part.pendingQuestion && onQuestionSubmit ? (
-          <InlineQuestionComposer question={part.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
-        ) : null}
+            <PartActions part={part} onCopy={onCopy} onRetry={onRetry} onFeedback={onFeedback} />
+            {feedbackMessage && part.supportsFeedback ? (
+              <small className={`feedback-status feedback-${part.feedbackState?.status ?? "idle"}`}>{feedbackMessage}</small>
+            ) : null}
+          </>
+        )}
       </div>
     </section>
-  );
-}
-
-function TranscriptMessageCard({
-  message,
-  animate,
-  live,
-  onRetry,
-  onCopy,
-  onFeedback,
-  onQuestionSubmit,
-  questionSubmitDisabled
-}: {
-  message: TranscriptMessageModel;
-  animate: boolean;
-  live: boolean;
-  onRetry?: (message: TranscriptMessageModel) => void;
-  onCopy?: (message: TranscriptMessageModel) => void;
-  onFeedback?: (message: TranscriptMessageModel, feedback: MessageFeedbackValue) => void;
-  onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
-  questionSubmitDisabled?: boolean;
-}) {
-  const isUser = message.role === "user";
-  const feedbackMessage = message.feedbackState?.message || getDefaultFeedbackMessage(message.feedbackState?.status ?? "idle", message.feedbackState?.selected);
-
-  return (
-    <article className="transcript-message" data-message-anchor={message.anchorId} data-message-group-anchor={message.groupAnchorId} data-message-role={message.role}>
-      <div className="transcript-message-parts">
-        {message.parts.map((part, index) => (
-          <TranscriptPartBlock
-            key={`${message.id}:${part.id}:${index}`}
-            part={part}
-            animate={animate && index === message.parts.length - 1}
-            live={live}
-            onQuestionSubmit={onQuestionSubmit}
-            questionSubmitDisabled={questionSubmitDisabled}
-          />
-        ))}
-      </div>
-
-      {!isUser ? (
-        <div className="transcript-message-actions" aria-label="message actions">
-          {message.supportsCopy ? (
-            <button type="button" className="icon-button" aria-label="复制" title="复制" onClick={() => onCopy?.(message)}>
-              <CopyIcon />
-            </button>
-          ) : null}
-          {message.supportsFeedback ? (
-            <>
-              <button
-                type="button"
-                className={`icon-button ${message.feedbackState?.selected === "like" && message.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
-                aria-label="点赞"
-                title="点赞"
-                disabled={message.feedbackState?.status === "submitting"}
-                onClick={() => onFeedback?.(message, "like")}
-              >
-                <LikeIcon />
-              </button>
-              <button
-                type="button"
-                className={`icon-button ${message.feedbackState?.selected === "dislike" && message.feedbackState?.status === "submitted" ? "is-selected" : ""}`}
-                aria-label="点踩"
-                title="点踩"
-                disabled={message.feedbackState?.status === "submitting"}
-                onClick={() => onFeedback?.(message, "dislike")}
-              >
-                <DislikeIcon />
-              </button>
-            </>
-          ) : null}
-          {message.supportsRetry ? (
-            <button type="button" className="icon-button" aria-label="重试" title="重试" onClick={() => onRetry?.(message)}>
-              <RetryIcon />
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {!isUser && feedbackMessage ? (
-        <small className={`feedback-status feedback-${message.feedbackState?.status ?? "idle"}`}>{feedbackMessage}</small>
-      ) : null}
-    </article>
   );
 }
 
@@ -328,7 +288,6 @@ export function ReasoningTimeline({
   prompt,
   events,
   runSegments,
-  assistantStatus,
   answers = [],
   live = false,
   streamStatus,
@@ -353,51 +312,38 @@ export function ReasoningTimeline({
     finalOutput,
     errorMessage
   }), [errorMessage, events, finalOutput, runStatus, streamStatus]);
-  const messages = useMemo(() => buildTranscriptMessages({
-    runId,
-    prompt,
-    events,
-    answers,
-    feedbackByMessageId,
-    finalOutput,
-    errorMessage,
-    status: runStatus,
-    updatedAt,
-    pendingQuestionId
-  }), [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runStatus, updatedAt]);
-  const mergedMessages = useMemo(() => {
+
+  const parts = useMemo(() => {
+    const base = buildTranscriptPartStream({
+      runId,
+      prompt,
+      events,
+      answers,
+      feedbackByMessageId,
+      finalOutput,
+      errorMessage,
+      status: runStatus,
+      runStatus,
+      streamStatus,
+      updatedAt,
+      pendingQuestionId
+    });
+
     const merged = runSegments?.length
-      ? runSegments
-        .flatMap((segment, segmentIndex) => buildTranscriptMessages({
-          ...segment,
-          feedbackByMessageId
-        }).map((message, itemIndex) => ({ message, segmentIndex, itemIndex })))
-        .sort((left, right) => {
-          const timestampDelta = new Date(left.message.createdAt).getTime() - new Date(right.message.createdAt).getTime();
-          if (timestampDelta !== 0) {
-            return timestampDelta;
-          }
+      ? runSegments.flatMap((segment, index) => buildTranscriptPartStream({
+        ...segment,
+        feedbackByMessageId,
+        runStatus: segment.status,
+        streamStatus: segment.runId === runId ? streamStatus : undefined,
+        includeSummary: index === runSegments.length - 1
+      }))
+      : base;
 
-          const segmentDelta = left.segmentIndex - right.segmentIndex;
-          if (segmentDelta !== 0) {
-            return segmentDelta;
-          }
+    return merged.length ? merged : base;
+  }, [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runSegments, runStatus, streamStatus, updatedAt]);
 
-          const itemDelta = left.itemIndex - right.itemIndex;
-          if (itemDelta !== 0) {
-            return itemDelta;
-          }
-
-          return left.message.id.localeCompare(right.message.id);
-        })
-        .map(({ message }) => message)
-      : messages;
-
-    return merged.length ? merged : messages;
-  }, [feedbackByMessageId, messages, runSegments]);
   const inlineStatusCopy = useMemo(() => {
-    const hasAssistantTextPart = mergedMessages.some((message) => message.role === "assistant"
-      && message.parts.some((part) => part.kind === "text" && part.text.trim()));
+    const hasAssistantTextPart = parts.some((part) => part.role === "assistant" && part.kind === "text" && part.text.trim());
 
     if (!live || hasAssistantTextPart) {
       return "";
@@ -412,17 +358,7 @@ export function ReasoningTimeline({
     }
 
     return "";
-  }, [live, mergedMessages, pendingQuestionId, presentationState.runStatus, presentationState.streamStatus]);
-  const transcriptSummary = useMemo(() => buildTranscriptSummary({
-    events,
-    runStatus,
-    streamStatus,
-    finalOutput,
-    errorMessage,
-    pendingQuestionId,
-    runId,
-    updatedAt
-  }), [errorMessage, events, finalOutput, pendingQuestionId, runId, runStatus, streamStatus, updatedAt]);
+  }, [live, parts, pendingQuestionId, presentationState.runStatus, presentationState.streamStatus]);
 
   useEffect(() => {
     setFeedbackByMessageId({});
@@ -433,7 +369,7 @@ export function ReasoningTimeline({
   }, [live]);
 
   useEffect(() => {
-    const signature = mergedMessages.map((message) => `${message.id}:${message.parts.map((part) => part.text.length).join(",")}:${message.updatedAt}`).join("|");
+    const signature = parts.map((part) => `${part.id}:${part.text.length}:${part.updatedAt}`).join("|");
     if (!live || !signature || signature === previousSignatureRef.current) {
       previousSignatureRef.current = signature;
       return;
@@ -449,10 +385,10 @@ export function ReasoningTimeline({
         }
       });
     }
-  }, [autoFollow, live, mergedMessages]);
+  }, [autoFollow, live, parts]);
 
-  async function handleCopy(message: TranscriptMessageModel) {
-    const text = message.parts.map((part) => part.text.trim()).filter(Boolean).join("\n\n");
+  async function handleCopy(part: TranscriptPartModel) {
+    const text = [part.text.trim(), part.detail?.trim() || ""].filter(Boolean).join("\n\n");
     if (!text) {
       return;
     }
@@ -462,8 +398,8 @@ export function ReasoningTimeline({
     }
   }
 
-  async function handleFeedback(message: TranscriptMessageModel, feedback: MessageFeedbackValue) {
-    const messageId = message.actionAnchorId ?? message.anchorId;
+  async function handleFeedback(part: TranscriptPartModel, feedback: MessageFeedbackValue) {
+    const messageId = part.actionAnchorId ?? part.anchorId;
     setFeedbackByMessageId((current) => ({
       ...current,
       [messageId]: {
@@ -474,7 +410,7 @@ export function ReasoningTimeline({
     }));
 
     const response = await submitMessageFeedback({
-      runId: message.runId,
+      runId: part.runId,
       messageId,
       feedback
     });
@@ -501,15 +437,15 @@ export function ReasoningTimeline({
     }));
   }
 
-  async function handleRetry(message: TranscriptMessageModel) {
-    if (!message.sourceQuestionPrompt || !message.runId || !onRetry) {
+  async function handleRetry(part: TranscriptPartModel) {
+    if (!part.sourceQuestionPrompt || !part.runId || !onRetry) {
       return;
     }
 
     await onRetry({
-      prompt: message.sourceQuestionPrompt,
-      runId: message.runId,
-      messageId: message.actionAnchorId ?? message.anchorId
+      prompt: part.sourceQuestionPrompt,
+      runId: part.runId,
+      messageId: part.actionAnchorId ?? part.anchorId
     });
   }
 
@@ -524,14 +460,15 @@ export function ReasoningTimeline({
           setAutoFollow(nearBottom);
         }}
       >
-        {mergedMessages.length ? mergedMessages.map((message, index) => (
-          <TranscriptMessageCard
-            key={`${message.runId}:${message.id}`}
-            message={message}
+        {parts.length ? parts.map((part, index) => (
+          <TranscriptPartBlock
+            key={`${part.runId}:${part.id}:${index}`}
+            part={part}
             animate={live
               && (presentationState.streamStatus === "connecting" || presentationState.streamStatus === "streaming" || presentationState.streamStatus === "reconnecting")
-              && index === mergedMessages.length - 1
-              && message.role === "assistant"}
+              && index === parts.length - 2
+              && part.role === "assistant"
+              && part.kind === "text"}
             live={live}
             onCopy={handleCopy}
             onFeedback={handleFeedback}
@@ -540,15 +477,6 @@ export function ReasoningTimeline({
             questionSubmitDisabled={questionSubmitDisabled}
           />
         )) : <p className="empty-state chat-empty-state">{emptyText}</p>}
-        {mergedMessages.length ? (
-          <footer className={`transcript-summary transcript-summary-${transcriptSummary.tone}`} data-component="summary">
-            <SummaryStatusDecoration tone={transcriptSummary.tone} />
-            <div className="transcript-summary-content" data-section="content">
-              <strong>{transcriptSummary.label}</strong>
-              <p>{transcriptSummary.detail}</p>
-            </div>
-          </footer>
-        ) : null}
       </div>
     </div>
   );

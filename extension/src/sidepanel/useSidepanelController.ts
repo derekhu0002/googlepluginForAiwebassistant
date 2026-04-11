@@ -5,7 +5,7 @@ import { initialAssistantState } from "../shared/state";
 import { DEFAULT_MAIN_AGENT, MAIN_AGENTS, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, hasPendingQuestion } from "./questionState";
-import { buildTranscriptSummary, resolveCockpitStatusModel, resolveTimelinePresentationState, type BuildChatStreamItemsOptions } from "./reasoningTimeline";
+import { resolveCockpitStatusModel, resolveTimelinePresentationState, type BuildChatStreamItemsOptions } from "./reasoningTimeline";
 import {
   DRAFT_SESSION_KEY,
   buildSessionNavigationItems,
@@ -423,16 +423,6 @@ export function useSidepanelController() {
   const selectedThreadFinalOutput = selectedSessionIsCurrent
     ? liveFinalOutput
     : (selectedThreadRun?.finalOutput ?? "");
-  const transcriptSummary = useMemo(() => buildTranscriptSummary({
-    events: selectedSessionIsCurrent ? state.runEvents : [],
-    runStatus: selectedThreadStatus,
-    streamStatus: selectedThreadStreamStatus,
-    finalOutput: selectedThreadFinalOutput,
-    errorMessage: selectedThreadError,
-    pendingQuestionId: selectedSessionIsCurrent ? state.stream.pendingQuestionId : null,
-    runId: selectedThreadRun?.runId ?? state.stream.runId,
-    updatedAt: selectedThreadUpdatedAt
-  }), [selectedSessionIsCurrent, selectedThreadError, selectedThreadFinalOutput, selectedThreadRun?.runId, selectedThreadStatus, selectedThreadStreamStatus, selectedThreadUpdatedAt, state.runEvents, state.stream.pendingQuestionId, state.stream.runId]);
   const currentSessionHistorySummaries = selectedSessionIsCurrent
     ? activeSessionRunDetails.map((detail) => detail.run.finalOutput.trim()).filter(Boolean)
     : [];
@@ -859,7 +849,6 @@ export function useSidepanelController() {
     startStreamingRun,
     state,
     streamError,
-    transcriptSummary,
     toggleDrawer,
     updateDraft
   };

@@ -112,7 +112,6 @@ export function App() {
                 selectedThreadStatus={controller.selectedThreadStatus ?? controller.state.status}
                 selectedThreadStreamStatus={controller.selectedThreadStreamStatus ?? controller.state.stream.status}
                 questionMessage={controller.questionEvent?.question?.message ?? null}
-                transcriptSummary={controller.transcriptSummary}
               />
             )}
           />
@@ -211,8 +210,7 @@ function RunDrawerPanel({
   selectedThreadError,
   selectedThreadRunId,
   selectedThreadStatus,
-  selectedThreadStreamStatus,
-  transcriptSummary
+  selectedThreadStreamStatus
 }: {
   hasLivePendingQuestion: boolean;
   latestReasoningItems: NormalizedRunEvent[];
@@ -222,7 +220,6 @@ function RunDrawerPanel({
   selectedThreadRunId: string | null;
   selectedThreadStatus: string;
   selectedThreadStreamStatus: string;
-  transcriptSummary: { label: string; detail: string; };
 }) {
   return (
     <section className="run-drawer-panel">
@@ -239,13 +236,6 @@ function RunDrawerPanel({
           <span className={`pill ${hasLivePendingQuestion ? "pill-warning" : "pill-muted"}`}>{hasLivePendingQuestion ? "追问待答" : "主舞台连续"}</span>
         </article>
       </div>
-
-      <article className="status-card demoted-card">
-        <strong>Transcript 尾部摘要</strong>
-        <p>{transcriptSummary.label} · {transcriptSummary.detail}</p>
-        {selectedThreadError || latestRunSummary ? <small>{selectedThreadError || latestRunSummary}</small> : null}
-      </article>
-
       <article className="status-card demoted-card">
         <strong>最近推理节点</strong>
         {latestReasoningItems.length ? (
@@ -258,9 +248,16 @@ function RunDrawerPanel({
             ))}
           </ul>
         ) : (
-          <p className="empty-state">暂无可展示的推理节点，主舞台中的时间线仍可继续工作。</p>
+          <p className="empty-state">暂无可展示的推理节点，摘要与状态已收敛到主舞台 transcript 尾部 part。</p>
         )}
       </article>
+
+      {selectedThreadError || latestRunSummary ? (
+        <article className="status-card demoted-card">
+          <strong>运行摘记</strong>
+          <small>{selectedThreadError || latestRunSummary}</small>
+        </article>
+      ) : null}
     </section>
   );
 }

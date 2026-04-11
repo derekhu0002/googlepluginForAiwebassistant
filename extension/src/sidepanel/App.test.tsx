@@ -664,7 +664,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
     await flushAllTimers();
 
-    const assistantMessages = container.querySelectorAll(".transcript-message[data-message-role='assistant']");
+    const assistantMessages = container.querySelectorAll(".transcript-part[data-part-role='assistant'][data-part-kind='text']");
     expect(assistantMessages).toHaveLength(1);
     expect(container.querySelectorAll("[data-part-kind='reasoning']")).toHaveLength(0);
     expect(container.querySelectorAll("[data-part-kind='text']").length).toBeGreaterThanOrEqual(1);
@@ -720,7 +720,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
     await flushAllTimers();
 
-    const assistantText = Array.from(container.querySelectorAll(".transcript-message[data-message-role='assistant'] [data-part-kind='text']"))
+    const assistantText = Array.from(container.querySelectorAll(".transcript-part[data-part-role='assistant'][data-part-kind='text']"))
       .map((node) => node.textContent ?? "")
       .join("\n");
     expect(assistantText).toContain("第一段");
@@ -1622,7 +1622,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.querySelector("[data-component='summary']")?.textContent).toContain("等待补充");
+    expect(container.querySelector(".transcript-part[data-component='summary']")?.textContent).toContain("等待补充");
     expect(container.textContent).toContain("请选择处理方式");
 
     await act(async () => {
@@ -1694,7 +1694,7 @@ describe("side panel host permission request flow", () => {
     expect(sendButton?.querySelector("svg.send-icon")).toBeTruthy();
   });
 
-  it("shows hover action buttons for assistant messages", async () => {
+  it("shows part-local action buttons for terminal assistant content", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -2033,7 +2033,7 @@ describe("side panel host permission request flow", () => {
     expect(startButton?.disabled).toBe(false);
   });
 
-  it("renders assistant markdown in the same bubble while streaming deltas", async () => {
+  it("renders assistant markdown in the same flat part stream while streaming deltas", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -2047,14 +2047,14 @@ describe("side panel host permission request flow", () => {
     await flushUi();
     await flushAllTimers();
 
-    expect(container.querySelectorAll(".transcript-message[data-message-role='assistant']")).toHaveLength(1);
-    expect(container.querySelector(".transcript-message[data-message-role='assistant'] .transcript-part-copy.markdown-body")).toBeTruthy();
-    expect(container.querySelectorAll(".transcript-message[data-message-role='assistant'] h1").length).toBeGreaterThanOrEqual(1);
+    expect(container.querySelectorAll(".transcript-part[data-part-role='assistant']")).toHaveLength(2);
+    expect(container.querySelector(".transcript-part[data-part-role='assistant'] .transcript-part-copy.markdown-body")).toBeTruthy();
+    expect(container.querySelectorAll(".transcript-part[data-part-role='assistant'] h1").length).toBeGreaterThanOrEqual(1);
     expect(container.textContent).toContain("标题");
   });
 
   /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
-  it("renders transcript role hooks for user-right assistant-left alignment", async () => {
+  it("renders transcript parts on a unified vertical stream without chat-shell alignment hooks", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -2079,10 +2079,10 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const roleSequence = Array.from(container.querySelectorAll(".transcript-message")).map((element) => element.getAttribute("data-message-role"));
-    expect(roleSequence).toEqual(["user", "assistant"]);
-    expect(container.querySelector(".transcript-message[data-message-role='user'] [data-part-kind='prompt']")).toBeTruthy();
-    expect(container.querySelector(".transcript-message[data-message-role='assistant'] [data-part-kind='text']")).toBeTruthy();
+    const roleSequence = Array.from(container.querySelectorAll(".transcript-part[data-section='part']")).map((element) => element.getAttribute("data-part-role"));
+    expect(roleSequence).toEqual(["user", "assistant", "assistant"]);
+    expect(container.querySelector(".transcript-part[data-part-role='user'] [data-section='content']")).toBeTruthy();
+    expect(container.querySelector(".transcript-part[data-part-role='assistant'][data-part-kind='text']")).toBeTruthy();
   });
 
   it("updates assistant streaming text directly from transcript events without buffered typing", async () => {
@@ -2181,6 +2181,7 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("已完成");
     expect(container.textContent).toContain("本轮回答已就绪");
+    expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']")).toHaveLength(1);
     expect(container.textContent).not.toContain("You");
     expect(container.textContent).not.toContain("AI");
     expect(container.textContent).not.toContain("你");
@@ -2229,6 +2230,7 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("请选择处理方式");
     expect(container.textContent).toContain("当前 transcript 已暂停");
+    expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']")).toHaveLength(1);
 
     const submitButton = Array.from(container.querySelectorAll("button")).find((element) => element.textContent?.includes("提交回答"));
     await act(async () => {
@@ -2239,7 +2241,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("正在继续…");
   });
 
-  it("renders tool content inline before answer and keeps follow-up output as a new assistant message segment", async () => {
+  it("renders tool content inline before answer and keeps follow-up output later in the same flat stream", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -2287,12 +2289,12 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    const assistantMessages = Array.from(container.querySelectorAll(".transcript-message[data-message-role='assistant']"));
-    expect(assistantMessages).toHaveLength(2);
-    expect(assistantMessages[0]?.textContent ?? "").toContain("查询历史 SR");
-    expect(assistantMessages[0]?.querySelector("[data-part-kind='text']")?.textContent).toContain("第一段");
-    expect(assistantMessages[0]?.querySelector("[data-part-kind='question']")?.textContent).toContain("请选择处理方式");
-    expect(assistantMessages[1]?.querySelector("[data-part-kind='text']")?.textContent).toContain("第二段");
+    const streamParts = Array.from(container.querySelectorAll(".transcript-part[data-section='part']"));
+    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "tool", "text", "question", "answer", "text", "summary"]);
+    expect(streamParts[1]?.textContent ?? "").toContain("查询历史 SR");
+    expect(streamParts[2]?.textContent ?? "").toContain("第一段");
+    expect(streamParts[3]?.textContent ?? "").toContain("请选择处理方式");
+    expect(streamParts[5]?.textContent ?? "").toContain("第二段");
   });
 
   it("keeps newer live assistant body when stale final output exists in active run state", async () => {
@@ -2321,7 +2323,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).not.toContain("第一段生成中");
   });
 
-  it("does not render visible avatar role markers in transcript output", async () => {
+  it("does not render visible avatar role markers or message-card shells in transcript output", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -2370,7 +2372,7 @@ describe("side panel host permission request flow", () => {
     expect(container.querySelector(".conversation-avatar")).toBeNull();
     expect(container.querySelector(".turn-user")).toBeNull();
     expect(container.querySelector(".conversation-bubble")).toBeNull();
-    expect(container.querySelectorAll(".transcript-message").length).toBeGreaterThan(0);
-    expect(container.querySelectorAll(".transcript-message [data-section='part']").length).toBeGreaterThan(0);
+    expect(container.querySelectorAll(".transcript-message")).toHaveLength(0);
+    expect(container.querySelectorAll(".transcript-part[data-section='part']").length).toBeGreaterThan(0);
   });
 });
