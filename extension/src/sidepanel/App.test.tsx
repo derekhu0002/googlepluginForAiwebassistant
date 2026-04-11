@@ -2093,6 +2093,10 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("已完成");
     expect(container.textContent).toContain("本轮回答已就绪");
     expect(container.textContent).not.toContain("You");
+    expect(container.textContent).not.toContain("AI");
+    expect(container.textContent).not.toContain("你");
+    expect(container.textContent).not.toContain("?");
+    expect(container.textContent).not.toContain("!");
     expect(container.textContent).not.toContain("Assistant failed");
   });
 
@@ -2144,5 +2148,53 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("正在继续…");
+  });
+
+  it("does not render visible avatar role markers in transcript output", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          finalOutput: "最终回答",
+          updatedAt: "2026-04-02T00:00:02.000Z"
+        },
+        runEvents: [
+          createRunEvent(1, {
+            type: "question",
+            message: "请选择处理方式",
+            question: {
+              questionId: "q-1",
+              title: "需要确认",
+              message: "请选择处理方式",
+              options: [],
+              allowFreeText: true
+            }
+          }),
+          createRunEvent(2, { type: "error", message: "运行失败" }),
+          createRunEvent(3, { type: "result", message: "最终回答" })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const transcriptText = container.querySelector(".chat-stream-feed")?.textContent ?? "";
+    expect(transcriptText).not.toContain("AI");
+    expect(transcriptText).not.toContain("你");
+    expect(transcriptText).not.toContain("?");
+    expect(transcriptText).not.toContain("!");
+    expect(transcriptText).not.toContain("You");
+    expect(transcriptText).not.toContain("Assistant");
   });
 });

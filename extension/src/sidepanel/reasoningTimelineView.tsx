@@ -293,12 +293,11 @@ function TranscriptMessageCard({
 }) {
   const tone = getMessageTone(message);
   const isUser = message.role === "user";
-  const avatarLabel = tone === "question" ? "?" : tone === "error" ? "!" : isUser ? "你" : "AI";
   const feedbackMessage = message.feedbackState?.message || getDefaultFeedbackMessage(message.feedbackState?.status ?? "idle", message.feedbackState?.selected);
 
   return (
     <article className={`conversation-turn transcript-message turn-${tone}`} data-message-anchor={message.anchorId} data-message-group-anchor={message.groupAnchorId}>
-      <div className="conversation-avatar" aria-hidden="true">{avatarLabel}</div>
+      <div className="conversation-avatar" aria-hidden="true" />
       <div className={`conversation-bubble transcript-message-bubble ${isUser ? "user-bubble" : ""}`}>
         <div className="transcript-message-parts">
           {message.parts.map((part, index) => (
