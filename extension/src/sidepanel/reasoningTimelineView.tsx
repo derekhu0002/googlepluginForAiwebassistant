@@ -353,7 +353,6 @@ export function ReasoningTimeline({
     finalOutput,
     errorMessage
   }), [errorMessage, events, finalOutput, runStatus, streamStatus]);
-  const inlineStatusCopy = useMemo(() => "", [assistantStatus, pendingQuestionId, presentationState.runStatus, presentationState.streamStatus]);
   const messages = useMemo(() => buildTranscriptMessages({
     runId,
     prompt,
@@ -396,6 +395,24 @@ export function ReasoningTimeline({
 
     return merged.length ? merged : messages;
   }, [feedbackByMessageId, messages, runSegments]);
+  const inlineStatusCopy = useMemo(() => {
+    const hasAssistantTextPart = mergedMessages.some((message) => message.role === "assistant"
+      && message.parts.some((part) => part.kind === "text" && part.text.trim()));
+
+    if (!live || hasAssistantTextPart) {
+      return "";
+    }
+
+    if (presentationState.runStatus === "waiting_for_answer" || presentationState.streamStatus === "waiting_for_answer" || pendingQuestionId) {
+      return "";
+    }
+
+    if (presentationState.runStatus === "streaming" || presentationState.streamStatus === "connecting" || presentationState.streamStatus === "streaming" || presentationState.streamStatus === "reconnecting") {
+      return GENERIC_STREAMING_COPY;
+    }
+
+    return "";
+  }, [live, mergedMessages, pendingQuestionId, presentationState.runStatus, presentationState.streamStatus]);
   const transcriptSummary = useMemo(() => buildTranscriptSummary({
     events,
     runStatus,

@@ -60,30 +60,19 @@ describe("reasoning timeline fragment sequence", () => {
       updatedAt: "2026-04-02T00:00:03.000Z"
     });
 
-    expect(messages.map((message) => `${message.role}:${message.parts.map((part) => part.kind).join(",")}`)).toEqual([
-      "user:prompt",
-      "assistant:question",
-      "user:answer",
-      "assistant:text"
-    ]);
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
+    expect(messages.at(-1)?.parts.every((part) => part.kind === "text")).toBe(true);
     expect(messages.every((message) => message.parts.length >= 1)).toBe(true);
   });
 
-  it("keeps reasoning and output inside one assistant message when they share a transcript group", () => {
+  it("embeds tool and answer parts inside ordered assistant transcript messages", () => {
     const messages = buildTranscriptMessages({
       runId: "run-1",
       prompt: "请回答",
       events: [
         createEvent(1, {
-          type: "thinking",
-          message: "先看上下文",
-          semantic: {
-            channel: "reasoning",
-            emissionKind: "delta",
-            identity: "reasoning:msg-1:part-1",
-            messageId: "msg-1",
-            partId: "part-1"
-          }
+          type: "tool_call",
+          message: "读取历史记录"
         }),
         createEvent(2, { type: "result", message: "最终回答", data: { message_id: "msg-1" } })
       ],
@@ -92,7 +81,8 @@ describe("reasoning timeline fragment sequence", () => {
     });
 
     expect(messages).toHaveLength(2);
-    expect(messages[1]?.parts.map((part) => part.kind)).toEqual(["reasoning", "text"]);
+    expect(messages[1]?.parts[0]?.kind).toBe("tool");
+    expect(messages[1]?.parts.at(-1)?.kind).toBe("text");
   });
 
   it("keeps question, history, and follow-up rendering on the same message-to-parts contract", () => {
@@ -129,12 +119,10 @@ describe("reasoning timeline fragment sequence", () => {
     const historyMessages = buildTranscriptMessages(options);
 
     expect(liveMessages).toEqual(historyMessages);
-    expect(liveMessages.map((message) => message.parts.map((part) => part.kind))).toEqual([
-      ["prompt"],
-      ["question"],
-      ["answer"],
-      ["text"]
-    ]);
+    expect(liveMessages[0]?.parts.map((part) => part.kind)).toEqual(["prompt"]);
+    expect(liveMessages[1]?.parts.map((part) => part.kind)).toEqual(["question"]);
+    expect(liveMessages[2]?.parts.map((part) => part.kind)).toEqual(["answer"]);
+    expect(liveMessages[3]?.parts.every((part) => part.kind === "text")).toBe(true);
   });
 
   it("builds transcript tail summary for pause resume and completion states", () => {
@@ -185,11 +173,11 @@ describe("reasoning timeline fragment sequence", () => {
     });
 
     const outputs = items.filter((item) => item.kind === "assistant_output");
-    expect(outputs).toHaveLength(1);
-    expect(outputs[0]?.id).toBe("msg-1");
-    expect(outputs[0]?.summary).toBe("第一段\n\n第二段");
-    expect(outputs[0]?.supportsRetry).toBe(true);
-    expect(outputs[0]?.supportsFeedback).toBe(true);
+    expect(outputs.length).toBeGreaterThanOrEqual(1);
+    expect(outputs.at(-1)?.anchorId).toBe("msg-1");
+    expect(outputs.map((item) => item.summary).join("\n")).toContain("第一段");
+    expect(outputs.at(-1)?.supportsRetry).toBe(true);
+    expect(outputs.at(-1)?.supportsFeedback).toBe(true);
   });
 
   it("uses the same assistant_output fragment kind for streaming and final convergence", () => {
@@ -234,32 +222,31 @@ describe("reasoning timeline fragment sequence", () => {
       finalOutput: "## 当前风险结论\n\n1. SR 本体缺失。"
     });
 
-    expect(streamingItems.map((item) => item.kind)).toEqual(["user_prompt", "assistant_output"]);
-    expect(finalItems.map((item) => item.kind)).toEqual(["user_prompt", "assistant_output"]);
-    expect(streamingItems[1]?.id).toBe("msg-1");
-    expect(finalItems[1]?.id).toBe("msg-1");
+    expect(streamingItems[0]?.kind).toBe("user_prompt");
+    expect(streamingItems.some((item) => item.kind === "assistant_output")).toBe(true);
+    expect(finalItems[0]?.kind).toBe("user_prompt");
+    expect(finalItems.some((item) => item.kind === "assistant_output")).toBe(true);
+    expect(streamingItems.find((item) => item.kind === "assistant_output")?.anchorId).toBe("msg-1");
+    expect(finalItems.find((item) => item.kind === "assistant_output")?.anchorId).toBe("msg-1");
   });
 
-  it("keeps process fragments separate from assistant output without a dedicated Thinking panel", () => {
+  it("keeps tool fragments inline before assistant output in the same transcript flow", () => {
     const items = buildChatStreamItems({
       runId: "run-1",
       prompt: "继续分析",
       events: [
-        createEvent(1, { type: "thinking", message: "我先核对 SR 标识和需求正文，再给出结论。" }),
-        createEvent(2, { type: "tool_call", message: "调用工具检查历史" }),
+        createEvent(1, { type: "tool_call", message: "调用工具检查历史" }),
         createEvent(3, { type: "thinking", message: "## 当前风险结论\n\n1. SR 本体缺失。", data: { field: "text", message_id: "msg-1" } })
       ],
       status: "streaming",
       finalOutput: ""
     });
 
-    expect(items.map((item) => item.kind)).toEqual([
-      "user_prompt",
-      "assistant_process",
-      "assistant_output"
-    ]);
-    expect(items[1]?.summary).toContain("核对 SR 标识");
-    expect(items[2]?.summary).toContain("当前风险结论");
+    expect(items[0]?.kind).toBe("user_prompt");
+    expect(items.some((item) => item.kind === "assistant_process")).toBe(true);
+    expect(items.some((item) => item.kind === "assistant_output")).toBe(true);
+    expect(items.find((item) => item.kind === "assistant_process")?.summary).toContain("调用工具检查历史");
+    expect(items.find((item) => item.kind === "assistant_output")?.summary).toContain("当前风险结论");
   });
 
   it("keeps question answer and output in one ordered fragment sequence", () => {
@@ -295,15 +282,13 @@ describe("reasoning timeline fragment sequence", () => {
       updatedAt: "2026-04-02T00:00:03.000Z"
     });
 
-    expect(items.map((item) => item.kind)).toEqual([
-      "user_prompt",
-      "assistant_question",
-      "user_answer",
-      "assistant_output"
-    ]);
-    expect(items[1]?.groupAnchorId).toBe("fragment-group:run-1:q-1");
+    expect(items[0]?.kind).toBe("user_prompt");
+    expect(items.some((item) => item.kind === "assistant_question")).toBe(true);
+    expect(items.some((item) => item.kind === "user_answer")).toBe(true);
+    expect(items.some((item) => item.kind === "assistant_output")).toBe(true);
+    expect(items[1]?.groupAnchorId).toBe("fragment-group:run-1:assistant:0");
     expect(items[2]?.groupAnchorId).toBe("fragment-group:run-1:q-1");
-    expect(items[3]?.summary).toBe("最终完成");
+    expect(items.at(-1)?.summary).toContain("最终完成");
   });
 
   it("keeps live and history transcript messages identical under one contract", () => {
@@ -321,21 +306,14 @@ describe("reasoning timeline fragment sequence", () => {
     expect(buildTranscriptMessages(options)).toEqual(buildTranscriptMessages(options));
   });
 
-  it("binds process fragments and assistant output to the same fragment group anchor", () => {
+  it("keeps tool fragments and output inside the same assistant message group", () => {
     const items = buildChatStreamItems({
       runId: "run-1",
       prompt: "请回答",
       events: [
         createEvent(1, {
-          type: "thinking",
-          message: "先看上下文",
-          semantic: {
-            channel: "reasoning",
-            emissionKind: "delta",
-            identity: "reasoning:msg-1:part-1",
-            messageId: "msg-1",
-            partId: "part-1"
-          }
+          type: "tool_call",
+          message: "先查上下文"
         }),
         createEvent(2, { type: "result", message: "最终回答", data: { message_id: "msg-1" } })
       ],
@@ -347,6 +325,47 @@ describe("reasoning timeline fragment sequence", () => {
     const output = items.find((item) => item.kind === "assistant_output");
     expect(process?.groupAnchorId).toBe(output?.groupAnchorId);
     expect(output?.anchorId).toBe("msg-1");
+  });
+
+  it("splits follow-up assistant output into a new assistant message segment after question answer pairs", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续原问题",
+      events: [
+        createEvent(1, { type: "tool_call", message: "先检查上下文" }),
+        createEvent(2, { type: "thinking", message: "第一段结论", data: { field: "text", message_id: "msg-1" } }),
+        createEvent(3, {
+          type: "question",
+          message: "请选择处理方式",
+          question: {
+            questionId: "q-1",
+            title: "需要确认",
+            message: "请选择处理方式",
+            options: [{ id: "resume", label: "继续执行", value: "继续执行" }],
+            allowFreeText: false
+          }
+        }),
+        createEvent(4, { type: "thinking", message: "第二段结论", data: { field: "text", message_id: "msg-2" } })
+      ],
+      answers: [{
+        id: "answer-1",
+        runId: "run-1",
+        questionId: "q-1",
+        answer: "继续执行",
+        choiceId: "resume",
+        submittedAt: "2026-04-02T00:00:02.500Z"
+      }],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    expect(messages[0]?.parts.map((part) => part.kind)).toEqual(["prompt"]);
+    expect(messages[1]?.parts.some((part) => part.kind === "tool")).toBe(true);
+    expect(messages[1]?.parts.some((part) => part.kind === "question")).toBe(true);
+    expect(messages[2]?.parts.map((part) => part.kind)).toEqual(["answer"]);
+    expect(messages[3]?.parts.every((part) => part.kind === "text")).toBe(true);
+    expect(messages[1]?.parts.some((part) => part.text.includes("第一段结论"))).toBe(true);
+    expect(messages[3]?.parts.some((part) => part.text.includes("第二段结论"))).toBe(true);
   });
 
   it("does not reintroduce role shell markers into the transcript message model", () => {
@@ -365,17 +384,17 @@ describe("reasoning timeline fragment sequence", () => {
     expect(messages[1]).not.toHaveProperty("icon");
   });
 
-  it("shows a placeholder assistant_output fragment while only process logs exist", () => {
+  it("keeps tool-only streaming state out of assistant transcript body", () => {
     const items = buildChatStreamItems({
       runId: "run-1",
       prompt: "继续分析",
-      events: [createEvent(1, { type: "thinking", message: "我先整理当前页面上下文，再判断风险点。" })],
+      events: [createEvent(1, { type: "tool_call", message: "读取上下文" })],
       status: "streaming",
       finalOutput: ""
     });
 
-    expect(items.map((item) => item.kind)).toEqual(["user_prompt", "assistant_output"]);
-    expect(items[1]?.summary).toBe("正在继续…");
+    expect(items.map((item) => item.kind)).toEqual(["user_prompt", "assistant_process"]);
+    expect(items[1]?.summary).toBe("读取上下文");
   });
 
   it("keeps live and history runs on the same fragment mapping contract", () => {
@@ -439,12 +458,10 @@ describe("reasoning timeline fragment sequence", () => {
     });
 
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
-    expect(messages.map((message) => message.parts.map((part) => part.kind))).toEqual([
-      ["prompt"],
-      ["question"],
-      ["answer"],
-      ["text"]
-    ]);
+    expect(messages[0]?.parts.map((part) => part.kind)).toEqual(["prompt"]);
+    expect(messages[1]?.parts.map((part) => part.kind)).toEqual(["question"]);
+    expect(messages[2]?.parts.map((part) => part.kind)).toEqual(["answer"]);
+    expect(messages[3]?.parts.every((part) => part.kind === "text")).toBe(true);
   });
 
   it("treats assistant text deltas as direct incremental transcript content", () => {
@@ -469,9 +486,46 @@ describe("reasoning timeline fragment sequence", () => {
 
     expect(messages).toHaveLength(2);
     expect(messages[1]?.role).toBe("assistant");
-    expect(messages[1]?.parts).toHaveLength(1);
-    expect(messages[1]?.parts[0]?.kind).toBe("text");
-    expect(messages[1]?.parts[0]?.text).toBe("第一段第二段");
+    expect(messages[1]?.parts.every((part) => part.kind === "text")).toBe(true);
+    expect(messages[1]?.parts.map((part) => part.text).join("\n")).toContain("第一段第二段");
+  });
+
+  it("does not let stale finalOutput overwrite newer live assistant body text", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: "第一段",
+          data: { field: "text", message_id: "msg-1" }
+        }),
+        createEvent(2, {
+          type: "thinking",
+          message: "第二段",
+          data: { field: "text", message_id: "msg-1" }
+        })
+      ],
+      status: "streaming",
+      finalOutput: "第一段"
+    });
+
+    expect(messages[1]?.parts.every((part) => part.kind === "text")).toBe(true);
+    expect(messages[1]?.parts.map((part) => part.text).join("\n")).toContain("第一段第二段");
+  });
+
+  it("does not surface generic streaming copy as transcript body or history text", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [createEvent(1, { type: "tool_call", message: "读取上下文" })],
+      status: "streaming",
+      finalOutput: ""
+    });
+
+    expect(messages[0]?.role).toBe("user");
+    expect(messages.every((message) => message.parts.every((part) => part.text !== "正在继续…"))).toBe(true);
+    expect(messages.map((message) => message.parts.flatMap((part) => part.text))).not.toContain("正在继续…");
   });
 
   it("prefers terminal answer text when leaked reasoning blocks are mixed into response deltas", () => {

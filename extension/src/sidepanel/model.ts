@@ -1,7 +1,7 @@
 import type { AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
 import { createDefaultFieldTemplates, createDefaultRule, createId } from "../shared/rules";
 import type { NormalizedRunEvent, RunRecord } from "../shared/protocol";
-import { isAssistantResponseDeltaEvent } from "./reasoningTimeline";
+import { collectRunAssistantResponseText, isAssistantResponseDeltaEvent } from "./reasoningTimeline";
 import { getNextPendingQuestionId } from "./questionState";
 
 const ASSISTANT_STATUS_RANK: Record<AssistantState["status"], number> = {
@@ -169,12 +169,23 @@ export function mergeStateUpdate(current: AssistantState, payload: AssistantStat
   }
 
   const keepLocalRunEvents = current.runEvents.length > payload.runEvents.length;
+  const currentVisibleAssistantText = collectRunAssistantResponseText(current.runEvents, current.currentRun?.finalOutput ?? "");
+  const payloadVisibleAssistantText = collectRunAssistantResponseText(payload.runEvents, payload.currentRun?.finalOutput ?? "");
+  const keepLocalAssistantBody = Boolean(
+    current.currentRun
+    && payload.currentRun
+    && current.currentRun.runId === payload.currentRun.runId
+    && currentVisibleAssistantText.trim()
+    && currentVisibleAssistantText.trim() !== payloadVisibleAssistantText.trim()
+    && currentVisibleAssistantText.trim().length > payloadVisibleAssistantText.trim().length
+  );
   const keepLocalCurrentRun = Boolean(
     current.currentRun
     && payload.currentRun
     && current.currentRun.runId === payload.currentRun.runId
     && (
       (blockPrematureTerminalMerge && isTerminalRunStatus(payload.currentRun.status))
+      || keepLocalAssistantBody
       || keepLocalRunEvents
       || toTimestamp(current.currentRun.updatedAt) > toTimestamp(payload.currentRun.updatedAt)
       || RUN_STATUS_RANK[current.currentRun.status] > RUN_STATUS_RANK[payload.currentRun.status]
