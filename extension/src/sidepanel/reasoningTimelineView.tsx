@@ -219,10 +219,6 @@ function TranscriptPartBlock({
       data-part-type={part.kind === "summary" ? "summary" : undefined}
       data-component={part.kind === "summary" ? "summary" : undefined}
     >
-      <div className="transcript-part-decoration" data-section="decoration" aria-hidden="true">
-        <span className="transcript-part-anchor" data-tone={part.tone ?? undefined} />
-        <span className="transcript-part-rail" />
-      </div>
       <div className="transcript-part-body" data-section="content">
         {part.kind === "summary" ? (
           <>

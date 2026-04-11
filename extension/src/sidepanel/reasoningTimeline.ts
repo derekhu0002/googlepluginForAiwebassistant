@@ -757,6 +757,14 @@ function mergeAssistantResponseDelta(current: string, delta: string) {
     return existing;
   }
 
+  if (nextComparable.includes(existingComparable)) {
+    return next;
+  }
+
+  if (existingComparable.includes(nextComparable)) {
+    return existing;
+  }
+
   if (nextComparable.startsWith(existingComparable)) {
     return next;
   }
@@ -1531,13 +1539,16 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
     }
 
     const anchorId = getAssistantResponseMessageId(event);
-    if (currentOutputIndex >= 0 && currentOutputAnchorId === anchorId) {
+    if (currentOutputIndex >= 0) {
       items[currentOutputIndex] = {
         ...items[currentOutputIndex],
+        anchorId: currentOutputAnchorId ?? anchorId,
         summary: normalizedText,
         updatedAt: event.createdAt,
-        primaryType: event.type === "result" ? "result" : items[currentOutputIndex].primaryType
+        primaryType: event.type === "result" ? "result" : items[currentOutputIndex].primaryType,
+        originEventTypes: [...new Set([...items[currentOutputIndex].originEventTypes, event.type])]
       };
+      currentOutputAnchorId = currentOutputAnchorId ?? anchorId;
       return;
     }
 

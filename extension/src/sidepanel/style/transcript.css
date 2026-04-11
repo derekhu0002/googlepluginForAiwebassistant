@@ -29,55 +29,7 @@
 .transcript-part,
 .transcript-empty-state {
   display: flex;
-  gap: 10px;
   align-items: flex-start;
-}
-
-.transcript-part-decoration {
-  flex: 0 0 auto;
-  width: 18px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding-top: 3px;
-}
-
-.transcript-part-anchor {
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.transcript-part-anchor[data-tone="progress"] {
-  background: rgba(14, 99, 156, 0.72);
-}
-
-.transcript-part-anchor[data-tone="warning"] {
-  background: rgba(198, 144, 38, 0.72);
-}
-
-.transcript-part-anchor[data-tone="success"] {
-  background: rgba(46, 160, 67, 0.72);
-}
-
-.transcript-part-anchor[data-tone="danger"] {
-  background: rgba(218, 54, 51, 0.72);
-}
-
-.transcript-part-rail {
-  width: 3px;
-  flex: 1 1 auto;
-  min-height: 18px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.transcript-part:last-child .transcript-part-rail,
-.transcript-empty-state .transcript-part-rail {
-  min-height: 0;
 }
 
 .transcript-part-body {
@@ -127,18 +79,6 @@
   border-radius: 10px;
   padding: 0.5rem 0.75rem;
   align-self: flex-start;
-}
-
-.transcript-part[data-part-kind="tool"] .transcript-part-anchor {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.transcript-part[data-part-kind="question"] .transcript-part-anchor {
-  background: rgba(198, 144, 38, 0.48);
-}
-
-.transcript-part[data-part-kind="error"] .transcript-part-anchor {
-  background: rgba(218, 54, 51, 0.52);
 }
 
 .transcript-part-footer-actions {

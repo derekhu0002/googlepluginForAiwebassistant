@@ -226,6 +226,22 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(aggregation.preferredMessageId).toBe("msg-1");
   });
 
+  it("does not repeatedly append the full assistant snapshot during streaming updates", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, { type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-1" } }),
+        createEvent(2, { type: "thinking", message: "第一段第二段", data: { field: "text", message_id: "msg-1" } }),
+        createEvent(3, { type: "thinking", message: "第一段第二段第三段", data: { field: "text", message_id: "msg-1" } })
+      ],
+      status: "streaming"
+    });
+
+    expect(messages[1]?.parts).toHaveLength(1);
+    expect(messages[1]?.parts[0]?.text).toBe("第一段第二段第三段");
+  });
+
   it("derives conservative timeline and cockpit states from terminal evidence", () => {
     expect(resolveTimelinePresentationState({
       events: [createEvent(1, { type: "thinking", message: "读取页面上下文" })],
