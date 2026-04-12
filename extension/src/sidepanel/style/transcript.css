@@ -36,6 +36,10 @@
   justify-content: flex-end;
 }
 
+.transcript-part-assistant {
+  justify-content: flex-start;
+}
+
 .transcript-part-body {
   flex: 1 1 auto;
   min-width: 0;
@@ -45,9 +49,17 @@
   padding: 0 0 0.375rem;
 }
 
+.transcript-part-body-user,
 .transcript-part-user .transcript-part-body {
   flex: 0 1 min(85%, 720px);
   align-items: flex-end;
+}
+
+.transcript-part-body-assistant,
+.transcript-part-assistant .transcript-part-body {
+  flex: 0 1 min(100%, 760px);
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .transcript-part-copy {
@@ -83,11 +95,30 @@
   color: var(--copilot-muted);
 }
 
+.transcript-part-copy-user,
 .transcript-part[data-part-role="user"] .transcript-part-copy {
   background-color: rgba(255, 255, 255, 0.04);
-  border-radius: 10px;
-  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  padding: 0.55rem 0.85rem;
   align-self: flex-end;
+  max-width: min(100%, 680px);
+}
+
+.transcript-part-copy-assistant {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  align-self: flex-start;
+  max-width: min(100%, 760px);
+}
+
+.transcript-part-assistant .transcript-part-label,
+.transcript-part-assistant .transcript-part-footer-actions,
+.transcript-part-assistant .feedback-status,
+.transcript-part-assistant .inline-question-card {
+  margin-left: 0;
 }
 
 .transcript-part-footer-actions {

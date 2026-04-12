@@ -201,9 +201,11 @@ function TranscriptPartBlock({
   questionSubmitDisabled?: boolean;
 }) {
   const isUser = part.role === "user";
+  const roleClassName = isUser ? "transcript-part-user" : "transcript-part-assistant";
   const feedbackMessage = part.feedbackState?.message || getDefaultFeedbackMessage(part.feedbackState?.status ?? "idle", part.feedbackState?.selected);
   const messageClassName = [
     "transcript-part-copy",
+    isUser ? "transcript-part-copy-user" : "transcript-part-copy-assistant",
     "markdown-body",
     part.kind === "reasoning" ? "transcript-part-muted" : ""
   ].filter(Boolean).join(" ");
@@ -211,7 +213,7 @@ function TranscriptPartBlock({
 
   return (
     <section
-      className={`transcript-part transcript-part-${part.kind} ${isUser ? "transcript-part-user" : "transcript-part-assistant"}`}
+      className={`transcript-part transcript-part-${part.kind} ${roleClassName}`}
       data-section="part"
       data-part-kind={part.kind}
       data-part-anchor={part.anchorId}
@@ -219,7 +221,7 @@ function TranscriptPartBlock({
       data-part-type={part.kind === "summary" ? "summary" : undefined}
       data-component={part.kind === "summary" ? "summary" : undefined}
     >
-      <div className="transcript-part-body" data-section="content">
+      <div className={`transcript-part-body ${isUser ? "transcript-part-body-user" : "transcript-part-body-assistant"}`} data-section="content">
         {part.kind === "summary" ? (
           <>
             <p className="transcript-part-copy transcript-part-summary-copy" data-section="copy">{part.text}</p>
@@ -230,7 +232,7 @@ function TranscriptPartBlock({
             {toolLabel ? <span className="transcript-part-label">{toolLabel}</span> : null}
             {part.text ? (
               isUser
-                ? <p className="transcript-part-copy">{part.text}</p>
+                ? <p className="transcript-part-copy transcript-part-copy-user">{part.text}</p>
                 : <MarkdownMessage text={part.text} className={messageClassName} />
             ) : null}
 

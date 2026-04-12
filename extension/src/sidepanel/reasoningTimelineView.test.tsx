@@ -82,4 +82,37 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(container.querySelector(".transcript-part[data-part-role='user']")?.classList.contains("transcript-part-user")).toBe(true);
     expect(container.querySelector(".transcript-part[data-part-role='assistant']")?.classList.contains("transcript-part-assistant")).toBe(true);
   });
+
+  it("renders user prompts as compact cards and assistant content as flat markdown flow", async () => {
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          runId="run-1"
+          prompt="用户提问"
+          events={[
+            {
+              id: "event-1",
+              runId: "run-1",
+              type: "thinking",
+              createdAt: "2026-04-02T00:00:01.000Z",
+              sequence: 1,
+              message: "# 助手回答",
+              data: { field: "text", message_id: "msg-1" }
+            }
+          ]}
+          runStatus="done"
+          finalOutput="# 助手回答"
+        />
+      );
+    });
+
+    const userCopy = container.querySelector(".transcript-part[data-part-role='user'] .transcript-part-copy-user");
+    const assistantCopy = container.querySelector(".transcript-part[data-part-role='assistant'] .transcript-part-copy-assistant.markdown-body");
+
+    expect(userCopy).toBeTruthy();
+    expect(userCopy?.classList.contains("transcript-part-copy-assistant")).toBe(false);
+    expect(assistantCopy).toBeTruthy();
+    expect(assistantCopy?.classList.contains("transcript-part-copy-user")).toBe(false);
+    expect(container.querySelector(".transcript-part[data-part-role='assistant'] h1")?.textContent).toBe("助手回答");
+  });
 });
