@@ -163,19 +163,33 @@ function createAssistantState(overrides: Partial<AssistantState> = {}): Assistan
 function setupChromeStub(options: ChromeStubOptions) {
   const contextQueue = [...options.contexts];
   const listeners = new Set<(message: RuntimeMessage) => void>();
+  let currentState = options.getStateResponse ?? initialAssistantState;
   const runtimeSendMessage = vi.fn(async (message: RuntimeMessage) => {
     switch (message.type) {
       case "GET_STATE":
-        return options.getStateResponse ?? initialAssistantState;
+        return currentState;
       case "GET_RULES":
         return options.rules ?? [];
       case "GET_ACTIVE_CONTEXT":
         return contextQueue.shift() ?? options.contexts[options.contexts.length - 1] ?? null;
       case "START_RUN":
         return options.startRunResponse ?? { ok: true, data: { runId: "run-1", selectedAgent: DEFAULT_MAIN_AGENT, currentRun: createCurrentRun() } };
+      case "SYNC_RUN_STATE":
+        currentState = {
+          ...currentState,
+          ...message.payload
+        };
+        return { ok: true };
       case "SET_MAIN_AGENT":
+        currentState = {
+          ...currentState,
+          mainAgentPreference: message.payload.selectedAgent
+        };
         return { ok: true, data: { selectedAgent: message.payload.selectedAgent } };
       case "RECAPTURE":
+        return { ok: true };
+      case "CLEAR_RESULT":
+        currentState = initialAssistantState;
         return { ok: true };
       default:
         return undefined;
@@ -2156,6 +2170,7 @@ describe("side panel host permission request flow", () => {
     await act(async () => {
       submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await flushUi();
     await flushUi();
 
     expect(mockSubmitQuestionAnswer).toHaveBeenCalledWith("run-1", {

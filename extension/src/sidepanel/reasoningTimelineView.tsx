@@ -253,7 +253,7 @@ function TranscriptPartBlock({
                 : <MarkdownMessage text={part.text} className={messageClassName} />
             ) : null}
 
-            {part.kind === "question" && part.question && part.pendingQuestion && onQuestionSubmit ? (
+            {part.kind === "question" && part.question && part.pendingQuestion && onQuestionSubmit && !questionSubmitDisabled ? (
               <InlineQuestionComposer question={part.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
             ) : null}
 
