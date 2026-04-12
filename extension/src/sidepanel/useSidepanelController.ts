@@ -410,12 +410,13 @@ export function useSidepanelController() {
         prompt: selectedHistoryFallbackDetail.run.prompt,
         events: selectedHistoryFallbackDetail.events,
         answers: selectedHistoryFallbackDetail.answers,
-        finalOutput: selectedHistoryFallbackDetail.run.finalOutput,
-        errorMessage: selectedHistoryFallbackDetail.run.errorMessage,
-        status: selectedHistoryFallbackDetail.run.status,
-        updatedAt: selectedHistoryFallbackDetail.run.updatedAt ?? selectedHistoryFallbackDetail.run.startedAt,
-        pendingQuestionId: null
-      }];
+      finalOutput: selectedHistoryFallbackDetail.run.finalOutput,
+      errorMessage: selectedHistoryFallbackDetail.run.errorMessage,
+      status: selectedHistoryFallbackDetail.run.status,
+      updatedAt: selectedHistoryFallbackDetail.run.updatedAt ?? selectedHistoryFallbackDetail.run.startedAt,
+      pendingQuestionId: null,
+      includeToolCallParts: true
+    }];
     }
 
     return historicalRunDetails.map((detail) => ({
@@ -427,7 +428,8 @@ export function useSidepanelController() {
       errorMessage: detail.run.errorMessage,
       status: detail.run.status,
       updatedAt: detail.run.updatedAt ?? detail.run.startedAt,
-      pendingQuestionId: null
+      pendingQuestionId: null,
+      includeToolCallParts: true
     }));
   }, [activeSessionRunDetails, frozenSessionRunDetails, selectedHistoryFallbackDetail, selectedSessionIsCurrent]);
 
@@ -454,7 +456,7 @@ export function useSidepanelController() {
       updatedAt: state.currentRun?.updatedAt ?? state.currentRun?.startedAt,
       pendingQuestionId: state.stream.pendingQuestionId,
       includeSummary: true,
-      includeToolCallParts: false
+      includeToolCallParts: true
     };
   }, [liveFinalOutput, livePresentationState.runStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, state.stream.status, streamError]);
 

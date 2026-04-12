@@ -1331,18 +1331,7 @@ function normalizeProcessFragment(item: ChatStreamItemModel, assistantDisplayTex
     return item;
   }
 
-  if (item.primaryType === "thinking") {
-    return null;
-  }
-
-  const sanitized = item.primaryType === "tool_call"
-    ? normalizeMarkdownStructure(item.summary).trim()
-    : normalizeMarkdownStructure(item.summary)
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line && !isLikelyOrchestrationNoiseLine(line))
-      .join("\n")
-      .trim();
+  const sanitized = normalizeMarkdownStructure(item.summary).trim();
 
   if (!sanitized) {
     return null;
@@ -1368,7 +1357,7 @@ function dedupeFragmentSequence(items: ChatStreamItemModel[]) {
       && previous.kind === "assistant_process"
       && item.runId === previous.runId
       && item.primaryType === previous.primaryType
-      && (item.anchorId === previous.anchorId || shouldTreatComparableTextsAsDuplicate(getComparableBlockKey(previous.summary), getComparableBlockKey(item.summary)))) {
+      && (item.anchorId === previous.anchorId || getComparableBlockKey(previous.summary) === getComparableBlockKey(item.summary))) {
       if (item.summary.length >= previous.summary.length) {
         deduped[deduped.length - 1] = {
           ...previous,
@@ -1529,7 +1518,7 @@ function createHistorySegmentsSignature(segments: BuildChatStreamItemsOptions[])
       ...segment,
       runStatus: segment.status,
       includeSummary: false,
-      includeToolCallParts: false
+      includeToolCallParts: segment.includeToolCallParts ?? true
     }))
     .join("::");
 }
@@ -1548,7 +1537,7 @@ function canIncrementallyReuseLiveProjection(
 
   const nextRunId = options.runId ?? "";
   const nextPrompt = options.prompt?.trim() || "";
-  const nextIncludeToolCallParts = options.includeToolCallParts ?? false;
+  const nextIncludeToolCallParts = options.includeToolCallParts ?? true;
   const nextAnswers = options.answers ?? [];
   const nextEvents = options.events;
 
@@ -1753,7 +1742,7 @@ function createEmptyLiveProjectionState(options: BuildTranscriptSegmentReadModel
   return {
     runId,
     prompt,
-    includeToolCallParts: options.includeToolCallParts ?? false,
+    includeToolCallParts: options.includeToolCallParts ?? true,
     eventCount: 0,
     answerCount: 0,
     eventIds: [],
@@ -2036,7 +2025,7 @@ function buildTranscriptMessagesFromFragments(fragments: ChatStreamItemModel[]) 
 function buildTranscriptSegmentReadModel(options: BuildTranscriptSegmentReadModelOptions) {
   const messages = buildTranscriptMessages({
     ...options,
-    includeToolCallParts: options.includeToolCallParts ?? false
+    includeToolCallParts: options.includeToolCallParts ?? true
   });
   const parts = flattenTranscriptMessages(messages);
   const summaryPart = options.includeSummary === false
@@ -2142,7 +2131,7 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
       ...segment,
       runStatus: segment.status,
       includeSummary: false,
-      includeToolCallParts: false
+      includeToolCallParts: segment.includeToolCallParts ?? true
     }).messages);
 
   const historicalParts = canReuseHistory
@@ -2178,7 +2167,7 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
 
   const liveSegment = buildIncrementalLiveTranscriptSegmentReadModel({
     ...options.liveSegment,
-    includeToolCallParts: options.liveSegment.includeToolCallParts ?? false
+    includeToolCallParts: options.liveSegment.includeToolCallParts ?? true
   }, options.previousModel);
 
   return mergeTranscriptMessageCollections({
@@ -2529,7 +2518,7 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
 export function buildTranscriptMessages(options: BuildChatStreamItemsOptions): TranscriptMessageModel[] {
   const fragments = buildFragmentSequence({
     ...options,
-    includeToolCallParts: options.includeToolCallParts ?? false
+    includeToolCallParts: options.includeToolCallParts ?? true
   });
   const messages: TranscriptMessageModel[] = [];
 

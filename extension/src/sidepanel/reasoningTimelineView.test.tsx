@@ -216,7 +216,7 @@ describe("ReasoningTimeline transcript rendering", () => {
         runStatus: "streaming",
         streamStatus: "streaming",
         includeSummary: true,
-        includeToolCallParts: false
+        includeToolCallParts: true
       }
     });
 
@@ -269,7 +269,7 @@ describe("ReasoningTimeline transcript rendering", () => {
         runStatus: "streaming",
         streamStatus: "streaming",
         includeSummary: true,
-        includeToolCallParts: false
+        includeToolCallParts: true
       }
     });
 
@@ -316,7 +316,7 @@ describe("ReasoningTimeline transcript rendering", () => {
         runStatus: "streaming",
         streamStatus: "streaming",
         includeSummary: true,
-        includeToolCallParts: false
+        includeToolCallParts: true
       },
       previousModel: firstModel
     });
@@ -336,5 +336,49 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(secondModel.liveProjectionDebug).toMatchObject({ reusedPreviousStore: true, appliedDeltaEventCount: 1 });
     expect(container.textContent).toContain("历史回答");
     expect(container.textContent).toContain("第一段第二段");
+  });
+
+  it("renders reasoning and tool parts in the main transcript", async () => {
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          runId="run-1"
+          prompt="请分析"
+          events={[
+            {
+              id: "event-1",
+              runId: "run-1",
+              type: "thinking",
+              createdAt: "2026-04-02T00:00:01.000Z",
+              sequence: 1,
+              message: "我先读取页面上下文，再整理结论。"
+            },
+            {
+              id: "event-2",
+              runId: "run-1",
+              type: "tool_call",
+              createdAt: "2026-04-02T00:00:02.000Z",
+              sequence: 2,
+              message: "查询历史 SR"
+            },
+            {
+              id: "event-3",
+              runId: "run-1",
+              type: "result",
+              createdAt: "2026-04-02T00:00:03.000Z",
+              sequence: 3,
+              message: "最终结论",
+              data: { message_id: "msg-1" }
+            }
+          ]}
+          runStatus="done"
+          finalOutput="最终结论"
+        />
+      );
+    });
+
+    expect(container.querySelector("[data-part-kind='reasoning']")?.textContent).toContain("我先读取页面上下文，再整理结论。");
+    expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("查询历史 SR");
+    expect(container.querySelector("[data-part-kind='text']")?.textContent).toContain("最终结论");
   });
 });

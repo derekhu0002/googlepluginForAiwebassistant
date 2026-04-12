@@ -337,7 +337,7 @@ export function ReasoningTimeline({
         runStatus: segment.status,
         streamStatus: segment.runId === runId ? streamStatus : undefined,
         includeSummary: index === runSegments.length - 1,
-        includeToolCallParts: false
+        includeToolCallParts: segment.includeToolCallParts ?? true
       }));
 
       if (merged.length) {
@@ -358,7 +358,7 @@ export function ReasoningTimeline({
       streamStatus,
       updatedAt,
       pendingQuestionId,
-      includeToolCallParts: false
+      includeToolCallParts: true
     });
   }, [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runSegments, runStatus, streamStatus, transcriptReadModel, updatedAt]);
 

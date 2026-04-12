@@ -64,7 +64,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.at(-1)?.text).toBe("已完成");
   });
 
-  it("hides tool-call parts from the default transcript stream while keeping the answer", () => {
+  it("shows tool-call parts in the transcript stream by default", () => {
     const parts = buildTranscriptPartStream({
       runId: "run-1",
       prompt: "请回答",
@@ -76,10 +76,10 @@ describe("reasoning timeline share-aligned transcript contract", () => {
       finalOutput: "最终回答"
     });
 
-    expect(parts.map((part) => part.kind)).toEqual(["prompt", "text", "summary"]);
+    expect(parts.map((part) => part.kind)).toEqual(["prompt", "tool", "text", "summary"]);
   });
 
-  it("can still project tool-call parts when explicitly requested for non-transcript consumers", () => {
+  it("can still omit tool-call parts when explicitly requested", () => {
     const parts = buildTranscriptPartStream({
       runId: "run-1",
       prompt: "请回答",
@@ -89,10 +89,10 @@ describe("reasoning timeline share-aligned transcript contract", () => {
       ],
       status: "done",
       finalOutput: "最终回答",
-      includeToolCallParts: true
+      includeToolCallParts: false
     });
 
-    expect(parts.map((part) => part.kind)).toEqual(["prompt", "tool", "text", "summary"]);
+    expect(parts.map((part) => part.kind)).toEqual(["prompt", "text", "summary"]);
   });
 
   it("keeps follow-up pause resume on a single ordered transcript stream", () => {
@@ -198,6 +198,28 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.map((part) => part.text)).not.toContain("正在继续…");
   });
 
+  it("keeps reasoning and tool process parts visible in transcript projection", () => {
+    const parts = buildTranscriptPartStream({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, { type: "thinking", message: "我先读取当前上下文，再比对已有结论。" }),
+        createEvent(2, { type: "tool_call", message: "查询历史 SR" }),
+        createEvent(3, { type: "result", message: "最终结论", data: { message_id: "msg-1" } })
+      ],
+      status: "done",
+      finalOutput: "最终结论"
+    });
+
+    expect(parts.map((part) => ({ kind: part.kind, text: part.text }))).toEqual([
+      { kind: "prompt", text: "继续分析" },
+      { kind: "reasoning", text: "我先读取当前上下文，再比对已有结论。" },
+      { kind: "tool", text: "查询历史 SR" },
+      { kind: "text", text: "最终结论" },
+      { kind: "summary", text: "已完成" }
+    ]);
+  });
+
   it("prefers terminal answer text when leaked reasoning blocks are mixed into response deltas", () => {
     const finalOutput = "当前主要风险\n\n1. 数据最小化风险。\n\n2. 访问边界需要补强。";
     const events = [
@@ -277,7 +299,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
         finalOutput: "",
         updatedAt: "2026-04-02T00:00:02.000Z",
         includeSummary: true,
-        includeToolCallParts: false
+        includeToolCallParts: true
       }
     });
 
@@ -296,7 +318,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
         finalOutput: "",
         updatedAt: "2026-04-02T00:00:03.000Z",
         includeSummary: true,
-        includeToolCallParts: false
+        includeToolCallParts: true
       },
       previousModel: firstModel
     });
@@ -332,7 +354,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
         runStatus: "streaming",
         streamStatus: "streaming",
         includeSummary: true,
-        includeToolCallParts: false
+        includeToolCallParts: true
       }
     });
 
@@ -350,7 +372,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
         runStatus: "streaming",
         streamStatus: "streaming",
         includeSummary: true,
-        includeToolCallParts: false
+        includeToolCallParts: true
       },
       previousModel: firstModel
     });
@@ -374,7 +396,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
         runStatus: "streaming",
         streamStatus: "streaming",
         includeSummary: true,
-        includeToolCallParts: false
+        includeToolCallParts: true
       }
     });
 
@@ -388,7 +410,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
         runStatus: "streaming",
         streamStatus: "streaming",
         includeSummary: true,
-        includeToolCallParts: false
+        includeToolCallParts: true
       },
       previousModel: firstModel
     });
@@ -417,7 +439,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
         runStatus: "streaming",
         streamStatus: "streaming",
         includeSummary: true,
-        includeToolCallParts: false
+        includeToolCallParts: true
       }
     });
 

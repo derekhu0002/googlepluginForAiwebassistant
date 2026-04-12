@@ -880,7 +880,7 @@ describe("side panel host permission request flow", () => {
 
     const assistantMessages = container.querySelectorAll(".transcript-part[data-part-role='assistant'][data-part-kind='text']");
     expect(assistantMessages).toHaveLength(1);
-    expect(container.querySelectorAll("[data-part-kind='reasoning']")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-part-kind='reasoning']").length).toBeGreaterThanOrEqual(1);
     expect(container.querySelectorAll("[data-part-kind='text']").length).toBeGreaterThanOrEqual(1);
     expect(assistantMessages[0]?.textContent).toContain("当前风险结论");
     expect(mockSaveEvent).toHaveBeenNthCalledWith(1, replayedThinkingEvent);
@@ -1019,7 +1019,7 @@ describe("side panel host permission request flow", () => {
     expect(merged.runEvents.at(-1)?.type).toBe("result");
   });
 
-  it("keeps hidden live run events from surfacing after history rerenders", async () => {
+  it("keeps live run events stable after history rerenders", async () => {
     const { runtimeSendMessage } = setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: initialAssistantState
@@ -1050,7 +1050,7 @@ describe("side panel host permission request flow", () => {
     expect(container.querySelector(".conversation-inline-status")).toBeNull();
     expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']")).toHaveLength(1);
     expect(container.querySelector(".transcript-part[data-part-kind='summary']")?.textContent).toContain("进行中");
-    expect(container.textContent).not.toContain("event 1");
+    expect(container.textContent).toContain("event 1");
 
     mockRunHistoryState.history = [{
       ...createCurrentRun(),
@@ -1066,11 +1066,11 @@ describe("side panel host permission request flow", () => {
     expect(container.querySelector(".conversation-inline-status")).toBeNull();
     expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']")).toHaveLength(1);
     expect(container.querySelector(".transcript-part[data-part-kind='summary']")?.textContent).toContain("进行中");
-    expect(container.textContent).not.toContain("event 1");
+    expect(container.textContent).toContain("event 1");
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
-  it("renders the final assistant answer while hiding tool and reasoning logs", async () => {
+  it("renders transcript process parts alongside the final assistant answer", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1102,13 +1102,13 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).not.toContain("You");
     expect(container.textContent).not.toContain("Assistant");
     expect(container.textContent).toContain("最终结论");
-    expect(container.textContent).not.toContain("读取页面上下文");
-    expect(container.textContent).not.toContain("工具");
-    expect(container.textContent).not.toContain("查询历史 SR");
-    expect(container.textContent).not.toContain("展开推理过程");
+    expect(container.textContent).toContain("读取页面上下文");
+    expect(container.textContent).toContain("查询历史 SR");
+    expect(container.querySelector("[data-part-kind='reasoning']")?.textContent).toContain("读取页面上下文");
+    expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("查询历史 SR");
   });
 
-  it("shows persisted final output while keeping tool content hidden", async () => {
+  it("shows persisted final output while keeping projected tool content visible", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1137,10 +1137,8 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("来自持久化状态的回复");
-    expect(container.textContent).not.toContain("工具");
-    expect(container.textContent).not.toContain("查询历史 SR");
-    expect(container.textContent).not.toContain("展开推理过程");
-    expect(container.textContent).not.toContain("读取页面上下文");
+    expect(container.textContent).toContain("查询历史 SR");
+    expect(container.textContent).toContain("读取页面上下文");
   });
 
   it("renders complete assistant text when same run emits delayed response after result", async () => {
@@ -1330,7 +1328,7 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
-  it("hides tool-call-only transcript blocks while still hiding raw payloads", async () => {
+  it("shows tool-call-only transcript blocks while still hiding raw payloads", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1348,11 +1346,11 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).not.toContain("工具");
+    expect(container.textContent).toContain("正在整理上下文并准备分析。");
     expect(container.textContent).not.toContain("prepare_context");
     expect(container.textContent).not.toContain("secret");
     expect(container.querySelector("pre")).toBeNull();
-    expect(container.querySelector("[data-part-kind='tool']")).toBeNull();
+    expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("正在整理上下文并准备分析。");
     expect(container.querySelector("[data-part-kind='text']")).toBeNull();
   });
 
@@ -1383,10 +1381,10 @@ describe("side panel host permission request flow", () => {
     await flushAllTimers();
 
     expect(container.textContent).not.toContain("Called");
-    expect(container.textContent).not.toContain("我先整理页面关键信息，再给出最终建议。");
+    expect(container.textContent).toContain("我先整理页面关键信息，再给出最终建议。");
   });
 
-  it("hides aggregated orchestration thinking events", async () => {
+  it("shows aggregated orchestration thinking events in the transcript", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1402,12 +1400,11 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).not.toContain("读取页面上下文");
-    expect(container.textContent).not.toContain("整理可用字段");
-    expect(container.textContent).not.toContain("展开推理过程");
+    expect(container.textContent).toContain("读取页面上下文");
+    expect(container.textContent).toContain("整理可用字段");
   });
 
-  it("shows final answer in history detail without orchestration steps", async () => {
+  it("shows final answer in history detail with projected reasoning steps", async () => {
     mockRunHistoryState.selectedHistoryDetail = {
       run: {
         ...createCurrentRun(),
@@ -1434,12 +1431,11 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("历史结果");
     expect(container.textContent).not.toContain("You");
-    expect(container.textContent).not.toContain("历史思考 1");
-    expect(container.textContent).not.toContain("历史思考 2");
-    expect(container.textContent).not.toContain("展开推理过程");
+    expect(container.textContent).toContain("历史思考 1");
+    expect(container.textContent).toContain("历史思考 2");
   });
 
-  it("shows history detail meaningful thinking but hides session noise", async () => {
+  it("shows history detail meaningful thinking together with session progress copy", async () => {
     mockRunHistoryState.selectedHistoryDetail = {
       run: {
         ...createCurrentRun(),
@@ -1465,8 +1461,8 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("历史结论");
-    expect(container.textContent).not.toContain("已连接主分析代理");
-    expect(container.textContent).not.toContain("我先对比历史差异，再汇总结论。");
+    expect(container.textContent).toContain("已连接主分析代理");
+    expect(container.textContent).toContain("我先对比历史差异，再汇总结论。");
   });
 
   it("shows the final answer after question events complete", async () => {
@@ -2397,7 +2393,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("第一段第二段");
   });
 
-  it("keeps tool-only streaming state out of transcript body and hides tool details entirely", async () => {
+  it("keeps tool-only streaming state in transcript body while hiding tool payload details", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -2417,7 +2413,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.querySelector("[data-part-kind='text']")).toBeNull();
-    expect(container.textContent).not.toContain("工具");
+    expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("正在检索相关信息。");
     expect(container.textContent).not.toContain("token=123");
     expect(container.textContent).not.toContain("grep");
   });
@@ -2592,7 +2588,7 @@ describe("side panel host permission request flow", () => {
     expect(container.querySelectorAll(".transcript-part[data-part-kind='summary']").length).toBeGreaterThan(0);
   });
 
-  it("keeps follow-up output in the same flat stream while hiding tool insertions", async () => {
+  it("keeps follow-up output in the same flat stream while showing tool insertions", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -2641,11 +2637,12 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     const streamParts = Array.from(container.querySelectorAll(".transcript-part[data-section='part']"));
-    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "text", "question", "answer", "text", "summary"]);
-    expect(container.textContent).not.toContain("查询历史 SR");
-    expect(streamParts[1]?.textContent ?? "").toContain("第一段");
-    expect(streamParts[2]?.textContent ?? "").toContain("请选择处理方式");
-    expect(streamParts[4]?.textContent ?? "").toContain("第二段");
+    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "tool", "text", "question", "answer", "text", "summary"]);
+    expect(container.textContent).toContain("查询历史 SR");
+    expect(streamParts[1]?.textContent ?? "").toContain("查询历史 SR");
+    expect(streamParts[2]?.textContent ?? "").toContain("第一段");
+    expect(streamParts[3]?.textContent ?? "").toContain("请选择处理方式");
+    expect(streamParts[5]?.textContent ?? "").toContain("第二段");
   });
 
   it("keeps newer live assistant body when stale final output exists in active run state", async () => {
