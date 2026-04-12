@@ -9,6 +9,8 @@ vi.mock("../shared/api", () => ({
 const { ReasoningTimeline } = await import("./reasoningTimelineView");
 const { buildStableTranscriptProjection } = await import("./reasoningTimeline");
 
+/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
+/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
 describe("ReasoningTimeline transcript rendering", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
@@ -232,5 +234,107 @@ describe("ReasoningTimeline transcript rendering", () => {
 
     expect(container.textContent).toContain("历史回答");
     expect(container.textContent).toContain("当前回答");
+  });
+
+  it("renders updated live tail from incremental transcript projection debug state", async () => {
+    const firstModel = buildStableTranscriptProjection({
+      historicalSegments: [{
+        runId: "run-history",
+        prompt: "历史问题",
+        events: [{
+          id: "event-history",
+          runId: "run-history",
+          type: "result",
+          createdAt: "2026-04-02T00:00:01.000Z",
+          sequence: 1,
+          message: "历史回答",
+          data: { message_id: "msg-history" }
+        }],
+        status: "done",
+        finalOutput: "历史回答"
+      }],
+      liveSegment: {
+        runId: "run-current",
+        prompt: "当前问题",
+        events: [{
+          id: "event-current-1",
+          runId: "run-current",
+          type: "thinking",
+          createdAt: "2026-04-02T00:00:02.000Z",
+          sequence: 2,
+          message: "第一段",
+          data: { field: "text", message_id: "msg-current" }
+        }],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    const secondModel = buildStableTranscriptProjection({
+      historicalSegments: [{
+        runId: "run-history",
+        prompt: "历史问题",
+        events: [{
+          id: "event-history",
+          runId: "run-history",
+          type: "result",
+          createdAt: "2026-04-02T00:00:01.000Z",
+          sequence: 1,
+          message: "历史回答",
+          data: { message_id: "msg-history" }
+        }],
+        status: "done",
+        finalOutput: "历史回答"
+      }],
+      liveSegment: {
+        runId: "run-current",
+        prompt: "当前问题",
+        events: [
+          {
+            id: "event-current-1",
+            runId: "run-current",
+            type: "thinking",
+            createdAt: "2026-04-02T00:00:02.000Z",
+            sequence: 2,
+            message: "第一段",
+            data: { field: "text", message_id: "msg-current" }
+          },
+          {
+            id: "event-current-2",
+            runId: "run-current",
+            type: "thinking",
+            createdAt: "2026-04-02T00:00:03.000Z",
+            sequence: 3,
+            message: "第二段",
+            data: { field: "text", message_id: "msg-current" }
+          }
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      },
+      previousModel: firstModel
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={secondModel}
+          runId="run-current"
+          prompt="当前问题"
+          events={[]}
+          runStatus="streaming"
+        />
+      );
+    });
+
+    expect(secondModel.liveProjectionDebug).toMatchObject({ reusedPreviousStore: true, appliedDeltaEventCount: 1 });
+    expect(container.textContent).toContain("历史回答");
+    expect(container.textContent).toContain("第一段第二段");
   });
 });

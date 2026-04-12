@@ -304,6 +304,100 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(secondModel.historicalMessages).toBe(firstModel.historicalMessages);
     expect(secondModel.historicalParts).toBe(firstModel.historicalParts);
     expect(secondModel.liveParts.map((part) => part.text)).toEqual(["当前问题", "第一段第二段"]);
+    expect(secondModel.liveProjectionDebug).toMatchObject({
+      reusedPreviousStore: true,
+      appliedDeltaEventCount: 1
+    });
+  });
+
+  it("does not replay the full live event array when only a new delta arrives", () => {
+    const historicalSegments = [{
+      runId: "run-history",
+      prompt: "历史问题",
+      events: [createEvent(1, { runId: "run-history", type: "result", message: "历史回答", data: { message_id: "msg-history" } })],
+      status: "done" as const,
+      finalOutput: "历史回答"
+    }];
+
+    const firstModel = buildStableTranscriptProjection({
+      historicalSegments,
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [
+          createEvent(2, { runId: "run-live", type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-live" } }),
+          createEvent(3, { runId: "run-live", type: "thinking", message: "第二段", data: { field: "text", message_id: "msg-live" } })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    const secondModel = buildStableTranscriptProjection({
+      historicalSegments,
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [
+          createEvent(2, { runId: "run-live", type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-live" } }),
+          createEvent(3, { runId: "run-live", type: "thinking", message: "第二段", data: { field: "text", message_id: "msg-live" } }),
+          createEvent(4, { runId: "run-live", type: "thinking", message: "第三段", data: { field: "text", message_id: "msg-live" } })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      },
+      previousModel: firstModel
+    });
+
+    expect(secondModel.liveProjectionDebug).toMatchObject({
+      reusedPreviousStore: true,
+      appliedDeltaEventCount: 1
+    });
+    expect(secondModel.liveProjectionState?.eventCount).toBe(3);
+    expect(secondModel.liveParts.map((part) => part.text)).toEqual(["当前问题", "第一段第二段第三段"]);
+  });
+
+  it("falls back to rebuilding the live projection when the live event prefix changes", () => {
+    const firstModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [createEvent(1, { runId: "run-live", type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-live" } })],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    const secondModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [createEvent(9, { runId: "run-live", type: "thinking", message: "替换后的首段", data: { field: "text", message_id: "msg-live" } })],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      },
+      previousModel: firstModel
+    });
+
+    expect(secondModel.liveProjectionDebug).toMatchObject({
+      reusedPreviousStore: false,
+      appliedDeltaEventCount: 1
+    });
+    expect(secondModel.liveParts.map((part) => part.text)).toEqual(["当前问题", "替换后的首段"]);
   });
 
   it("builds historical archive batches separately from live tail projection", () => {
