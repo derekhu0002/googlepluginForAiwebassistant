@@ -1,47 +1,50 @@
-# Release Summary: sidepanel transcript 合同重构
+# Release Summary: TASK-093 fast-track sidepanel transcript style update
 
 ## Release Status
 
 - Status: completed
-- Date: 2026-04-11
-- Goal: 按 OpenCode Web Share 合同将 transcript 重构为 source-ordered flat part stream，且 summary/status 仅位于尾部 summary part。
-- Main implementation commit: `d80ef2520f717b327ab85519d892928288ad756f`
-- Final validated baseline commit: `944cc120271d15ecd08394e03f0c73e52f079304`
+- Date: 2026-04-12
+- Task: `TASK-093`
+- Implementation commit: `86140ec917ac099cb1f032c8044c45c048bd5392`
+- QA status: `passed`
+- Audit status: `not_run`
 
 ## Release Summary
 
-- 本次发布完成 sidepanel transcript 合同重构，将 transcript 统一为 source-ordered flat part stream，并确保 summary/status 仅通过尾部 summary part 暴露。
-- 渲染层、样式层、live/history shell 集成与测试基线已全部收敛到同一 Share 风格 transcript-stream contract，移除旧 message-card/card shell 与 feed-external inline status 依赖。
-- 主实现位于 `d80ef2520f717b327ab85519d892928288ad756f`，随后通过 `97426a4afa4c1fc278dc29526f744252606e6759` 移除 feed 外状态，再通过 `944cc120271d15ecd08394e03f0c73e52f079304` 移除 part 内 streaming 状态，完成最终验证基线收口。
+- Finalized the fast-track sidepanel transcript styling update so user prompts render as compact right-side cards while assistant responses render as flatter left-side markdown flow.
+- QA confirmed the intended presentation change and passed targeted regression, typecheck, and build validation for the implementation commit.
 
 ## Completed Scope
 
-- `TASK-085`: Rebaseline sidepanel transcript projection to source-ordered flat part stream.
-- `TASK-086`: Replace card-based transcript rendering with Share-style flat part renderer.
-- `TASK-087`: Align sidepanel transcript CSS to unified vertical part-stream skeleton.
-- `TASK-088`: Converge sidepanel live/history shell integration on single transcript-stream contract.
-- `TASK-089`: Rebaseline transcript tests to Share reference contract.
+- `TASK-093`: 调整当前对话框的消息样式，使整体显示更接近 OpenCode Web：用户消息右侧气泡显示，AI反馈内容保持左侧普通内容流样式
 
 ## Validation Results
 
-- QA: expected passed after recheck
-- Audit: expected passed after recheck
+- QA: passed — transcript styling intent matched expected behavior for commit `86140ec917ac099cb1f032c8044c45c048bd5392`; `reasoningTimelineView.test.tsx`, `App.test.tsx`, `npm run typecheck`, and `npm run build` passed.
+- Audit: not run.
 
 ## Commit Traceability
 
-- Main implementation: `d80ef2520f717b327ab85519d892928288ad756f`
-- Remove feed-external status: `97426a4afa4c1fc278dc29526f744252606e6759`
-- Remove in-part streaming status: `944cc120271d15ecd08394e03f0c73e52f079304`
-- Final validation baseline: `944cc120271d15ecd08394e03f0c73e52f079304`
-- Completed tasks: `TASK-085`, `TASK-086`, `TASK-087`, `TASK-088`, `TASK-089`
+- Implementation commit: `86140ec917ac099cb1f032c8044c45c048bd5392`
+- Completed task: `TASK-093`
+
+## Intent Traceability Matrix
+
+# Traceability Matrix
+
+Scope: commit 86140ec917ac099cb1f032c8044c45c048bd5392
+
+| Requirement (Intent) | Architecture Component (Design) | Implemented Task | Source Files (Reality) | Verified by Tests? |
+| --- | --- | --- | --- | --- |
+| N/A | N/A | TASK-093 调整当前对话框的消息样式，使整体显示更接近 OpenCode Web：用户消息右侧气泡显示，AI反馈内容保持左侧普通内容流样式 (86140ec917ac099cb1f032c8044c45c048bd5392) | N/A | ❌ No |
+
+100% of the intended sprint scope was not verified by tests. The traceability matrix contains one or more `❌ No` rows, so full intent verification was not achieved and this release contains verification gaps in formal requirement/design/reality linkage.
 
 ## Release Artifacts
 
 - Release log: `SprintRleaseLog.md`
-- QA status: `expected passed after recheck`
-- Audit status: `expected passed after recheck`
-- Final commit: `944cc120271d15ecd08394e03f0c73e52f079304`
+- QA summary: `Transcript styling adjustment matches the stated intent: user prompt renders as a compact right-side card, assistant content renders as left-side flatter markdown flow, and regression/build checks passed.`
 
 ## Release Conclusion
 
-sidepanel transcript 合同重构已完成发布收口。最终交付以 commit `944cc120271d15ecd08394e03f0c73e52f079304` 为验证基线，达成 Share 合同要求：source-ordered flat part stream、尾部 summary part 承载 summary/status、统一渲染与样式骨架，以及 live/history/follow-up 单流集成。
+TASK-093 is finalized as completed for release packaging. Functional QA passed for the intended sidepanel transcript styling behavior, but formal traceability metadata remains incomplete and should be tightened in a follow-up if strict intent-to-code verification is required.
