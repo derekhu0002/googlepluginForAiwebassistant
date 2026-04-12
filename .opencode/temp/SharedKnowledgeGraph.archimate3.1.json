@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "For ELM-004, the approved design introduces an explicit main-agent preference across extension sidepanel, shared protocol, background run orchestration, and python adapter selection logic. The UI must expose a lower-left main-agent entry anchored in the composer utility strip and allow only two logical agent IDs: TARA_analyst and ThreatIntelliganceCommander. The recommended baseline default is TARA_analyst, seeded visibly in extension state and persisted locally in chrome.storage.local so the current preference survives sidepanel close/reopen. Every new run must explicitly send the selected logical agent to the adapter; switching affects only future runs and does not mutate in-flight runs. The adapter must stop auto-selecting an implicit canonical analyst agent and instead resolve the requested logical agent against remote /agent discovery using a server-side whitelist plus alias normalization. On success, start_run returns the final effective logical selectedAgent (and may internally track resolved remote canonical agent separately). The UI list remains fixed by product whitelist and is never populated directly from discovery. If the requested agent is not allowed, reject with VALIDATION_ERROR; if discovery succeeds but the requested agent is unavailable remotely, fail the run start explicitly without silent fallback; if discovery transport/payload/runtime evidence fails, surface ANALYSIS_ERROR. Historical runs should record the effective agent so later UI views remain accurate after the user changes the future-run preference."
+      "value": "已批准的 sidepanel transcript 重构本轮重新基线为 OpenCode Web Share 合同：以 source-ordered message.parts 作为唯一可见 transcript 流，强参考源码为 packages/web/src/components/Share.tsx、packages/web/src/components/share/part.tsx、packages/web/src/components/share/common.tsx、packages/web/src/components/share.module.css。旧 TASK-078~TASK-084 仅为错误切分的 planning seed，不能直接执行；本轮以新的 implementation tasks 为准。设计边界：reasoningTimeline.ts 负责按 typed filter 与 source part order 投影 flat part stream，并把 follow-up 表达为同一 transcript 流中的 suspension/resume 与尾部 summary part；reasoningTimelineView.tsx 负责移除 TranscriptMessageCard / message hover bar / 通用 part header-badge-timestamp 噪音，改为 Share 式 flat part renderer 与局部 part footer decoration；transcript.css 负责统一竖向 part stream 骨架，移除 user/assistant chat bubble 左右壳；MainStage 与 live/history 边界负责保证 summary/status 只以 transcript 流末尾 summary part 呈现，不再有 feed 外 footer 或顶部独立状态行；测试基线改为 reference-based contract，覆盖 source-ordered parts、typed visibility filter、single-stream follow-up suspension/resume、tail summary part、flat renderer、Share-style CSS skeleton。"
     }
   ],
   "metadata": {
@@ -19,30 +19,30 @@
     "ai4pb": {
       "managedBy": "opencode",
       "counters": {
-        "ELM": 4
+        "ELM": 5
       },
       "designSummary": "",
       "designDecisions": [],
       "runtime": {
-        "activeGoal": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。",
+        "activeGoal": "修复 sidepanel transcript 的三个局部问题：1) assistant 输出到后段时仍变慢；2) 移除 transcript 中仍残留的 avatar/anchor 装饰图标，让 AI 消息更自然；3) 修正正文增量合并，",
         "validations": {
           "qa": {
             "status": "not_run",
             "summary": "QA not run for the current goal.",
-            "updatedAt": "2026-04-10T04:08:28.972Z"
+            "updatedAt": "2026-04-11T07:08:52.900Z"
           },
           "audit": {
             "status": "not_run",
             "summary": "Audit not run for the current goal.",
-            "updatedAt": "2026-04-10T04:08:28.972Z"
+            "updatedAt": "2026-04-11T07:08:52.900Z"
           }
         },
         "release": {
           "status": "not_started",
           "summary": "Release not prepared for the current goal.",
-          "updatedAt": "2026-04-10T04:08:28.972Z"
+          "updatedAt": "2026-04-11T07:08:52.900Z"
         },
-        "updatedAt": "2026-04-10T04:09:17.425Z"
+        "updatedAt": "2026-04-11T07:09:56.407Z"
       }
     }
   },
@@ -496,38 +496,52 @@
         ]
       },
       {
-        "identifier": "PROJECT-CURRENT",
-        "type": "WorkPackage",
+        "identifier": "ELM-005",
+        "type": "Requirement",
         "name": [
           {
-            "value": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。"
+            "value": "Formal Requirement"
           }
         ],
         "documentation": [
           {
-            "value": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。"
+            "value": "# Formal Requirement Draft\n\n## Goal\n将“sidepanel 主舞台中的 assistant 正文内容”和“THINKING / reasoning 内容”从当前的分离式双板块呈现，正式调整为**统一呈现导向**的产品需求，以便架构师基于该目标提出可审核的合并方案，而不是继续沿用“正文区 + 独立 THINKING 面板”的视觉结构。\n\n## Scope\n### In Scope\n- 明确本轮需求目标：**不再把正文和 THINKING 分成两个独立视觉板块**。\n- 约束架构分析方向：允许提出不同实现策略，但都必须围绕“统一呈现”。\n- 覆盖当前 sidepanel 主舞台相关交互与展示逻辑的需求定义：\n  - `reasoningTimeline.ts` 中 assistant 最终/流式消息携带 `processItems` 的现状\n  - `reasoningTimelineView.tsx` 中 message 区与 `assistant-thinking-panel` 的分离展示现状\n- 输出给架构师的分析前提、边界、验收标准与风险。\n\n### Out of Scope\n- 本轮不直接开发、不修改代码、不提交实现方案代码。\n- 不在本轮锁定唯一 UI 方案或唯一技术实现路径。\n- 不要求本轮定义所有视觉细节、样式细节、文案细节。\n- 不扩展到 sidepanel 主舞台之外的其他页面/容器，除非架构分析证明存在强依赖。\n\n## User Stories / Usage Scenarios\n1. 作为产品审核者，我希望 assistant 的回答内容和 THINKING 不再以两个割裂的视觉板块出现，这样整体阅读体验更连贯，不会产生“正文已结束但旁边还有另一个面板”的割裂感。  \n2. 作为架构师，我需要在“统一呈现”的明确目标下分析可选方案，例如内联折叠、时间线合流、同消息体分段展示等，以便输出可比较、可审核的架构方案。  \n3. 作为后续开发者，我需要需求明确禁止继续保留“message 主正文 + 独立 assistant-thinking-panel”这一主视觉结构，以避免方案偏离产品目标。  \n\n## Acceptance Criteria\n1. 新需求必须明确写明：**正文与 THINKING 不应继续作为两个独立视觉板块呈现**。  \n2. 架构阶段允许提出多个候选方案，但每个方案都必须满足以下约束：\n   - 正文与 THINKING 属于**同一条 assistant 输出体验**；\n   - 用户在主阅读流中看到的是**统一消息呈现**，而不是旁置或下置的独立第二面板；\n   - 若存在折叠、展开、分段、标记、切换等机制，这些机制也必须是统一消息内部的呈现策略，而非独立容器策略。  \n3. 架构分析产出中必须包含：\n   - 当前分离式结构的问题说明；\n   - 至少一种统一呈现策略；\n   - 各候选策略对流式消息、最终消息、`processItems` 数据承载方式的影响分析；\n   - 对现有 `assistant-thinking-panel` 是否移除、吸收或重构的判断。  \n4. 后续进入设计/开发阶段时，任何仍保留“正文区 + 独立 THINKING 框”作为默认主方案的提案，都应视为**不满足该需求**。  \n5. 本轮交付目标是“形成可供架构师分析并供用户审核的正式需求”，而不是直接进入实现。  \n\n## Constraints\n- 必须基于现有项目上下文：\n  - `reasoningTimeline.ts` 中 assistant 消息包含 `processItems`\n  - `reasoningTimelineView.tsx` 中当前存在独立 `assistant-thinking-panel`\n- 需求目标是“统一呈现”，不是“隐藏 THINKING”或“删除 reasoning 数据”。\n- 允许保留 THINKING 信息价值，但其展示方式必须被纳入统一消息体验。\n- 本轮输出必须服务于“让架构师分析方案给用户审核”这一流程目标。\n\n## Open Questions / Assumptions\n### Assumptions\n- 当前用户关切点主要是**视觉与交互层面的分离感**，而不是 `processItems` 数据本身是否保留。\n- 架构师可以在不违背统一呈现目标的前提下，自由比较不同合并策略。\n- 若统一呈现方案需要对消息数据结构、流式渲染路径或组件边界提出调整建议，可在架构分析中提出，但不属于本轮实现范围。\n\n### Open Questions\n- 暂未要求锁定 THINKING 在统一消息中的默认可见性策略（如默认展开、默认折叠、按阶段展开等），该部分可由架构师提出备选方案供审核。"
+          }
+        ]
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "修复 sidepanel transcript 的三个局部问题：1) assistant 输出到后段时仍变慢；2) 移除 transcript 中仍残留的 avatar/anchor 装饰图标，让 AI 消息更自然；3) 修正正文增量合并，"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "修复 sidepanel transcript 的三个局部问题：1) assistant 输出到后段时仍变慢；2) 移除 transcript 中仍残留的 avatar/anchor 装饰图标，让 AI 消息更自然；3) 修正正文增量合并，"
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。",
+            "rawRequirement": "修复 sidepanel transcript 的三个局部问题：1) assistant 输出到后段时仍变慢；2) 移除 transcript 中仍残留的 avatar/anchor 装饰图标，让 AI 消息更自然；3) 修正正文增量合并，",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-043",
+        "identifier": "TASK-091",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "修复 sidepanel 中主 AGENT 选择器点击后列表不可见的问题，将其从 composer 内部绝对定位下拉改为类似 drawer 的独立浮层容器，确保不受 overflow 裁切且点击可见可选。"
+            "value": "修复 sidepanel transcript 的三个局部问题：1) assistant 输出到后段时仍变慢；2) 移除 transcript 中仍残留的 avatar/anchor 装饰图标，让 AI 消息更自然；3) 修正正文增量合并，"
           }
         ],
         "documentation": [
           {
-            "value": "Fast-track sidepanel main agent menu fix completed. Replaced composer-local clipped dropdown with overlay-hosted floating menu, preserved the two allowed agent options, added focused interaction coverage, and validated with sidepanel App tests plus extension typecheck."
+            "value": "Fast-track fix completed: removed transcript decoration/avatar markup, deduped assistant streaming snapshot merges, and added regression tests for transcript decoration absence and non-duplicating assistant output."
           }
         ],
         "extensions": {
@@ -538,12 +552,12 @@
             "status": "Done",
             "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Fast-track sidepanel main agent menu fix completed. Replaced composer-local clipped dropdown with overlay-hosted floating menu, preserved the two allowed agent options, added focused interaction coverage, and validated with sidepanel App tests plus extension typecheck.",
-            "commitId": "af57b1704f9b408a5dfacc787c07f85b65afe1d1",
+            "summary": "Fast-track fix completed: removed transcript decoration/avatar markup, deduped assistant streaming snapshot merges, and added regression tests for transcript decoration absence and non-duplicating assistant output.",
+            "commitId": "e4fee471ce894cb2c4fe547b47b594ab7d26e339",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-10T04:33:06.568Z"
+            "updatedAt": "2026-04-11T07:15:58.997Z"
           }
         }
       }
@@ -880,15 +894,15 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-043",
+        "identifier": "REL-PROJECT-TASK-091",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-043"
+            "value": "Project aggregates TASK-091"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-043",
+        "target": "TASK-091",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."

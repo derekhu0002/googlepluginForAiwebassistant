@@ -1,45 +1,47 @@
-# Release Summary: 主 AGENT 用户可见与可切换
+# Release Summary: sidepanel transcript 合同重构
 
 ## Release Status
 
 - Status: completed
-- Date: 2026-04-10
-- Goal: 实现主 AGENT 用户可见且可切换，范围限定为 `TARA_analyst` 与 `ThreatIntelliganceCommander`。
-- Final validated commit: `b6edc54222abe436be6d2b1da4846f5111b2bd11`
+- Date: 2026-04-11
+- Goal: 按 OpenCode Web Share 合同将 transcript 重构为 source-ordered flat part stream，且 summary/status 仅位于尾部 summary part。
+- Main implementation commit: `d80ef2520f717b327ab85519d892928288ad756f`
+- Final validated baseline commit: `944cc120271d15ecd08394e03f0c73e52f079304`
 
 ## Release Summary
 
-- `TASK-039` 至 `TASK-042` 已完成，交付主 AGENT 在用户侧可见、可选择、可持久化，并在运行链路中显式闭环传递。
-- 本次发布将主 AGENT 选择范围收敛到 `TARA_analyst` 与 `ThreatIntelliganceCommander`，并通过 audit rework 修正显式 agent discovery 失败时的错误契约，避免静默回退。
+- 本次发布完成 sidepanel transcript 合同重构，将 transcript 统一为 source-ordered flat part stream，并确保 summary/status 仅通过尾部 summary part 暴露。
+- 渲染层、样式层、live/history shell 集成与测试基线已全部收敛到同一 Share 风格 transcript-stream contract，移除旧 message-card/card shell 与 feed-external inline status 依赖。
+- 主实现位于 `d80ef2520f717b327ab85519d892928288ad756f`，随后通过 `97426a4afa4c1fc278dc29526f744252606e6759` 移除 feed 外状态，再通过 `944cc120271d15ecd08394e03f0c73e52f079304` 移除 part 内 streaming 状态，完成最终验证基线收口。
 
 ## Completed Scope
 
-- `TASK-039`: 实现 sidepanel 主 AGENT 偏好设置交互，固定展示两种允许的 AGENT，默认状态可解释，且切换仅影响未来新运行。
-- `TASK-040`: 扩展 extension run-start 契约，请求显式携带 `selectedAgent`，成功响应返回确认后的有效 `selectedAgent`。
-- `TASK-041`: 将主 AGENT 偏好接入 background run orchestration，持久化用户选择，并在 run record / history 中记录 effective agent，不修改进行中的运行。
-- `TASK-042`: 实现 adapter whitelist resolution、discovery validation 与显式 agent failure 契约；audit rework 后，显式指定 agent 的 discovery 失败不再静默降级到 mock fallback。
+- `TASK-085`: Rebaseline sidepanel transcript projection to source-ordered flat part stream.
+- `TASK-086`: Replace card-based transcript rendering with Share-style flat part renderer.
+- `TASK-087`: Align sidepanel transcript CSS to unified vertical part-stream skeleton.
+- `TASK-088`: Converge sidepanel live/history shell integration on single transcript-stream contract.
+- `TASK-089`: Rebaseline transcript tests to Share reference contract.
 
 ## Validation Results
 
 - QA: expected passed after recheck
-  - 预期已在复检后通过，覆盖用户可见切换、请求/响应 `selectedAgent` 闭环、偏好持久化、运行记录 stamping，以及显式 discovery failure 错误契约。
 - Audit: expected passed after recheck
-  - 预期已在复检后通过，审计关注的 silent mock fallback 缺口已由 `b6edc54222abe436be6d2b1da4846f5111b2bd11` 修复。
 
 ## Commit Traceability
 
-- Main implementation: `0cc067a6d1fdf803a5ed97f885a678620063d530`
-- Audit rework: `b6edc54222abe436be6d2b1da4846f5111b2bd11`
-- Final implementation and validation baseline: `b6edc54222abe436be6d2b1da4846f5111b2bd11`
+- Main implementation: `d80ef2520f717b327ab85519d892928288ad756f`
+- Remove feed-external status: `97426a4afa4c1fc278dc29526f744252606e6759`
+- Remove in-part streaming status: `944cc120271d15ecd08394e03f0c73e52f079304`
+- Final validation baseline: `944cc120271d15ecd08394e03f0c73e52f079304`
+- Completed tasks: `TASK-085`, `TASK-086`, `TASK-087`, `TASK-088`, `TASK-089`
 
 ## Release Artifacts
 
 - Release log: `SprintRleaseLog.md`
-- Completed tasks: `TASK-039`, `TASK-040`, `TASK-041`, `TASK-042`
-- Allowed primary agents: `TARA_analyst`, `ThreatIntelliganceCommander`
 - QA status: `expected passed after recheck`
 - Audit status: `expected passed after recheck`
+- Final commit: `944cc120271d15ecd08394e03f0c73e52f079304`
 
 ## Release Conclusion
 
-主 AGENT 用户可见与可切换能力已在 commit `b6edc54222abe436be6d2b1da4846f5111b2bd11` 完成收口。该发布确保用户只能在 `TARA_analyst` 与 `ThreatIntelliganceCommander` 间切换，且所选 agent 会在 UI、扩展请求、后台编排与适配器校验链路中保持一致，并在显式 discovery 失败时返回明确错误而非静默回退。
+sidepanel transcript 合同重构已完成发布收口。最终交付以 commit `944cc120271d15ecd08394e03f0c73e52f079304` 为验证基线，达成 Share 合同要求：source-ordered flat part stream、尾部 summary part 承载 summary/status、统一渲染与样式骨架，以及 live/history/follow-up 单流集成。
