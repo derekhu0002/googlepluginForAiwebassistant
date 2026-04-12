@@ -242,6 +242,18 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(messages[1]?.parts[0]?.text).toBe("第一段第二段第三段");
   });
 
+  it("projects only the provided run segments without rebuilding a duplicate base transcript", () => {
+    const parts = buildTranscriptPartStream({
+      runId: "run-1",
+      prompt: "当前问题",
+      events: [createEvent(1, { type: "result", message: "当前回答", data: { message_id: "msg-1" } })],
+      status: "done",
+      finalOutput: "当前回答"
+    });
+
+    expect(parts.map((part) => part.text)).toEqual(["当前问题", "当前回答", "已完成"]);
+  });
+
   it("derives conservative timeline and cockpit states from terminal evidence", () => {
     expect(resolveTimelinePresentationState({
       events: [createEvent(1, { type: "thinking", message: "读取页面上下文" })],

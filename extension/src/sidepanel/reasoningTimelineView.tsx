@@ -304,7 +304,22 @@ export function ReasoningTimeline({
   }), [errorMessage, events, finalOutput, runStatus, streamStatus]);
 
   const parts = useMemo(() => {
-    const base = buildTranscriptPartStream({
+    if (runSegments?.length) {
+      const merged = runSegments.flatMap((segment, index) => buildTranscriptPartStream({
+        ...segment,
+        feedbackByMessageId,
+        runStatus: segment.status,
+        streamStatus: segment.runId === runId ? streamStatus : undefined,
+        includeSummary: index === runSegments.length - 1,
+        includeToolCallParts: false
+      }));
+
+      if (merged.length) {
+        return merged;
+      }
+    }
+
+    return buildTranscriptPartStream({
       runId,
       prompt,
       events,
@@ -319,19 +334,6 @@ export function ReasoningTimeline({
       pendingQuestionId,
       includeToolCallParts: false
     });
-
-    const merged = runSegments?.length
-      ? runSegments.flatMap((segment, index) => buildTranscriptPartStream({
-        ...segment,
-        feedbackByMessageId,
-        runStatus: segment.status,
-        streamStatus: segment.runId === runId ? streamStatus : undefined,
-        includeSummary: index === runSegments.length - 1,
-        includeToolCallParts: false
-      }))
-      : base;
-
-    return merged.length ? merged : base;
   }, [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runSegments, runStatus, streamStatus, updatedAt]);
 
   useEffect(() => {

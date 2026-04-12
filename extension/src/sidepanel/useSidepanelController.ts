@@ -323,7 +323,9 @@ export function useSidepanelController() {
       .sort((left, right) => toTimestamp(left.startedAt) - toTimestamp(right.startedAt));
 
     if (!selectedRuns.length) {
-      setActiveSessionRunDetails([]);
+      if (!selectedSessionIsCurrent) {
+        setActiveSessionRunDetails([]);
+      }
       return;
     }
 
@@ -334,10 +336,27 @@ export function useSidepanelController() {
           return;
         }
 
-        setActiveSessionRunDetails(details.filter((detail): detail is RunHistoryDetail => Boolean(detail)));
+        const nextDetails = details.filter((detail): detail is RunHistoryDetail => Boolean(detail));
+        setActiveSessionRunDetails((currentDetails) => {
+          if (
+            currentDetails.length === nextDetails.length
+            && currentDetails.every((detail, index) => {
+              const nextDetail = nextDetails[index];
+              return Boolean(nextDetail)
+                && detail.run.runId === nextDetail.run.runId
+                && detail.run.updatedAt === nextDetail.run.updatedAt
+                && detail.events.length === nextDetail.events.length
+                && detail.answers.length === nextDetail.answers.length;
+            })
+          ) {
+            return currentDetails;
+          }
+
+          return nextDetails;
+        });
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && !selectedSessionIsCurrent) {
           setActiveSessionRunDetails([]);
         }
       });
@@ -345,12 +364,12 @@ export function useSidepanelController() {
     return () => {
       cancelled = true;
     };
-  }, [currentSessionKey, effectiveSelectedSessionKey, loadRunDetail, sortedHistory, state.currentRun?.runId]);
+  }, [currentSessionKey, effectiveSelectedSessionKey, loadRunDetail, selectedSessionIsCurrent, sortedHistory, state.currentRun?.runId]);
 
   const liveFinalOutput = state.currentRun?.finalOutput?.trim() || "";
   const livePrompt = state.currentRun?.prompt ?? prompt;
 
-  const liveConversationSegments = useMemo<BuildChatStreamItemsOptions[]>(() => {
+  const historicalConversationSegments = useMemo<BuildChatStreamItemsOptions[]>(() => {
     if (selectedHistoryFallbackDetail) {
       return [{
         runId: selectedHistoryFallbackDetail.run.runId,
@@ -365,7 +384,7 @@ export function useSidepanelController() {
       }];
     }
 
-    const historicalSegments = activeSessionRunDetails.map((detail) => ({
+    return activeSessionRunDetails.map((detail) => ({
       runId: detail.run.runId,
       prompt: detail.run.prompt,
       events: detail.events,
@@ -376,17 +395,19 @@ export function useSidepanelController() {
       updatedAt: detail.run.updatedAt ?? detail.run.startedAt,
       pendingQuestionId: null
     }));
+  }, [activeSessionRunDetails, selectedHistoryFallbackDetail]);
 
+  const liveConversationSegments = useMemo<BuildChatStreamItemsOptions[]>(() => {
     if (!selectedSessionIsCurrent) {
-      return historicalSegments;
+      return historicalConversationSegments;
     }
 
     if (!state.currentRun && !state.runEvents.length) {
-      return historicalSegments;
+      return historicalConversationSegments;
     }
 
     return [
-      ...historicalSegments,
+      ...historicalConversationSegments,
       {
         runId: state.currentRun?.runId ?? state.stream.runId,
         prompt: livePrompt,
@@ -399,7 +420,7 @@ export function useSidepanelController() {
         pendingQuestionId: state.stream.pendingQuestionId
       }
     ];
-  }, [activeSessionRunDetails, liveFinalOutput, livePresentationState.runStatus, livePrompt, selectedHistoryFallbackDetail, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, streamError]);
+  }, [historicalConversationSegments, liveFinalOutput, livePresentationState.runStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, streamError]);
 
   const selectedConversationHasContent = liveConversationSegments.length > 0;
   const selectedThreadRun = selectedSessionItem?.latestRun ?? selectedHistoryFallbackDetail?.run ?? state.currentRun;

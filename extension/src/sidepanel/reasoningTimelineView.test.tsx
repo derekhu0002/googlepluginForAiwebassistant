@@ -115,4 +115,68 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(assistantCopy?.classList.contains("transcript-part-copy-user")).toBe(false);
     expect(container.querySelector(".transcript-part[data-part-role='assistant'] h1")?.textContent).toBe("助手回答");
   });
+
+  it("renders only supplied session segments without duplicating the current run base transcript", async () => {
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          runId="run-current"
+          prompt="当前问题"
+          events={[
+            {
+              id: "event-current",
+              runId: "run-current",
+              type: "result",
+              createdAt: "2026-04-02T00:00:02.000Z",
+              sequence: 2,
+              message: "当前回答",
+              data: { message_id: "msg-current" }
+            }
+          ]}
+          runSegments={[
+            {
+              runId: "run-previous",
+              prompt: "历史问题",
+              events: [
+                {
+                  id: "event-previous",
+                  runId: "run-previous",
+                  type: "result",
+                  createdAt: "2026-04-02T00:00:01.000Z",
+                  sequence: 1,
+                  message: "历史回答",
+                  data: { message_id: "msg-previous" }
+                }
+              ],
+              status: "done",
+              finalOutput: "历史回答"
+            },
+            {
+              runId: "run-current",
+              prompt: "当前问题",
+              events: [
+                {
+                  id: "event-current",
+                  runId: "run-current",
+                  type: "result",
+                  createdAt: "2026-04-02T00:00:02.000Z",
+                  sequence: 2,
+                  message: "当前回答",
+                  data: { message_id: "msg-current" }
+                }
+              ],
+              status: "done",
+              finalOutput: "当前回答"
+            }
+          ]}
+          runStatus="done"
+          finalOutput="当前回答"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("历史回答");
+    expect(container.textContent).toContain("当前回答");
+    expect(container.textContent?.match(/当前回答/g)?.length).toBe(1);
+  });
 });

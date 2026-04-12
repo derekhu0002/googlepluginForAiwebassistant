@@ -508,6 +508,83 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("继续追问当前问题");
   });
 
+  it("keeps previous same-session transcript visible while history reload catches up to a new run", async () => {
+    const previousRun = {
+      ...createCurrentRun(),
+      runId: "run-previous",
+      prompt: "前一轮问题",
+      status: "done" as const,
+      updatedAt: "2026-04-02T00:00:02.000Z",
+      finalOutput: "前一轮回答"
+    };
+
+    const { emitRuntimeMessage } = setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        currentRun: {
+          ...createCurrentRun(),
+          runId: "run-current",
+          prompt: "当前问题",
+          status: "done",
+          updatedAt: "2026-04-02T00:00:04.000Z",
+          finalOutput: "当前回答"
+        },
+        runEvents: [createRunEvent(1, { runId: "run-current", type: "result", message: "当前回答" })],
+        stream: {
+          runId: "run-current",
+          status: "done",
+          pendingQuestionId: null
+        }
+      })
+    });
+
+    mockRunHistoryState.history = [previousRun];
+    mockRunHistoryState.runDetails = {
+      "run-previous": {
+        run: previousRun,
+        events: [createRunEvent(1, { runId: "run-previous", type: "result", message: "前一轮回答" })],
+        answers: []
+      }
+    };
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("前一轮回答");
+    expect(container.textContent).toContain("当前回答");
+
+    mockRunHistoryState.history = [];
+    mockRunHistoryState.runDetails = {};
+
+    await act(async () => {
+      emitRuntimeMessage({
+        type: "STATE_UPDATED",
+        payload: createAssistantState({
+          currentRun: {
+            ...createCurrentRun(),
+            runId: "run-next",
+            prompt: "继续追问当前问题",
+            status: "streaming",
+            updatedAt: "2026-04-02T00:00:05.000Z",
+            finalOutput: ""
+          },
+          runEvents: [],
+          stream: {
+            runId: "run-next",
+            status: "connecting",
+            pendingQuestionId: null
+          }
+        })
+      });
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("前一轮回答");
+    expect(container.textContent).toContain("继续追问当前问题");
+  });
+
   it("keeps independent page capture entry working", async () => {
     const { runtimeSendMessage } = setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
