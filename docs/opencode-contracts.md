@@ -398,6 +398,91 @@ Important rendering rules:
 - errors become `assistant_error` fragments
 - transcript messages are grouped by `groupAnchorId` so one assistant turn can contain process fragments plus output fragments
 
+### Message extraction and rendering path for visible chat text
+
+This is the end-to-end path for the text a user finally sees in chat.
+
+#### 1. Raw OpenCode JSON payloads
+
+The adapter first receives raw JSON from OpenCode `/global/event`, for example `message.part.delta`, `message.part.updated`, `question.asked`, `session.idle`, plus the later `/session/{session_id}/message` list used to build the final answer.
+
+Compact event example:
+
+```json
+{
+  "type": "message.part.delta",
+  "properties": {
+    "messageID": "msg-1",
+    "partID": "part-1",
+    "delta": "Hello"
+  }
+}
+```
+
+Compact session-message example:
+
+```json
+{
+  "items": [{
+    "id": "msg-1",
+    "role": "assistant",
+    "parts": [{ "id": "part-1", "type": "text", "text": "Hello world" }]
+  }]
+}
+```
+
+#### 2. Adapter normalization into `NormalizedRunEvent`
+
+`python_adapter/app/opencode_adapter.py:_normalize_global_event` converts those raw payloads into adapter SSE events. The plugin does not render raw OpenCode JSON directly; it renders `NormalizedRunEvent`.
+
+- `message.part.delta` is buffered until the adapter knows whether the part is `text` or `reasoning`
+- `message.part.updated` usually supplies that type information and becomes a normalized snapshot/update
+- `/session/{session_id}/message` may later be joined into a final `result`
+
+The normalized fields that matter most for rendering are:
+
+- `type`: broad UI behavior (`thinking`, `tool_call`, `question`, `result`, `error`)
+- `message`: display text for the event/result
+- `data`: fallback raw metadata used by some UI logic
+- `question`: normalized question payload for interactive prompts
+- `semantic.channel`: distinguishes `assistant_text` from `reasoning`
+- `semantic.emissionKind`: whether text is a `delta`, `snapshot`, or `final`
+- `semantic.messageId` and `semantic.partId`: stable anchors for grouping/deduping transcript parts
+
+#### 3. Plugin storage layers
+
+After normalization, the plugin stores JSON-derived data in three places:
+
+- `runEvents`: the ordered live/persisted `NormalizedRunEvent[]`
+- `RunRecord.finalOutput`: only the final assistant answer derived from `result` events
+- `AnswerRecord`: the user's replies to normalized `question` events
+
+This means visible transcript text is not sourced from one field only; it is projected from event history plus answers, while `finalOutput` keeps the final answer snapshot.
+
+#### 4. Transcript projection to visible chat parts
+
+`extension/src/sidepanel/reasoningTimeline.ts` turns `runEvents` + `AnswerRecord[]` into visible transcript parts:
+
+1. `buildFragmentSequence` / `buildIncrementalLiveTranscriptSegmentReadModel` derive fragments from normalized events
+2. `buildTranscriptMessagesFromFragments` groups them into assistant/user messages
+3. `buildStableTranscriptProjection` merges historical and live segments into the final transcript read model
+
+Compact pipeline example:
+
+```text
+OpenCode JSON -> NormalizedRunEvent -> runEvents / finalOutput / AnswerRecord -> buildStableTranscriptProjection -> TranscriptPartBlock
+```
+
+#### 5. Why visible assistant text often comes from `thinking`
+
+Some assistant text is intentionally emitted as `type: "thinking"` with `semantic.channel = "assistant_text"`, not as `result`. This is how streamed assistant text appears while the run is still in progress. The UI detects that via `isAssistantResponseDeltaEvent`, so these events render as assistant output even though their `type` is not `result`.
+
+`result` is mainly the final committed answer snapshot, often produced later after the adapter fetches `/session/{session_id}/message` on `session.idle` or stream completion.
+
+#### 6. Final render component
+
+`useSidepanelController.ts` builds `transcriptReadModel` with `buildStableTranscriptProjection`, `MainStage.tsx` passes it into `ReasoningTimeline`, and `extension/src/sidepanel/reasoningTimelineView.tsx` finally maps the projected parts to chat UI blocks via `TranscriptPartBlock`.
+
 ### How status, final output, question, and completion are derived
 
 #### Run lifecycle
