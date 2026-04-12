@@ -213,6 +213,62 @@ describe("streaming api client", () => {
     expect(stream.url).toBe("http://localhost:8000/api/runs/run-1/events");
   });
 
+  /** @ArchitectureID: ELM-APP-EXT-SHARED-API-CONTRACT */
+  it("preserves normalized event semantic and tool metadata defined by the shared contract", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    global.EventSource = FakeEventSource as unknown as typeof EventSource;
+
+    const { createRunEventStream } = await import("./api");
+    const onEvent = vi.fn();
+    const onError = vi.fn();
+    const stream = createRunEventStream("run-contract", { onEvent, onError }) as unknown as FakeEventSource;
+
+    stream.emit("message", JSON.stringify({
+      id: "event-contract",
+      runId: "run-contract",
+      type: "tool_call",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      message: "Calling tool",
+      tool: {
+        name: "bash",
+        status: "running",
+        title: "Executing tool",
+        callId: "call-1"
+      },
+      semantic: {
+        channel: "tool",
+        emissionKind: "snapshot",
+        identity: "tool:msg-1:part-1",
+        itemKind: "tool",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    }));
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: "tool_call",
+      tool: {
+        name: "bash",
+        status: "running",
+        title: "Executing tool",
+        callId: "call-1"
+      },
+      semantic: {
+        channel: "tool",
+        emissionKind: "snapshot",
+        identity: "tool:msg-1:part-1",
+        itemKind: "tool",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    }));
+  });
+
   it("accepts normalized event semantic metadata with nullable fields", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
     vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
