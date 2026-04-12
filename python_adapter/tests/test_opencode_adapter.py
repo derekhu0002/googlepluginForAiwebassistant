@@ -345,6 +345,61 @@ def test_text_part_delta_is_buffered_and_emitted_as_answer_stream_after_part_typ
     anyio.run(scenario)
 
 
+def test_tool_part_snapshot_preserves_compact_tool_metadata_and_semantics() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+    sse_events = [
+        {"directory": "/repo", "payload": {"type": "message.part.updated", "agent": "TARA_analyst", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "part": {"id": "part-tool-1", "type": "tool", "tool": "bash", "state": {"status": "running", "title": "shell"}}}}},
+        {"directory": "/repo", "payload": {"type": "session.idle", "properties": {"sessionID": "ses-1"}}},
+    ]
+    messages_payload = [
+        {
+            "agent": "TARA_analyst",
+            "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
+            "parts": [{"type": "text", "text": "final answer from session"}],
+        }
+    ]
+
+    response_sets = [
+        [("GET", "/agent", make_agent_catalog_response("TARA_analyst"))],
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [("GET", "/global/event", make_sse_response(sse_events))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=messages_payload))],
+    ]
+
+    def factory(_timeout):
+        return FakeAsyncClient(response_sets.pop(0))
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(create_request())
+
+        events = [event async for event in adapter.stream_events(run_id)]
+
+        tool_event = next(event for event in events if event.type == "tool_call" and event.tool is not None)
+        assert tool_event.tool is not None
+        assert tool_event.tool.name == "bash"
+        assert tool_event.tool.status == "running"
+        assert tool_event.tool.title == "shell"
+        assert tool_event.tool.callId == "part-tool-1"
+        assert tool_event.semantic is not None
+        assert tool_event.semantic.channel == "tool"
+        assert tool_event.semantic.itemKind == "tool"
+        assert tool_event.semantic.messageId == "msg-1"
+        assert tool_event.semantic.partId == "part-tool-1"
+        assert tool_event.semantic.identity == "tool:msg-1:part-tool-1"
+
+    anyio.run(scenario)
+
+
 def test_message_completed_does_not_emit_result_before_late_text_stream_finishes() -> None:
     session_payload = {
         "id": "ses-1",

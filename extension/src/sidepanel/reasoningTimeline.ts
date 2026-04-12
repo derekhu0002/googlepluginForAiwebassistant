@@ -276,6 +276,16 @@ export interface AssistantResponseAggregation {
   hasResponseEvent: boolean;
 }
 
+function createEmptyAssistantResponseAggregation(): AssistantResponseAggregation {
+  return {
+    text: "",
+    firstResponseAt: null,
+    lastResponseAt: null,
+    preferredMessageId: null,
+    hasResponseEvent: false
+  };
+}
+
 export type TimelineAssistantStatus = "idle" | "collecting" | "streaming" | "waiting_for_answer" | "done" | "error";
 type TimelineRunStatus = RunRecord["status"];
 type TimelineStreamStatus = "idle" | "connecting" | "streaming" | "reconnecting" | "waiting_for_answer" | "done" | "error";
@@ -341,6 +351,22 @@ function getEventSemanticChannel(event: Pick<NormalizedRunEvent, "semantic">) {
   return event.semantic?.channel;
 }
 
+function getEventSemanticPartId(event: Pick<NormalizedRunEvent, "semantic">) {
+  return event.semantic?.partId?.trim() || undefined;
+}
+
+function getAssistantLogicalMessageId(event: Pick<NormalizedRunEvent, "id" | "data" | "semantic">) {
+  return event.semantic?.messageId?.trim()
+    || getEventDataValue(event, "message_id")
+    || getEventSemanticPartId(event)
+    || getEventSemanticIdentity(event)
+    || event.id;
+}
+
+function getAssistantTranscriptGroupAnchorId(runId: string, event: Pick<NormalizedRunEvent, "id" | "data" | "semantic">) {
+  return `assistant-message:${runId}:${getAssistantLogicalMessageId(event)}`;
+}
+
 function getTimelineCardSemanticIdentity(item: Pick<TimelineCardModel, "entries">) {
   return item.entries.map((entry) => entry.semantic?.identity?.trim() || undefined).find(Boolean);
 }
@@ -350,7 +376,7 @@ function getTimelineCardSemanticChannel(item: Pick<TimelineCardModel, "entries">
 }
 
 function getAssistantResponseMessageId(event: Pick<NormalizedRunEvent, "id" | "data" | "semantic">) {
-  return event.semantic?.messageId?.trim() || getEventDataValue(event, "message_id") || event.id;
+  return getAssistantLogicalMessageId(event);
 }
 
 export function isAssistantResponseDeltaEvent(event: NormalizedRunEvent) {
@@ -1029,44 +1055,48 @@ function sortAnswers(answers: AnswerRecord[]) {
 
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 export function collectAssistantResponseAggregation(events: NormalizedRunEvent[], finalOutput?: string | null): AssistantResponseAggregation {
-  let aggregatedText = "";
-  let firstResponseAt: string | null = null;
-  let lastResponseAt: string | null = null;
-  let preferredMessageId: string | null = null;
-  let hasResponseEvent = false;
+  let aggregation = createEmptyAssistantResponseAggregation();
+  let currentLogicalMessageId: string | null = null;
 
   for (const event of events) {
     const thinkingEmissionKind = getAssistantResponseThinkingEmissionKind(event);
     if (thinkingEmissionKind) {
-      aggregatedText = thinkingEmissionKind === "snapshot"
-        ? mergeAssistantResponseSnapshot(aggregatedText, event.message)
-        : mergeAssistantResponseDelta(aggregatedText, event.message);
-      firstResponseAt = firstResponseAt ?? event.createdAt;
-      lastResponseAt = event.createdAt;
-      preferredMessageId = preferredMessageId ?? getAssistantResponseMessageId(event);
-      hasResponseEvent = true;
+      const logicalMessageId = getAssistantLogicalMessageId(event);
+      if (currentLogicalMessageId && logicalMessageId !== currentLogicalMessageId) {
+        aggregation = createEmptyAssistantResponseAggregation();
+      }
+      currentLogicalMessageId = logicalMessageId;
+      aggregation.text = thinkingEmissionKind === "snapshot"
+        ? mergeAssistantResponseSnapshot(aggregation.text, event.message)
+        : mergeAssistantResponseDelta(aggregation.text, event.message);
+      aggregation.firstResponseAt = aggregation.firstResponseAt ?? event.createdAt;
+      aggregation.lastResponseAt = event.createdAt;
+      aggregation.preferredMessageId = aggregation.preferredMessageId ?? logicalMessageId;
+      aggregation.hasResponseEvent = true;
       continue;
     }
 
     if (isAssistantResponseSnapshotEvent(event)) {
-      aggregatedText = mergeAssistantResponseSnapshot(aggregatedText, event.message);
-      firstResponseAt = firstResponseAt ?? event.createdAt;
-      lastResponseAt = event.createdAt;
-      preferredMessageId = preferredMessageId ?? getAssistantResponseMessageId(event);
-      hasResponseEvent = true;
+      const logicalMessageId = getAssistantLogicalMessageId(event);
+      if (currentLogicalMessageId && logicalMessageId !== currentLogicalMessageId) {
+        aggregation = createEmptyAssistantResponseAggregation();
+      }
+      currentLogicalMessageId = logicalMessageId;
+      aggregation.text = mergeAssistantResponseSnapshot(aggregation.text, event.message);
+      aggregation.firstResponseAt = aggregation.firstResponseAt ?? event.createdAt;
+      aggregation.lastResponseAt = event.createdAt;
+      aggregation.preferredMessageId = aggregation.preferredMessageId ?? logicalMessageId;
+      aggregation.hasResponseEvent = true;
     }
   }
 
   if (finalOutput?.trim()) {
-    aggregatedText = mergeAssistantResponseSnapshot(aggregatedText, finalOutput);
+    aggregation.text = mergeAssistantResponseSnapshot(aggregation.text, finalOutput);
   }
 
   return {
-    text: aggregatedText.trim(),
-    firstResponseAt,
-    lastResponseAt,
-    preferredMessageId,
-    hasResponseEvent
+    ...aggregation,
+    text: aggregation.text.trim()
   };
 }
 
@@ -1383,6 +1413,14 @@ function dedupeFragmentSequence(items: ChatStreamItemModel[]) {
   return deduped;
 }
 
+function filterTranscriptFragments(items: ChatStreamItemModel[], includeToolCallParts: boolean) {
+  if (includeToolCallParts) {
+    return items;
+  }
+
+  return items.filter((item) => !(item.kind === "assistant_process" && item.primaryType === "tool_call"));
+}
+
 function getTranscriptRole(item: ChatStreamItemModel): TranscriptMessageRole {
   return item.kind === "user_prompt" || item.kind === "user_answer" ? "user" : "assistant";
 }
@@ -1518,7 +1556,7 @@ function createHistorySegmentsSignature(segments: BuildChatStreamItemsOptions[])
       ...segment,
       runStatus: segment.status,
       includeSummary: false,
-      includeToolCallParts: segment.includeToolCallParts ?? true
+      includeToolCallParts: segment.includeToolCallParts ?? false
     }))
     .join("::");
 }
@@ -1537,7 +1575,7 @@ function canIncrementallyReuseLiveProjection(
 
   const nextRunId = options.runId ?? "";
   const nextPrompt = options.prompt?.trim() || "";
-  const nextIncludeToolCallParts = options.includeToolCallParts ?? true;
+  const nextIncludeToolCallParts = options.includeToolCallParts ?? false;
   const nextAnswers = options.answers ?? [];
   const nextEvents = options.events;
 
@@ -1626,7 +1664,7 @@ function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, optio
         items.push(createBaseItem({
           id,
           anchorId,
-          groupAnchorId: state.currentAssistantGroupAnchorId,
+          groupAnchorId: getAssistantTranscriptGroupAnchorId(state.runId, syntheticEvent),
           runId: state.runId,
           kind: "assistant_output",
           title: "Assistant",
@@ -1696,7 +1734,8 @@ function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, optio
   const normalizedItems = dedupeFragmentSequence(items
     .map((item) => normalizeProcessFragment(item, assistantDisplayText, presentationState.runStatus, state.hasResultEvent))
     .filter((item): item is ChatStreamItemModel => Boolean(item)));
-  const messages = buildTranscriptMessagesFromFragments(normalizedItems);
+  const transcriptItems = filterTranscriptFragments(normalizedItems, options.includeToolCallParts ?? false);
+  const messages = buildTranscriptMessagesFromFragments(transcriptItems);
   const parts = flattenTranscriptMessages(messages);
   const summaryPart = options.includeSummary === false
     ? null
@@ -1742,7 +1781,7 @@ function createEmptyLiveProjectionState(options: BuildTranscriptSegmentReadModel
   return {
     runId,
     prompt,
-    includeToolCallParts: options.includeToolCallParts ?? true,
+    includeToolCallParts: options.includeToolCallParts ?? false,
     eventCount: 0,
     answerCount: 0,
     eventIds: [],
@@ -1758,11 +1797,7 @@ function createEmptyLiveProjectionState(options: BuildTranscriptSegmentReadModel
       ? [createPromptItem({ runId, prompt, createdAt: options.events[0]?.createdAt ?? fallbackTimestamp, updatedAt: options.events[0]?.createdAt ?? fallbackTimestamp })]
       : [],
     assistantResponse: {
-      text: "",
-      firstResponseAt: null,
-      lastResponseAt: null,
-      preferredMessageId: null,
-      hasResponseEvent: false
+      ...createEmptyAssistantResponseAggregation()
     },
     latestResultText: "",
     reasoningOnlyText: "",
@@ -1795,11 +1830,12 @@ function upsertAssistantOutputSegmentInState(state: LiveTranscriptProjectionStat
   }
 
   const anchorId = getAssistantResponseMessageId(event);
+  const groupAnchorId = getAssistantTranscriptGroupAnchorId(state.runId, event);
   const currentOutputIndex = state.currentOutputItemId
     ? state.items.findIndex((item) => item.id === state.currentOutputItemId)
     : -1;
 
-  if (currentOutputIndex >= 0) {
+  if (currentOutputIndex >= 0 && state.items[currentOutputIndex]?.groupAnchorId === groupAnchorId) {
     state.items[currentOutputIndex] = {
       ...state.items[currentOutputIndex],
       anchorId: state.currentOutputAnchorId ?? anchorId,
@@ -1816,7 +1852,7 @@ function upsertAssistantOutputSegmentInState(state: LiveTranscriptProjectionStat
   state.items.push(createBaseItem({
     id,
     anchorId,
-    groupAnchorId: state.currentAssistantGroupAnchorId,
+    groupAnchorId,
     runId: state.runId,
     kind: "assistant_output",
     title: "Assistant",
@@ -1865,6 +1901,13 @@ function processLiveProjectionEvent(
   pendingQuestionId?: string | null
 ) {
   if (isAssistantResponseDeltaEvent(event) || event.type === "result") {
+    const logicalMessageId = getAssistantLogicalMessageId(event);
+    if (state.assistantResponse.preferredMessageId && logicalMessageId !== state.assistantResponse.preferredMessageId) {
+      advanceAssistantGroupInState(state);
+      state.assistantTextSoFar = "";
+      state.assistantResponse = createEmptyAssistantResponseAggregation();
+      state.latestResultText = "";
+    }
     const thinkingEmissionKind = getAssistantResponseThinkingEmissionKind(event);
     state.assistantTextSoFar = thinkingEmissionKind === "snapshot" || event.type === "result"
       ? mergeAssistantResponseSnapshot(state.assistantTextSoFar, event.message)
@@ -1873,7 +1916,7 @@ function processLiveProjectionEvent(
       text: state.assistantTextSoFar.trim(),
       firstResponseAt: state.assistantResponse.firstResponseAt ?? event.createdAt,
       lastResponseAt: event.createdAt,
-      preferredMessageId: state.assistantResponse.preferredMessageId ?? getAssistantResponseMessageId(event),
+      preferredMessageId: state.assistantResponse.preferredMessageId ?? logicalMessageId,
       hasResponseEvent: true
     };
     if (event.type === "result") {
@@ -1945,18 +1988,17 @@ function processLiveProjectionEvent(
       state.reasoningOnlyText = joinUniqueParagraphs([state.reasoningOnlyText, event.message]);
     }
 
-    if (event.type === "tool_call") {
-      if (!state.includeToolCallParts) {
-        return;
+      if (event.type === "tool_call") {
+        closeCurrentOutputSegmentInState(state);
       }
-      closeCurrentOutputSegmentInState(state);
-    }
 
-    state.items.push(createBaseItem({
-      id: `process:${state.runId}:${event.id}`,
-      anchorId: getEventSemanticIdentity(event) || event.id,
-      groupAnchorId: state.currentAssistantGroupAnchorId,
-      runId: state.runId,
+      state.items.push(createBaseItem({
+        id: `process:${state.runId}:${event.id}`,
+        anchorId: getEventSemanticIdentity(event) || event.id,
+        groupAnchorId: event.semantic?.messageId
+          ? getAssistantTranscriptGroupAnchorId(state.runId, event)
+          : state.currentAssistantGroupAnchorId,
+        runId: state.runId,
       kind: "assistant_process",
       title: getEventTitle(event),
       summary: event.message.trim(),
@@ -2025,7 +2067,7 @@ function buildTranscriptMessagesFromFragments(fragments: ChatStreamItemModel[]) 
 function buildTranscriptSegmentReadModel(options: BuildTranscriptSegmentReadModelOptions) {
   const messages = buildTranscriptMessages({
     ...options,
-    includeToolCallParts: options.includeToolCallParts ?? true
+    includeToolCallParts: options.includeToolCallParts ?? false
   });
   const parts = flattenTranscriptMessages(messages);
   const summaryPart = options.includeSummary === false
@@ -2131,7 +2173,7 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
       ...segment,
       runStatus: segment.status,
       includeSummary: false,
-      includeToolCallParts: segment.includeToolCallParts ?? true
+      includeToolCallParts: segment.includeToolCallParts ?? false
     }).messages);
 
   const historicalParts = canReuseHistory
@@ -2167,7 +2209,7 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
 
   const liveSegment = buildIncrementalLiveTranscriptSegmentReadModel({
     ...options.liveSegment,
-    includeToolCallParts: options.liveSegment.includeToolCallParts ?? true
+    includeToolCallParts: options.liveSegment.includeToolCallParts ?? false
   }, options.previousModel);
 
   return mergeTranscriptMessageCollections({
@@ -2196,7 +2238,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
       ...options,
       runStatus: options.status,
       includeSummary: false,
-      includeToolCallParts: options.includeToolCallParts ?? true
+      includeToolCallParts: options.includeToolCallParts ?? false
     });
     return projection.liveState.items;
   }
@@ -2204,7 +2246,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
   const runId = options.runId ?? "standalone-run";
   const prompt = options.prompt?.trim() || "";
   const events = options.events;
-  const includeToolCallParts = options.includeToolCallParts ?? true;
+  const includeToolCallParts = options.includeToolCallParts ?? false;
   const answersByQuestionId = new Map<string, AnswerRecord[]>();
   const consumedQuestionAnswerIds = new Set<string>();
   const items: ChatStreamItemModel[] = [];
@@ -2231,6 +2273,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
   let currentOutputIndex = -1;
   let currentOutputAnchorId: string | null = null;
   let segmentBaselineText = "";
+  let currentAssistantMessageId: string | null = null;
 
   const closeCurrentOutputSegment = () => {
     currentOutputIndex = -1;
@@ -2251,7 +2294,8 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
     }
 
     const anchorId = getAssistantResponseMessageId(event);
-    if (currentOutputIndex >= 0) {
+    const groupAnchorId = getAssistantTranscriptGroupAnchorId(runId, event);
+    if (currentOutputIndex >= 0 && items[currentOutputIndex]?.groupAnchorId === groupAnchorId) {
       items[currentOutputIndex] = {
         ...items[currentOutputIndex],
         anchorId: currentOutputAnchorId ?? anchorId,
@@ -2267,7 +2311,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
     items.push(createBaseItem({
       id: `assistant-output:${runId}:${event.id}`,
       anchorId,
-      groupAnchorId: currentAssistantGroupAnchorId,
+      groupAnchorId,
       runId,
       kind: "assistant_output",
       title: "Assistant",
@@ -2302,6 +2346,12 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
 
   for (const event of events) {
     if (isAssistantResponseDeltaEvent(event) || event.type === "result") {
+      const logicalMessageId = getAssistantLogicalMessageId(event);
+      if (currentAssistantMessageId && logicalMessageId !== currentAssistantMessageId) {
+        advanceAssistantGroup();
+        assistantTextSoFar = "";
+      }
+      currentAssistantMessageId = logicalMessageId;
       const thinkingEmissionKind = getAssistantResponseThinkingEmissionKind(event);
       assistantTextSoFar = thinkingEmissionKind === "snapshot" || event.type === "result"
         ? mergeAssistantResponseSnapshot(assistantTextSoFar, event.message)
@@ -2384,17 +2434,15 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
 
     if (event.type === "thinking" || event.type === "tool_call") {
       if (event.type === "tool_call") {
-        if (!includeToolCallParts) {
-          continue;
-        }
-
         closeCurrentOutputSegment();
       }
 
       items.push(createBaseItem({
         id: `process:${runId}:${event.id}`,
         anchorId: getEventSemanticIdentity(event) || event.id,
-        groupAnchorId: currentAssistantGroupAnchorId,
+        groupAnchorId: event.semantic?.messageId
+          ? getAssistantTranscriptGroupAnchorId(runId, event)
+          : currentAssistantGroupAnchorId,
         runId,
         kind: "assistant_process",
         title: getEventTitle(event),
@@ -2516,10 +2564,10 @@ export function buildChatStreamItems(options: BuildChatStreamItemsOptions): Chat
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildTranscriptMessages(options: BuildChatStreamItemsOptions): TranscriptMessageModel[] {
-  const fragments = buildFragmentSequence({
+  const fragments = filterTranscriptFragments(buildFragmentSequence({
     ...options,
-    includeToolCallParts: options.includeToolCallParts ?? true
-  });
+    includeToolCallParts: options.includeToolCallParts ?? false
+  }), options.includeToolCallParts ?? false);
   const messages: TranscriptMessageModel[] = [];
 
   for (const item of fragments) {

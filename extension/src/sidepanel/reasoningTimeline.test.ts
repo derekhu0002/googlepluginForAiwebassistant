@@ -64,7 +64,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.at(-1)?.text).toBe("已完成");
   });
 
-  it("shows tool-call parts in the transcript stream by default", () => {
+  it("suppresses tool-call parts from the transcript stream by default", () => {
     const parts = buildTranscriptPartStream({
       runId: "run-1",
       prompt: "请回答",
@@ -76,10 +76,10 @@ describe("reasoning timeline share-aligned transcript contract", () => {
       finalOutput: "最终回答"
     });
 
-    expect(parts.map((part) => part.kind)).toEqual(["prompt", "tool", "text", "summary"]);
+    expect(parts.map((part) => part.kind)).toEqual(["prompt", "text", "summary"]);
   });
 
-  it("can still omit tool-call parts when explicitly requested", () => {
+  it("can still include tool-call parts when explicitly requested", () => {
     const parts = buildTranscriptPartStream({
       runId: "run-1",
       prompt: "请回答",
@@ -89,10 +89,10 @@ describe("reasoning timeline share-aligned transcript contract", () => {
       ],
       status: "done",
       finalOutput: "最终回答",
-      includeToolCallParts: false
+      includeToolCallParts: true
     });
 
-    expect(parts.map((part) => part.kind)).toEqual(["prompt", "text", "summary"]);
+    expect(parts.map((part) => part.kind)).toEqual(["prompt", "tool", "text", "summary"]);
   });
 
   it("keeps follow-up pause resume on a single ordered transcript stream", () => {
@@ -198,7 +198,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.map((part) => part.text)).not.toContain("正在继续…");
   });
 
-  it("keeps reasoning and tool process parts visible in transcript projection", () => {
+  it("keeps reasoning visible while suppressing tool process parts in transcript projection", () => {
     const parts = buildTranscriptPartStream({
       runId: "run-1",
       prompt: "继续分析",
@@ -214,10 +214,57 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.map((part) => ({ kind: part.kind, text: part.text }))).toEqual([
       { kind: "prompt", text: "继续分析" },
       { kind: "reasoning", text: "我先读取当前上下文，再比对已有结论。" },
-      { kind: "tool", text: "查询历史 SR" },
       { kind: "text", text: "最终结论" },
       { kind: "summary", text: "已完成" }
     ]);
+  });
+
+  it("merges assistant text chunks by semantic message identity instead of raw adjacency", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: "第一段",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "delta",
+            identity: "assistant_text:msg-1:part-1",
+            itemKind: "text",
+            messageId: "msg-1",
+            partId: "part-1"
+          }
+        }),
+        createEvent(2, {
+          type: "thinking",
+          message: "第二段",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "delta",
+            identity: "assistant_text:msg-1:part-2",
+            itemKind: "text",
+            messageId: "msg-1",
+            partId: "part-2"
+          }
+        }),
+        createEvent(3, {
+          type: "thinking",
+          message: "其他消息",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "delta",
+            identity: "assistant_text:msg-2:part-1",
+            itemKind: "text",
+            messageId: "msg-2",
+            partId: "part-1"
+          }
+        })
+      ],
+      status: "streaming"
+    });
+
+    expect(messages.map((message) => message.parts.map((part) => part.text).join(""))).toEqual(["继续分析", "第一段第二段", "其他消息"]);
   });
 
   it("prefers terminal answer text when leaked reasoning blocks are mixed into response deltas", () => {

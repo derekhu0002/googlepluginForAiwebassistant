@@ -9,8 +9,16 @@ MainAgent = Literal["TARA_analyst", "ThreatIntelliganceCommander"]
 
 
 NormalizedEventType = Literal["thinking", "tool_call", "question", "result", "error"]
-NormalizedEventChannel = Literal["reasoning", "assistant_text"]
+NormalizedEventChannel = Literal["reasoning", "assistant_text", "tool"]
 NormalizedEventEmissionKind = Literal["delta", "snapshot", "final"]
+NormalizedEventItemKind = Literal["reasoning", "text", "tool"]
+
+
+class NormalizedRunEventTool(BaseModel):
+    name: str | None = None
+    status: str | None = None
+    title: str | None = None
+    callId: str | None = None
 
 
 class RunContext(BaseModel):
@@ -62,6 +70,7 @@ class NormalizedRunEventSemantic(BaseModel):
     channel: NormalizedEventChannel
     emissionKind: NormalizedEventEmissionKind
     identity: str
+    itemKind: NormalizedEventItemKind
     messageId: str | None = None
     partId: str | None = None
 
@@ -76,6 +85,7 @@ class NormalizedRunEvent(BaseModel):
     title: str | None = None
     data: dict[str, Any] | None = None
     logData: dict[str, Any] | None = None
+    tool: NormalizedRunEventTool | None = None
     question: QuestionPayload | None = None
     semantic: NormalizedRunEventSemantic | None = None
 

@@ -13,6 +13,7 @@ from .models import (
     MainAgent,
     NormalizedRunEvent,
     NormalizedRunEventSemantic,
+    NormalizedRunEventTool,
     QuestionAnswerRequest,
     QuestionOption,
     QuestionPayload,
@@ -70,6 +71,7 @@ class OpencodeAdapter:
         title: str | None = None,
         data: dict[str, Any] | None = None,
         log_data: dict[str, Any] | None = None,
+        tool: NormalizedRunEventTool | None = None,
         question: QuestionPayload | None = None,
         semantic: NormalizedRunEventSemantic | None = None,
     ) -> NormalizedRunEvent:
@@ -84,11 +86,22 @@ class OpencodeAdapter:
             message=message,
             data=data,
             logData=log_data if log_data is not None else data,
+            tool=tool,
             question=question,
             semantic=semantic,
         )
 
-    def _next_tool_event(self, run: dict[str, Any], message: str, *, title: str = "处理中", data: dict[str, Any] | None = None, log_data: dict[str, Any] | None = None) -> NormalizedRunEvent:
+    def _next_tool_event(
+        self,
+        run: dict[str, Any],
+        message: str,
+        *,
+        title: str = "处理中",
+        data: dict[str, Any] | None = None,
+        log_data: dict[str, Any] | None = None,
+        tool: NormalizedRunEventTool | None = None,
+        semantic: NormalizedRunEventSemantic | None = None,
+    ) -> NormalizedRunEvent:
         return self._next_event(
             run,
             "tool_call",
@@ -96,6 +109,8 @@ class OpencodeAdapter:
             title=title,
             data=data,
             log_data=log_data if log_data is not None else data,
+            tool=tool,
+            semantic=semantic,
         )
 
     def _normalize_agent_name(self, agent_name: str) -> str:
@@ -200,6 +215,14 @@ class OpencodeAdapter:
         identity_parts = ["reasoning", message_id or "unknown-message", part_id or "message-reasoning"]
         return ":".join(identity_parts)
 
+    def _tool_identity(self, message_id: str | None, part_id: str | None = None, call_id: str | None = None, tool_name: str | None = None) -> str:
+        identity_parts = [
+            "tool",
+            message_id or "unknown-message",
+            part_id or call_id or tool_name or "tool-state",
+        ]
+        return ":".join(identity_parts)
+
     def _assistant_text_semantic(
         self,
         message_id: str | None,
@@ -211,6 +234,7 @@ class OpencodeAdapter:
             channel="assistant_text",
             emissionKind=emission_kind,  # type: ignore[arg-type]
             identity=self._assistant_text_identity(message_id, part_id),
+            itemKind="text",
             messageId=message_id,
             partId=part_id,
         )
@@ -226,8 +250,36 @@ class OpencodeAdapter:
             channel="reasoning",
             emissionKind=emission_kind,  # type: ignore[arg-type]
             identity=self._reasoning_identity(message_id, part_id),
+            itemKind="reasoning",
             messageId=message_id,
             partId=part_id,
+        )
+
+    def _tool_semantic(
+        self,
+        message_id: str | None,
+        *,
+        part_id: str | None = None,
+        call_id: str | None = None,
+        tool_name: str | None = None,
+        emission_kind: str,
+    ) -> NormalizedRunEventSemantic:
+        return NormalizedRunEventSemantic(
+            channel="tool",
+            emissionKind=emission_kind,  # type: ignore[arg-type]
+            identity=self._tool_identity(message_id, part_id, call_id, tool_name),
+            itemKind="tool",
+            messageId=message_id,
+            partId=part_id,
+        )
+
+    def _tool_metadata(self, part: dict[str, Any], state: dict[str, Any] | None = None) -> NormalizedRunEventTool:
+        normalized_state = state or {}
+        return NormalizedRunEventTool(
+            name=str(part.get("tool") or normalized_state.get("tool") or "").strip() or None,
+            status=str(normalized_state.get("status") or "").strip() or None,
+            title=str(normalized_state.get("title") or part.get("title") or "").strip() or None,
+            callId=str(part.get("callID") or part.get("callId") or part.get("id") or "").strip() or None,
         )
 
     def _part_id_from_properties(self, properties: dict[str, Any], part: dict[str, Any] | None = None) -> str | None:
@@ -551,6 +603,7 @@ class OpencodeAdapter:
                 "thinking",
                 f"分析用户请求，并结合 software_version={request.capture.get('software_version', '') or '(empty)'}、selected_sr={request.capture.get('selected_sr', '') or '(empty)'} 构建推理上下文。",
                 data={"prompt": request.prompt, "username": request.context.username},
+                semantic=self._reasoning_semantic(None, emission_kind="snapshot"),
             ),
             self._next_tool_event(
                 run,
@@ -704,7 +757,23 @@ class OpencodeAdapter:
                 tool_name = str(part.get("tool") or "unknown")
                 state_status = str(state.get("status") or "running")
                 message = self._simplify_tool_call_message(tool_name, state_status, state.get("title"))
-                return [self._next_tool_event(run, message, data={"stage": state_status}, log_data={"tool": part.get("tool"), "state": state, "part": part})]
+                tool = self._tool_metadata(part, state)
+                return [
+                    self._next_tool_event(
+                        run,
+                        message,
+                        data={"stage": state_status},
+                        log_data={"tool": part.get("tool"), "state": state, "part": part},
+                        tool=tool,
+                        semantic=self._tool_semantic(
+                            properties.get("messageID"),
+                            part_id=part_id,
+                            call_id=tool.callId,
+                            tool_name=tool.name,
+                            emission_kind="snapshot",
+                        ),
+                    )
+                ]
             if part_type == "reasoning":
                 flushed_events = self._flush_buffered_part_delta(run, part_id, properties.get("messageID")) if part_id else []
                 if flushed_events:

@@ -331,14 +331,14 @@ export function ReasoningTimeline({
     }
 
     if (runSegments?.length) {
-      const merged = runSegments.flatMap((segment, index) => buildTranscriptPartStream({
-        ...segment,
-        feedbackByMessageId,
-        runStatus: segment.status,
-        streamStatus: segment.runId === runId ? streamStatus : undefined,
-        includeSummary: index === runSegments.length - 1,
-        includeToolCallParts: segment.includeToolCallParts ?? true
-      }));
+        const merged = runSegments.flatMap((segment, index) => buildTranscriptPartStream({
+          ...segment,
+          feedbackByMessageId,
+          runStatus: segment.status,
+          streamStatus: segment.runId === runId ? streamStatus : undefined,
+          includeSummary: index === runSegments.length - 1,
+          includeToolCallParts: segment.includeToolCallParts ?? false
+        }));
 
       if (merged.length) {
         return merged;
@@ -358,7 +358,7 @@ export function ReasoningTimeline({
       streamStatus,
       updatedAt,
       pendingQuestionId,
-      includeToolCallParts: true
+      includeToolCallParts: false
     });
   }, [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runSegments, runStatus, streamStatus, transcriptReadModel, updatedAt]);
 

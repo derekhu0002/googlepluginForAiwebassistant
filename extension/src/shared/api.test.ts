@@ -203,6 +203,7 @@ describe("streaming api client", () => {
         channel: "reasoning",
         emissionKind: "delta",
         identity: "reasoning:msg-1:part-1",
+        itemKind: "reasoning",
         messageId: "msg-1",
         partId: "part-1"
       }
@@ -235,6 +236,7 @@ describe("streaming api client", () => {
         channel: "assistant_text",
         emissionKind: "delta",
         identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
         messageId: "msg-1",
         partId: null
       }
@@ -246,6 +248,7 @@ describe("streaming api client", () => {
         channel: "assistant_text",
         emissionKind: "delta",
         identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
         messageId: "msg-1",
         partId: undefined
       }

@@ -8,11 +8,13 @@ export type MainAgent = typeof MAIN_AGENTS[number];
 export const DEFAULT_MAIN_AGENT: MainAgent = "TARA_analyst";
 
 export type NormalizedEventType = typeof NORMALIZED_EVENT_TYPES[number];
-export const NORMALIZED_EVENT_CHANNELS = ["reasoning", "assistant_text"] as const;
+export const NORMALIZED_EVENT_CHANNELS = ["reasoning", "assistant_text", "tool"] as const;
 export const NORMALIZED_EVENT_EMISSION_KINDS = ["delta", "snapshot", "final"] as const;
+export const NORMALIZED_EVENT_ITEM_KINDS = ["reasoning", "text", "tool"] as const;
 
 export type NormalizedEventChannel = typeof NORMALIZED_EVENT_CHANNELS[number];
 export type NormalizedEventEmissionKind = typeof NORMALIZED_EVENT_EMISSION_KINDS[number];
+export type NormalizedEventItemKind = typeof NORMALIZED_EVENT_ITEM_KINDS[number];
 
 export type UsernameSource =
   | "dom_data_attribute"
@@ -47,11 +49,18 @@ export interface NormalizedRunEvent {
   title?: string;
   data?: Record<string, unknown>;
   logData?: Record<string, unknown>;
+  tool?: {
+    name?: string;
+    status?: string;
+    title?: string;
+    callId?: string;
+  };
   question?: QuestionPayload;
   semantic?: {
     channel: NormalizedEventChannel;
     emissionKind: NormalizedEventEmissionKind;
     identity: string;
+    itemKind: NormalizedEventItemKind;
     messageId?: string;
     partId?: string;
   };

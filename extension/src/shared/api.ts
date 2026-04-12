@@ -66,11 +66,19 @@ const questionPayloadSchema = z.object({
 });
 
 const eventSemanticSchema = z.object({
-  channel: z.enum(["reasoning", "assistant_text"]),
+  channel: z.enum(["reasoning", "assistant_text", "tool"]),
   emissionKind: z.enum(["delta", "snapshot", "final"]),
   identity: z.string().min(1),
+  itemKind: z.enum(["reasoning", "text", "tool"]),
   messageId: nullableOptional(z.string().min(1)),
   partId: nullableOptional(z.string().min(1))
+});
+
+const eventToolSchema = z.object({
+  name: nullableOptional(z.string().min(1)),
+  status: nullableOptional(z.string().min(1)),
+  title: nullableOptional(z.string().min(1)),
+  callId: nullableOptional(z.string().min(1))
 });
 
 const streamEventSchema = z.object({
@@ -83,6 +91,7 @@ const streamEventSchema = z.object({
   title: z.string().optional(),
   data: nullableOptional(z.record(z.string(), z.unknown())),
   logData: nullableOptional(z.record(z.string(), z.unknown())),
+  tool: nullableOptional(eventToolSchema),
   question: nullableOptional(questionPayloadSchema),
   semantic: nullableOptional(eventSemanticSchema)
 });

@@ -338,7 +338,7 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(container.textContent).toContain("第一段第二段");
   });
 
-  it("renders reasoning and tool parts in the main transcript", async () => {
+  it("renders reasoning and suppresses tool parts in the main transcript", async () => {
     await act(async () => {
       root.render(
         <ReasoningTimeline
@@ -378,7 +378,72 @@ describe("ReasoningTimeline transcript rendering", () => {
     });
 
     expect(container.querySelector("[data-part-kind='reasoning']")?.textContent).toContain("我先读取页面上下文，再整理结论。");
-    expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("查询历史 SR");
+    expect(container.querySelector("[data-part-kind='tool']")).toBeNull();
     expect(container.querySelector("[data-part-kind='text']")?.textContent).toContain("最终结论");
+  });
+
+  it("renders merged assistant text chunks as one displayed assistant message", async () => {
+    const transcriptReadModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-current",
+        prompt: "当前问题",
+        events: [
+          {
+            id: "event-current-1",
+            runId: "run-current",
+            type: "thinking",
+            createdAt: "2026-04-02T00:00:02.000Z",
+            sequence: 2,
+            message: "第一段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-current:part-1",
+              itemKind: "text",
+              messageId: "msg-current",
+              partId: "part-1"
+            }
+          },
+          {
+            id: "event-current-2",
+            runId: "run-current",
+            type: "thinking",
+            createdAt: "2026-04-02T00:00:03.000Z",
+            sequence: 3,
+            message: "第二段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-current:part-2",
+              itemKind: "text",
+              messageId: "msg-current",
+              partId: "part-2"
+            }
+          }
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={transcriptReadModel}
+          runId="run-current"
+          prompt="当前问题"
+          events={[]}
+          runStatus="streaming"
+        />
+      );
+    });
+
+    const assistantTextParts = container.querySelectorAll("[data-part-kind='text']");
+    expect(assistantTextParts).toHaveLength(1);
+    expect(assistantTextParts[0]?.textContent).toContain("第一段第二段");
   });
 });
