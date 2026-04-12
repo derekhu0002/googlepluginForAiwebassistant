@@ -211,7 +211,7 @@ function TranscriptPartBlock({
 
   return (
     <section
-      className={`transcript-part transcript-part-${part.kind}`}
+      className={`transcript-part transcript-part-${part.kind} ${isUser ? "transcript-part-user" : "transcript-part-assistant"}`}
       data-section="part"
       data-part-kind={part.kind}
       data-part-anchor={part.anchorId}

@@ -32,6 +32,10 @@
   align-items: flex-start;
 }
 
+.transcript-part-user {
+  justify-content: flex-end;
+}
+
 .transcript-part-body {
   flex: 1 1 auto;
   min-width: 0;
@@ -39,6 +43,11 @@
   flex-direction: column;
   gap: 10px;
   padding: 0 0 0.375rem;
+}
+
+.transcript-part-user .transcript-part-body {
+  flex: 0 1 min(85%, 720px);
+  align-items: flex-end;
 }
 
 .transcript-part-copy {
@@ -78,7 +87,7 @@
   background-color: rgba(255, 255, 255, 0.04);
   border-radius: 10px;
   padding: 0.5rem 0.75rem;
-  align-self: flex-start;
+  align-self: flex-end;
 }
 
 .transcript-part-footer-actions {
