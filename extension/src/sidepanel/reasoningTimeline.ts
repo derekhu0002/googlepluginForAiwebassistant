@@ -195,6 +195,18 @@ export interface TranscriptSummaryModel {
   updatedAt?: string | null;
 }
 
+export interface TranscriptReadModel {
+  messages: TranscriptMessageModel[];
+  parts: TranscriptPartModel[];
+  summaryPart: TranscriptPartModel | null;
+  historicalMessages: TranscriptMessageModel[];
+  historicalParts: TranscriptPartModel[];
+  liveMessages: TranscriptMessageModel[];
+  liveParts: TranscriptPartModel[];
+  historicalSignature: string;
+  liveSignature: string | null;
+}
+
 export interface BuildChatStreamItemsOptions {
   runId?: string | null;
   prompt?: string | null;
@@ -207,6 +219,18 @@ export interface BuildChatStreamItemsOptions {
   updatedAt?: string | null;
   pendingQuestionId?: string | null;
   includeToolCallParts?: boolean;
+}
+
+interface BuildTranscriptSegmentReadModelOptions extends BuildChatStreamItemsOptions {
+  streamStatus?: TimelineStreamStatus;
+  runStatus?: TimelineRunStatus;
+  includeSummary?: boolean;
+}
+
+interface StableTranscriptProjectionOptions {
+  historicalSegments: BuildChatStreamItemsOptions[];
+  liveSegment?: BuildTranscriptSegmentReadModelOptions | null;
+  previousModel?: TranscriptReadModel | null;
 }
 
 export interface AssistantResponseAggregation {
@@ -1230,7 +1254,7 @@ function createBaseItem(options: {
 
 function createPromptItem(options: { runId: string; prompt: string; createdAt: string; updatedAt: string; }) {
   return createBaseItem({
-    id: `user-prompt-${options.runId}`,
+    id: `user-prompt:${options.runId}`,
     runId: options.runId,
     kind: "user_prompt",
     title: "You",
@@ -1438,6 +1462,99 @@ export function flattenTranscriptMessages(messages: TranscriptMessageModel[]) {
   return messages.flatMap((message) => message.parts);
 }
 
+function createTranscriptSegmentSignature(options: BuildTranscriptSegmentReadModelOptions) {
+  const eventTail = options.events.at(-1);
+  const answerTail = options.answers?.at(-1);
+
+  return [
+    options.runId ?? "",
+    options.prompt ?? "",
+    options.status ?? options.runStatus ?? "",
+    options.streamStatus ?? "",
+    options.updatedAt ?? "",
+    options.pendingQuestionId ?? "",
+    options.finalOutput ?? "",
+    options.errorMessage ?? "",
+    options.includeSummary === false ? "no-summary" : "with-summary",
+    options.includeToolCallParts ? "with-tools" : "without-tools",
+    String(options.events.length),
+    eventTail?.id ?? "",
+    eventTail?.createdAt ?? "",
+    eventTail?.message ?? "",
+    String(options.answers?.length ?? 0),
+    answerTail?.id ?? "",
+    answerTail?.submittedAt ?? "",
+    answerTail?.answer ?? ""
+  ].join("|");
+}
+
+function createHistorySegmentsSignature(segments: BuildChatStreamItemsOptions[]) {
+  return segments
+    .map((segment) => createTranscriptSegmentSignature({
+      ...segment,
+      runStatus: segment.status,
+      includeSummary: false,
+      includeToolCallParts: false
+    }))
+    .join("::");
+}
+
+function buildTranscriptSegmentReadModel(options: BuildTranscriptSegmentReadModelOptions) {
+  const messages = buildTranscriptMessages({
+    ...options,
+    includeToolCallParts: options.includeToolCallParts ?? false
+  });
+  const parts = flattenTranscriptMessages(messages);
+  const summaryPart = options.includeSummary === false
+    ? null
+    : createTranscriptSummaryPart(buildTranscriptSummary({
+      events: options.events,
+      runStatus: options.runStatus ?? options.status,
+      streamStatus: options.streamStatus,
+      finalOutput: options.finalOutput,
+      errorMessage: options.errorMessage,
+      pendingQuestionId: options.pendingQuestionId,
+      runId: options.runId,
+      updatedAt: options.updatedAt
+    }));
+
+  return {
+    messages,
+    parts,
+    summaryPart,
+    signature: createTranscriptSegmentSignature(options)
+  };
+}
+
+function mergeTranscriptMessageCollections(options: {
+  historicalMessages: TranscriptMessageModel[];
+  historicalParts: TranscriptPartModel[];
+  liveMessages: TranscriptMessageModel[];
+  liveParts: TranscriptPartModel[];
+  summaryPart: TranscriptPartModel | null;
+  historicalSignature: string;
+  liveSignature: string | null;
+}) {
+  const messages = options.liveMessages.length
+    ? [...options.historicalMessages, ...options.liveMessages]
+    : options.historicalMessages;
+  const parts = options.liveParts.length
+    ? [...options.historicalParts, ...options.liveParts]
+    : options.historicalParts;
+
+  return {
+    messages,
+    parts,
+    summaryPart: options.summaryPart,
+    historicalMessages: options.historicalMessages,
+    historicalParts: options.historicalParts,
+    liveMessages: options.liveMessages,
+    liveParts: options.liveParts,
+    historicalSignature: options.historicalSignature,
+    liveSignature: options.liveSignature
+  } satisfies TranscriptReadModel;
+}
+
 function createTranscriptSummaryPart(summary: TranscriptSummaryModel): TranscriptPartModel {
   return {
     id: `summary:${summary.runId ?? "transcript"}:${summary.updatedAt ?? "pending"}`,
@@ -1460,31 +1577,85 @@ function createTranscriptSummaryPart(summary: TranscriptSummaryModel): Transcrip
 }
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
-export function buildTranscriptPartStream(options: BuildChatStreamItemsOptions & {
-  streamStatus?: TimelineStreamStatus;
-  runStatus?: TimelineRunStatus;
-  includeSummary?: boolean;
-}) {
-  const messages = buildTranscriptMessages({
-    ...options,
-    includeToolCallParts: options.includeToolCallParts ?? false
+export function buildTranscriptReadModel(options: BuildTranscriptSegmentReadModelOptions): TranscriptReadModel {
+  const segment = buildTranscriptSegmentReadModel(options);
+  return mergeTranscriptMessageCollections({
+    historicalMessages: segment.messages,
+    historicalParts: segment.parts,
+    liveMessages: [],
+    liveParts: [],
+    summaryPart: segment.summaryPart,
+    historicalSignature: segment.signature,
+    liveSignature: null
   });
-  const parts = flattenTranscriptMessages(messages);
+}
 
-  if (!messages.length || options.includeSummary === false) {
-    return parts;
+/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+export function buildStableTranscriptProjection(options: StableTranscriptProjectionOptions): TranscriptReadModel {
+  const historySignature = createHistorySegmentsSignature(options.historicalSegments);
+  const canReuseHistory = Boolean(
+    options.previousModel
+    && options.previousModel.historicalSignature === historySignature
+  );
+
+  const historicalMessages = canReuseHistory
+    ? options.previousModel?.historicalMessages ?? []
+    : options.historicalSegments.flatMap((segment) => buildTranscriptSegmentReadModel({
+      ...segment,
+      runStatus: segment.status,
+      includeSummary: false,
+      includeToolCallParts: false
+    }).messages);
+
+  const historicalParts = canReuseHistory
+    ? options.previousModel?.historicalParts ?? []
+    : flattenTranscriptMessages(historicalMessages);
+
+  const lastHistoricalSegment = options.historicalSegments.at(-1);
+  const historicalSummaryPart = lastHistoricalSegment
+    ? createTranscriptSummaryPart(buildTranscriptSummary({
+        events: lastHistoricalSegment.events,
+        runStatus: lastHistoricalSegment.status,
+        finalOutput: lastHistoricalSegment.finalOutput,
+        errorMessage: lastHistoricalSegment.errorMessage,
+        pendingQuestionId: lastHistoricalSegment.pendingQuestionId,
+        runId: lastHistoricalSegment.runId,
+        updatedAt: lastHistoricalSegment.updatedAt
+      }))
+    : null;
+
+  if (!options.liveSegment) {
+    return mergeTranscriptMessageCollections({
+      historicalMessages,
+      historicalParts,
+      liveMessages: [],
+      liveParts: [],
+      summaryPart: historicalSummaryPart,
+      historicalSignature: historySignature,
+      liveSignature: null
+    });
   }
 
-  return [...parts, createTranscriptSummaryPart(buildTranscriptSummary({
-    events: options.events,
-    runStatus: options.runStatus ?? options.status,
-    streamStatus: options.streamStatus,
-    finalOutput: options.finalOutput,
-    errorMessage: options.errorMessage,
-    pendingQuestionId: options.pendingQuestionId,
-    runId: options.runId,
-    updatedAt: options.updatedAt
-  }))];
+  const liveSegment = buildTranscriptSegmentReadModel({
+    ...options.liveSegment,
+    includeToolCallParts: options.liveSegment.includeToolCallParts ?? false
+  });
+
+  return mergeTranscriptMessageCollections({
+    historicalMessages,
+    historicalParts,
+    liveMessages: liveSegment.messages,
+    liveParts: liveSegment.parts,
+    summaryPart: liveSegment.summaryPart,
+    historicalSignature: historySignature,
+    liveSignature: liveSegment.signature
+  });
+}
+
+/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+export function buildTranscriptPartStream(options: BuildTranscriptSegmentReadModelOptions) {
+  const readModel = buildTranscriptReadModel(options);
+  return readModel.summaryPart ? [...readModel.parts, readModel.summaryPart] : readModel.parts;
 }
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
@@ -1553,7 +1724,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
     }
 
     items.push(createBaseItem({
-      id: `assistant-output:${event.id}`,
+      id: `assistant-output:${runId}:${event.id}`,
       anchorId,
       groupAnchorId: currentAssistantGroupAnchorId,
       runId,
@@ -1603,8 +1774,8 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
       closeCurrentOutputSegment();
       const questionId = event.question?.questionId ?? event.id;
       const anchorId = questionId;
-      items.push(createBaseItem({
-        id: `question:${anchorId}`,
+        items.push(createBaseItem({
+          id: `question:${runId}:${anchorId}`,
         anchorId,
         groupAnchorId: currentAssistantGroupAnchorId,
         runId,
@@ -1651,7 +1822,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
     if (event.type === "error") {
       closeCurrentOutputSegment();
       items.push(createBaseItem({
-        id: `error:${event.id}`,
+        id: `error:${runId}:${event.id}`,
         anchorId: event.id,
         groupAnchorId: currentAssistantGroupAnchorId,
         runId,
@@ -1680,7 +1851,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
       }
 
       items.push(createBaseItem({
-        id: `process:${event.id}`,
+        id: `process:${runId}:${event.id}`,
         anchorId: getEventSemanticIdentity(event) || event.id,
         groupAnchorId: currentAssistantGroupAnchorId,
         runId,

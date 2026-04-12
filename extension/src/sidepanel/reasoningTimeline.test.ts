@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedRunEvent } from "../shared/protocol";
 import {
+  buildStableTranscriptProjection,
   buildTranscriptMessages,
   buildTranscriptPartStream,
   buildTranscriptSummary,
@@ -252,6 +253,82 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     });
 
     expect(parts.map((part) => part.text)).toEqual(["当前问题", "当前回答", "已完成"]);
+  });
+
+  it("keeps historical transcript identity stable while live tail updates incrementally", () => {
+    const historicalSegments = [{
+      runId: "run-history",
+      prompt: "历史问题",
+      events: [createEvent(1, { runId: "run-history", type: "result", message: "历史回答", data: { message_id: "msg-history" } })],
+      status: "done" as const,
+      finalOutput: "历史回答",
+      updatedAt: "2026-04-02T00:00:01.000Z"
+    }];
+
+    const firstModel = buildStableTranscriptProjection({
+      historicalSegments,
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [createEvent(2, { runId: "run-live", type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-live" } })],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        finalOutput: "",
+        updatedAt: "2026-04-02T00:00:02.000Z",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    const secondModel = buildStableTranscriptProjection({
+      historicalSegments,
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [
+          createEvent(2, { runId: "run-live", type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-live" } }),
+          createEvent(3, { runId: "run-live", type: "thinking", message: "第二段", data: { field: "text", message_id: "msg-live" } })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        finalOutput: "",
+        updatedAt: "2026-04-02T00:00:03.000Z",
+        includeSummary: true,
+        includeToolCallParts: false
+      },
+      previousModel: firstModel
+    });
+
+    expect(secondModel.historicalMessages).toBe(firstModel.historicalMessages);
+    expect(secondModel.historicalParts).toBe(firstModel.historicalParts);
+    expect(secondModel.liveParts.map((part) => part.text)).toEqual(["当前问题", "第一段第二段"]);
+  });
+
+  it("builds historical archive batches separately from live tail projection", () => {
+    const model = buildStableTranscriptProjection({
+      historicalSegments: [{
+        runId: "run-history",
+        prompt: "历史问题",
+        events: [createEvent(1, { runId: "run-history", type: "result", message: "历史回答", data: { message_id: "msg-history" } })],
+        status: "done",
+        finalOutput: "历史回答"
+      }],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [createEvent(2, { runId: "run-live", type: "thinking", message: "当前回答", data: { field: "text", message_id: "msg-live" } })],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    expect(model.historicalParts.map((part) => part.text)).toEqual(["历史问题", "历史回答"]);
+    expect(model.liveParts.map((part) => part.text)).toEqual(["当前问题", "当前回答"]);
   });
 
   it("derives conservative timeline and cockpit states from terminal evidence", () => {

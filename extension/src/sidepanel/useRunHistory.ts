@@ -45,9 +45,11 @@ export function useRunHistory() {
     }
   }
 
-  async function saveRun(run: RunRecord) {
+  async function saveRun(run: RunRecord, options?: { refresh?: boolean }) {
     await historyStore.saveRun(run);
-    await refresh();
+    if (options?.refresh !== false) {
+      await refresh();
+    }
   }
 
   async function saveEvent(event: NormalizedRunEvent) {

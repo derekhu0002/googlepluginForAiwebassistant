@@ -1,5 +1,5 @@
 import { ReasoningTimeline } from "../../reasoningTimelineView";
-import type { BuildChatStreamItemsOptions } from "../../reasoningTimeline";
+import type { BuildChatStreamItemsOptions, TranscriptReadModel } from "../../reasoningTimeline";
 import type { ActiveTabContext, AssistantState } from "../../../shared/types";
 import type { RunRecord } from "../../../shared/protocol";
 import type { SessionNavigationItem } from "../../model";
@@ -21,6 +21,7 @@ export function MainStage({
   selectedConversationHasContent,
   selectedSessionIsCurrent,
   selectedSessionItem,
+  transcriptReadModel,
   selectedThreadError,
   selectedThreadFinalOutput,
   selectedThreadRun,
@@ -45,6 +46,7 @@ export function MainStage({
   selectedConversationHasContent: boolean;
   selectedSessionIsCurrent: boolean;
   selectedSessionItem: SessionNavigationItem | null;
+  transcriptReadModel: TranscriptReadModel;
   selectedThreadError: string | null | undefined;
   selectedThreadFinalOutput: string;
   selectedThreadRun: RunRecord | null | undefined;
@@ -104,6 +106,7 @@ export function MainStage({
             prompt={selectedThreadRun?.prompt ?? livePrompt}
             events={selectedSessionIsCurrent ? state.runEvents : []}
             runSegments={liveConversationSegments}
+            transcriptReadModel={transcriptReadModel}
             assistantStatus={selectedSessionIsCurrent ? state.status : undefined}
             answers={selectedSessionIsCurrent ? state.answers : []}
             live={selectedSessionIsCurrent}

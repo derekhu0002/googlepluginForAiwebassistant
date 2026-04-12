@@ -40,6 +40,7 @@ export function App() {
             selectedConversationHasContent={controller.selectedConversationHasContent}
             selectedSessionIsCurrent={controller.selectedSessionIsCurrent}
             selectedSessionItem={controller.selectedSessionItem}
+            transcriptReadModel={controller.transcriptReadModel}
             selectedThreadError={controller.selectedThreadError}
             selectedThreadFinalOutput={controller.selectedThreadFinalOutput}
             selectedThreadRun={controller.selectedThreadRun}

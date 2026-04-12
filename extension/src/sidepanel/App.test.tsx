@@ -585,6 +585,120 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("继续追问当前问题");
   });
 
+  it("does not refresh history on every live event and preserves visible transcript until debounced reload", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: initialAssistantState
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = container.querySelector("button[aria-label='发送消息']");
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
+    const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void> };
+
+    await act(async () => {
+      await handlers.onEvent?.(createRunEvent(1, { type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-1" } }));
+      await handlers.onEvent?.(createRunEvent(2, { type: "thinking", message: "第二段", data: { field: "text", message_id: "msg-1" } }));
+    });
+    await flushUi();
+
+    expect(mockRefreshHistory).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(initialAssistantState.runPrompt);
+    expect(container.textContent).toContain("第一段第二段");
+
+    await flushTimers();
+
+    expect(mockRefreshHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps historical transcript visible while current live tail grows incrementally", async () => {
+    const previousRun = {
+      ...createCurrentRun(),
+      runId: "run-previous",
+      prompt: "历史问题",
+      status: "done" as const,
+      updatedAt: "2026-04-02T00:00:02.000Z",
+      finalOutput: "历史回答"
+    };
+
+    mockRunHistoryState.history = [previousRun];
+    mockRunHistoryState.runDetails = {
+      "run-previous": {
+        run: previousRun,
+        events: [createRunEvent(1, { runId: "run-previous", type: "result", message: "历史回答" })],
+        answers: []
+      }
+    };
+
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        currentRun: {
+          ...createCurrentRun(),
+          runId: "run-current",
+          prompt: "当前问题",
+          status: "streaming",
+          updatedAt: "2026-04-02T00:00:04.000Z",
+          finalOutput: ""
+        },
+        runEvents: [createRunEvent(2, { runId: "run-current", type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-current" } })],
+        stream: {
+          runId: "run-current",
+          status: "streaming",
+          pendingQuestionId: null
+        }
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("历史回答");
+    expect(container.textContent).toContain("第一段");
+
+    await act(async () => {
+      const runtimeMessage = {
+        type: "STATE_UPDATED",
+        payload: createAssistantState({
+          currentRun: {
+            ...createCurrentRun(),
+            runId: "run-current",
+            prompt: "当前问题",
+            status: "streaming",
+            updatedAt: "2026-04-02T00:00:05.000Z",
+            finalOutput: ""
+          },
+          runEvents: [
+            createRunEvent(2, { runId: "run-current", type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-current" } }),
+            createRunEvent(3, { runId: "run-current", type: "thinking", message: "第二段", data: { field: "text", message_id: "msg-current" } })
+          ],
+          stream: {
+            runId: "run-current",
+            status: "streaming",
+            pendingQuestionId: null
+          }
+        })
+      } satisfies RuntimeMessage;
+
+      (globalThis.chrome.runtime.onMessage.addListener as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.(runtimeMessage);
+    });
+    await flushUi();
+
+    expect(container.textContent).toContain("历史回答");
+    expect(container.textContent).toContain("第一段第二段");
+  });
+
   it("keeps independent page capture entry working", async () => {
     const { runtimeSendMessage } = setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]

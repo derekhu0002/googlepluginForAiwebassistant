@@ -5,7 +5,7 @@ import { initialAssistantState } from "../shared/state";
 import { DEFAULT_MAIN_AGENT, MAIN_AGENTS, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, hasPendingQuestion } from "./questionState";
-import { resolveCockpitStatusModel, resolveTimelinePresentationState, type BuildChatStreamItemsOptions } from "./reasoningTimeline";
+import { buildStableTranscriptProjection, resolveCockpitStatusModel, resolveTimelinePresentationState, type BuildChatStreamItemsOptions, type TranscriptReadModel } from "./reasoningTimeline";
 import {
   DRAFT_SESSION_KEY,
   buildSessionNavigationItems,
@@ -64,6 +64,7 @@ export function useSidepanelController() {
   const [prompt, setPrompt] = useState(initialAssistantState.runPrompt);
   const [streamError, setStreamError] = useState<string>("");
   const [activeSessionRunDetails, setActiveSessionRunDetails] = useState<RunHistoryDetail[]>([]);
+  const [frozenSessionRunDetails, setFrozenSessionRunDetails] = useState<RunHistoryDetail[]>([]);
   const [selectedSessionKey, setSelectedSessionKey] = useState<string | null>(null);
   const [activeDrawer, setActiveDrawer] = useState<DrawerKey | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -82,6 +83,9 @@ export function useSidepanelController() {
   const sessionHistory = runHistory.sessionHistory ?? [];
   const historyRef = useRef(history);
   const selectedHistoryDetailRef = useRef(selectedHistoryDetail);
+  const refreshHistoryRef = useRef(refresh);
+  const transcriptReadModelRef = useRef<TranscriptReadModel | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isBusy = state.status === "collecting" || state.status === "streaming";
   const hasActiveSession = Boolean(state.activeSessionId ?? state.currentRun?.sessionId);
@@ -115,6 +119,7 @@ export function useSidepanelController() {
   useEffect(() => {
     historyRef.current = history;
     selectedHistoryDetailRef.current = selectedHistoryDetail;
+    refreshHistoryRef.current = refresh;
   }, [history, selectedHistoryDetail]);
 
   useEffect(() => {
@@ -132,7 +137,13 @@ export function useSidepanelController() {
     };
 
     chrome.runtime.onMessage.addListener(listener as Parameters<typeof chrome.runtime.onMessage.addListener>[0]);
-    return () => chrome.runtime.onMessage.removeListener(listener as Parameters<typeof chrome.runtime.onMessage.addListener>[0]);
+    return () => {
+      chrome.runtime.onMessage.removeListener(listener as Parameters<typeof chrome.runtime.onMessage.removeListener>[0]);
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -368,8 +379,28 @@ export function useSidepanelController() {
 
   const liveFinalOutput = state.currentRun?.finalOutput?.trim() || "";
   const livePrompt = state.currentRun?.prompt ?? prompt;
+  const currentLiveRunId = state.currentRun?.runId ?? state.stream.runId ?? null;
+  const isStreamingSelectedCurrentSession = selectedSessionIsCurrent
+    && (state.status === "streaming" || state.status === "waiting_for_answer")
+    && Boolean(currentLiveRunId);
+
+  useEffect(() => {
+    if (!selectedSessionIsCurrent) {
+      setFrozenSessionRunDetails(activeSessionRunDetails);
+      return;
+    }
+
+    if (isStreamingSelectedCurrentSession) {
+      setFrozenSessionRunDetails((current) => current.length ? current : activeSessionRunDetails);
+      return;
+    }
+
+    setFrozenSessionRunDetails(activeSessionRunDetails);
+  }, [activeSessionRunDetails, isStreamingSelectedCurrentSession, selectedSessionIsCurrent]);
 
   const historicalConversationSegments = useMemo<BuildChatStreamItemsOptions[]>(() => {
+    const historicalRunDetails = selectedSessionIsCurrent ? frozenSessionRunDetails : activeSessionRunDetails;
+
     if (selectedHistoryFallbackDetail) {
       return [{
         runId: selectedHistoryFallbackDetail.run.runId,
@@ -384,7 +415,7 @@ export function useSidepanelController() {
       }];
     }
 
-    return activeSessionRunDetails.map((detail) => ({
+    return historicalRunDetails.map((detail) => ({
       runId: detail.run.runId,
       prompt: detail.run.prompt,
       events: detail.events,
@@ -395,34 +426,49 @@ export function useSidepanelController() {
       updatedAt: detail.run.updatedAt ?? detail.run.startedAt,
       pendingQuestionId: null
     }));
-  }, [activeSessionRunDetails, selectedHistoryFallbackDetail]);
+  }, [activeSessionRunDetails, frozenSessionRunDetails, selectedHistoryFallbackDetail, selectedSessionIsCurrent]);
 
-  const liveConversationSegments = useMemo<BuildChatStreamItemsOptions[]>(() => {
+  const liveConversationSegments = historicalConversationSegments;
+  const liveTranscriptSegment = useMemo(() => {
     if (!selectedSessionIsCurrent) {
-      return historicalConversationSegments;
+      return null;
     }
 
     if (!state.currentRun && !state.runEvents.length) {
-      return historicalConversationSegments;
+      return null;
     }
 
-    return [
-      ...historicalConversationSegments,
-      {
-        runId: state.currentRun?.runId ?? state.stream.runId,
-        prompt: livePrompt,
-        events: state.runEvents,
-        answers: state.answers,
-        finalOutput: liveFinalOutput,
-        errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError,
-        status: livePresentationState.runStatus,
-        updatedAt: state.currentRun?.updatedAt ?? state.currentRun?.startedAt,
-        pendingQuestionId: state.stream.pendingQuestionId
-      }
-    ];
-  }, [historicalConversationSegments, liveFinalOutput, livePresentationState.runStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, streamError]);
+    return {
+      runId: state.currentRun?.runId ?? state.stream.runId,
+      prompt: livePrompt,
+      events: state.runEvents,
+      answers: state.answers,
+      finalOutput: liveFinalOutput,
+      errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError,
+      status: livePresentationState.runStatus,
+      runStatus: livePresentationState.runStatus,
+      streamStatus: state.stream.status,
+      updatedAt: state.currentRun?.updatedAt ?? state.currentRun?.startedAt,
+      pendingQuestionId: state.stream.pendingQuestionId,
+      includeSummary: true,
+      includeToolCallParts: false
+    };
+  }, [liveFinalOutput, livePresentationState.runStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, state.stream.status, streamError]);
 
-  const selectedConversationHasContent = liveConversationSegments.length > 0;
+  const transcriptReadModel = useMemo(() => {
+    const nextModel = buildStableTranscriptProjection({
+      historicalSegments: historicalConversationSegments,
+      liveSegment: liveTranscriptSegment,
+      previousModel: transcriptReadModelRef.current
+    });
+    transcriptReadModelRef.current = nextModel;
+    return nextModel;
+  }, [historicalConversationSegments, liveTranscriptSegment]);
+
+  const selectedConversationHasContent = Boolean(
+    transcriptReadModel.parts.length
+    || transcriptReadModel.summaryPart
+  );
   const selectedThreadRun = selectedSessionItem?.latestRun ?? selectedHistoryFallbackDetail?.run ?? state.currentRun;
   const selectedThreadAgent = selectedThreadRun?.selectedAgent ?? state.currentRun?.selectedAgent ?? state.mainAgentPreference;
   const mainAgentOptions = useMemo<MainAgentOption[]>(() => MAIN_AGENTS.map((agent) => ({
@@ -533,7 +579,7 @@ export function useSidepanelController() {
       }
     }));
 
-    await saveRun(responseData.currentRun);
+    await saveRun(responseData.currentRun, { refresh: false });
     setSelectedSessionKey(deriveSessionKey(responseData.currentRun));
 
     eventSourceRef.current = createRunEventStream(responseData.runId, {
@@ -567,7 +613,7 @@ export function useSidepanelController() {
           };
 
           if (nextRun) {
-            saveRun(nextRun).catch(() => undefined);
+            saveRun(nextRun, { refresh: false }).catch(() => undefined);
           }
 
           syncRunStateToBackground({
@@ -589,7 +635,14 @@ export function useSidepanelController() {
           return nextState;
         });
 
-        refresh().catch(() => undefined);
+        if (refreshTimerRef.current) {
+          clearTimeout(refreshTimerRef.current);
+        }
+
+        refreshTimerRef.current = setTimeout(() => {
+          refreshHistoryRef.current().catch(() => undefined);
+          refreshTimerRef.current = null;
+        }, 150);
       },
       onStatusChange: (status) => {
         setState((current) => ({
@@ -674,7 +727,7 @@ export function useSidepanelController() {
         pendingQuestionId: null
       }
     });
-    refresh().catch(() => undefined);
+    refreshHistoryRef.current().catch(() => undefined);
   }
 
   async function handleRetry(payload: { prompt: string; runId: string; messageId: string }) {
@@ -852,6 +905,7 @@ export function useSidepanelController() {
     saveCurrentRule,
     savingRule,
     selectedConversationHasContent,
+    transcriptReadModel,
     selectedRuleId,
     selectedSessionIsCurrent,
     selectedSessionItem,

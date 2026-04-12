@@ -7,6 +7,7 @@ vi.mock("../shared/api", () => ({
 }));
 
 const { ReasoningTimeline } = await import("./reasoningTimelineView");
+const { buildStableTranscriptProjection } = await import("./reasoningTimeline");
 
 describe("ReasoningTimeline transcript rendering", () => {
   let container: HTMLDivElement;
@@ -178,5 +179,58 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(container.textContent).toContain("历史回答");
     expect(container.textContent).toContain("当前回答");
     expect(container.textContent?.match(/当前回答/g)?.length).toBe(1);
+  });
+
+  it("renders from stable projected read model without requiring whole-transcript rerender inputs", async () => {
+    const transcriptReadModel = buildStableTranscriptProjection({
+      historicalSegments: [{
+        runId: "run-history",
+        prompt: "历史问题",
+        events: [{
+          id: "event-history",
+          runId: "run-history",
+          type: "result",
+          createdAt: "2026-04-02T00:00:01.000Z",
+          sequence: 1,
+          message: "历史回答",
+          data: { message_id: "msg-history" }
+        }],
+        status: "done",
+        finalOutput: "历史回答"
+      }],
+      liveSegment: {
+        runId: "run-current",
+        prompt: "当前问题",
+        events: [{
+          id: "event-current",
+          runId: "run-current",
+          type: "thinking",
+          createdAt: "2026-04-02T00:00:02.000Z",
+          sequence: 2,
+          message: "当前回答",
+          data: { field: "text", message_id: "msg-current" }
+        }],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={transcriptReadModel}
+          runId="run-current"
+          prompt="当前问题"
+          events={[]}
+          runStatus="streaming"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("历史回答");
+    expect(container.textContent).toContain("当前回答");
   });
 });

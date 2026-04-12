@@ -9,6 +9,7 @@ import {
   getDefaultFeedbackMessage,
   resolveTimelinePresentationState,
   type BuildChatStreamItemsOptions,
+  type TranscriptReadModel,
   type TranscriptPartModel
 } from "./reasoningTimeline";
 
@@ -22,6 +23,22 @@ function isNearBottom(element: HTMLDivElement | null) {
 
 function normalizeFeedbackFailureMessage(message: string) {
   return message.trim() || "反馈提交失败";
+}
+
+function applyFeedbackState(parts: TranscriptPartModel[], feedbackByMessageId: Record<string, MessageFeedbackUiState>) {
+  if (!Object.keys(feedbackByMessageId).length) {
+    return parts;
+  }
+
+  return parts.map((part) => {
+    if (!part.supportsFeedback) {
+      return part;
+    }
+
+    const messageId = part.actionAnchorId ?? part.anchorId;
+    const nextFeedbackState = feedbackByMessageId[messageId];
+    return nextFeedbackState ? { ...part, feedbackState: nextFeedbackState } : part;
+  });
 }
 
 function MarkdownMessage({ text, className }: { text: string; className: string }) {
@@ -256,6 +273,7 @@ export interface ChatStreamViewProps {
   prompt?: string | null;
   events: import("../shared/protocol").NormalizedRunEvent[];
   runSegments?: BuildChatStreamItemsOptions[];
+  transcriptReadModel?: TranscriptReadModel;
   assistantStatus?: "idle" | "collecting" | "streaming" | "waiting_for_answer" | "done" | "error";
   answers?: AnswerRecord[];
   live?: boolean;
@@ -278,6 +296,7 @@ export function ReasoningTimeline({
   prompt,
   events,
   runSegments,
+  transcriptReadModel,
   answers = [],
   live = false,
   streamStatus,
@@ -304,6 +323,13 @@ export function ReasoningTimeline({
   }), [errorMessage, events, finalOutput, runStatus, streamStatus]);
 
   const parts = useMemo(() => {
+    if (transcriptReadModel) {
+      const projectedParts = transcriptReadModel.summaryPart
+        ? [...transcriptReadModel.parts, transcriptReadModel.summaryPart]
+        : transcriptReadModel.parts;
+      return applyFeedbackState(projectedParts, feedbackByMessageId);
+    }
+
     if (runSegments?.length) {
       const merged = runSegments.flatMap((segment, index) => buildTranscriptPartStream({
         ...segment,
@@ -334,7 +360,7 @@ export function ReasoningTimeline({
       pendingQuestionId,
       includeToolCallParts: false
     });
-  }, [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runSegments, runStatus, streamStatus, updatedAt]);
+  }, [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runSegments, runStatus, streamStatus, transcriptReadModel, updatedAt]);
 
   useEffect(() => {
     setFeedbackByMessageId({});
@@ -437,7 +463,7 @@ export function ReasoningTimeline({
       >
         {parts.length ? parts.map((part, index) => (
           <TranscriptPartBlock
-            key={`${part.runId}:${part.id}:${index}`}
+            key={part.id}
             part={part}
             onCopy={handleCopy}
             onFeedback={handleFeedback}
