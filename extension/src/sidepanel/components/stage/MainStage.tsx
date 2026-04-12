@@ -9,8 +9,11 @@ export function MainStage({
   activeContext,
   canShowPermissionButton,
   contextError,
+  diagnosticsError,
+  exportingDiagnostics,
   isBusy,
   livePrompt,
+  onExportDiagnostics,
   liveConversationSegments,
   onQuestionSubmit,
   onRequestPermission,
@@ -34,8 +37,11 @@ export function MainStage({
   activeContext: ActiveTabContext | null;
   canShowPermissionButton: boolean | null | undefined;
   contextError: string;
+  diagnosticsError: string;
+  exportingDiagnostics: boolean;
   isBusy: boolean;
   livePrompt: string;
+  onExportDiagnostics: () => void | Promise<void>;
   liveConversationSegments: BuildChatStreamItemsOptions[];
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   onRequestPermission: () => void | Promise<void>;
@@ -85,6 +91,9 @@ export function MainStage({
         </div>
         <div className="chat-primary-meta">
           {selectedThreadRun?.runId ? <small className="detail-muted">Run：{selectedThreadRun.runId}</small> : null}
+          <button className="secondary" disabled={!selectedThreadRun?.runId || exportingDiagnostics} onClick={() => onExportDiagnostics()}>
+            {exportingDiagnostics ? "导出中..." : "导出诊断日志"}
+          </button>
           {canShowPermissionButton ? (
             <button
               aria-label="授权当前域名"
@@ -100,6 +109,7 @@ export function MainStage({
       </div>
 
       <div className="conversation-mainline chat-primary-mainline">
+        {diagnosticsError ? <p className="error-text">{diagnosticsError}</p> : null}
         {selectedConversationHasContent ? (
           <ReasoningTimeline
             runId={selectedThreadRun?.runId ?? state.stream.runId}

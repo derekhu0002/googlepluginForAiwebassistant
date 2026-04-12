@@ -28,9 +28,12 @@ export function App() {
             activeContext={controller.activeContext}
             canShowPermissionButton={controller.canShowPermissionButton}
             contextError={controller.contextError}
+            diagnosticsError={controller.diagnosticsError}
+            exportingDiagnostics={controller.exportingDiagnostics}
             isBusy={controller.isBusy}
             livePrompt={controller.livePrompt}
             liveConversationSegments={controller.liveConversationSegments}
+            onExportDiagnostics={controller.handleExportDiagnostics}
             onQuestionSubmit={controller.selectedSessionIsCurrent ? controller.handleQuestionSubmit : undefined}
             onRequestPermission={controller.requestPermission}
             onRetry={controller.handleRetry}

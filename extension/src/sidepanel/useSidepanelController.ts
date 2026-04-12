@@ -5,6 +5,7 @@ import { initialAssistantState } from "../shared/state";
 import { DEFAULT_MAIN_AGENT, MAIN_AGENTS, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
 import { getActiveQuestionEvent, hasPendingQuestion } from "./questionState";
+import { buildRunDiagnosticsSnapshot, downloadRunDiagnosticsLog, type RunDiagnosticsSource } from "./diagnostics";
 import { buildStableTranscriptProjection, resolveCockpitStatusModel, resolveTimelinePresentationState, type BuildChatStreamItemsOptions, type TranscriptReadModel } from "./reasoningTimeline";
 import {
   DRAFT_SESSION_KEY,
@@ -63,6 +64,8 @@ export function useSidepanelController() {
   const [savingRule, setSavingRule] = useState(false);
   const [prompt, setPrompt] = useState(initialAssistantState.runPrompt);
   const [streamError, setStreamError] = useState<string>("");
+  const [diagnosticsError, setDiagnosticsError] = useState<string>("");
+  const [exportingDiagnostics, setExportingDiagnostics] = useState(false);
   const [activeSessionRunDetails, setActiveSessionRunDetails] = useState<RunHistoryDetail[]>([]);
   const [frozenSessionRunDetails, setFrozenSessionRunDetails] = useState<RunHistoryDetail[]>([]);
   const [selectedSessionKey, setSelectedSessionKey] = useState<string | null>(null);
@@ -857,6 +860,65 @@ export function useSidepanelController() {
     updateDraft((current) => ({ ...current, fields: current.fields.filter((item) => item.id !== fieldId) }));
   }
 
+  async function handleExportDiagnostics() {
+    const selectedRun = selectedThreadRun;
+    if (!selectedRun) {
+      setDiagnosticsError("当前没有可导出的 run 诊断信息。");
+      return;
+    }
+
+    setDiagnosticsError("");
+    setExportingDiagnostics(true);
+
+    try {
+      const isCurrentRun = Boolean(state.currentRun && state.currentRun.runId === selectedRun.runId);
+      let source: RunDiagnosticsSource;
+
+      if (isCurrentRun) {
+        source = {
+          scope: "live",
+          run: state.currentRun ?? selectedRun,
+          events: state.runEvents,
+          answers: state.answers,
+          assistantStatus: state.status,
+          streamStatus: state.stream.status,
+          pendingQuestionId: state.stream.pendingQuestionId
+        };
+      } else {
+        const detail = selectedHistoryDetail?.run.runId === selectedRun.runId
+          ? selectedHistoryDetail
+          : await loadRunDetail(selectedRun.runId);
+
+        if (!detail) {
+          throw new Error(`未找到 run ${selectedRun.runId} 的历史明细`);
+        }
+
+        source = {
+          scope: "history",
+          run: detail.run,
+          events: detail.events,
+          answers: detail.answers,
+          assistantStatus: detail.run.status,
+          streamStatus: detail.run.status === "waiting_for_answer" ? "waiting_for_answer" : detail.run.status,
+          pendingQuestionId: null
+        };
+      }
+
+      const backgroundState = await sendMessage<AssistantState>({ type: "GET_STATE" }).catch(() => null as AssistantState | null);
+      const snapshot = buildRunDiagnosticsSnapshot({
+        source,
+        sidepanelState: state,
+        backgroundState
+      });
+
+      downloadRunDiagnosticsLog(snapshot);
+    } catch (error) {
+      setDiagnosticsError(error instanceof Error ? error.message : "导出诊断日志失败");
+    } finally {
+      setExportingDiagnostics(false);
+    }
+  }
+
   return {
     activeDrawer,
     activeContext,
@@ -872,11 +934,13 @@ export function useSidepanelController() {
     deleteCurrentRule,
     draftRule,
     draftSessionSummary,
-    effectiveSelectedSessionKey,
+    diagnosticsError,
+     effectiveSelectedSessionKey,
     errorDescription,
     errorTitle,
     handleAddFieldRule,
     handleCaptureOnly,
+    handleExportDiagnostics,
     handleQuestionSubmit,
     handleRemoveFieldRule,
     handleRetry,
@@ -888,6 +952,7 @@ export function useSidepanelController() {
     hasActiveSession,
     hasLivePendingQuestion,
     isBusy,
+    exportingDiagnostics,
     isSendDisabled,
     liveConversationSegments,
     livePrompt,

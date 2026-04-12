@@ -18,6 +18,8 @@ const {
   mockSelectRun,
   mockClearSelectedRun,
   mockRunHistoryState,
+  mockBuildRunDiagnosticsSnapshot,
+  mockDownloadRunDiagnosticsLog,
   mockStreamClose
 } = vi.hoisted(() => {
   const mockRunHistoryState = {
@@ -39,6 +41,8 @@ const {
     mockLoadRunDetail: vi.fn(async (runId: string) => mockRunHistoryState.runDetails[runId] ?? null),
     mockSelectRun: vi.fn(async () => undefined),
     mockClearSelectedRun: vi.fn(async () => undefined),
+    mockBuildRunDiagnosticsSnapshot: vi.fn(() => ({ runMetadata: { runId: "run-1" } })),
+    mockDownloadRunDiagnosticsLog: vi.fn(),
     mockStreamClose,
     mockRunHistoryState
   };
@@ -78,6 +82,11 @@ vi.mock("./useRunHistory", () => ({
     refresh: mockRefreshHistory,
     setSelectedHistoryDetail: vi.fn()
   })
+}));
+
+vi.mock("./diagnostics", () => ({
+  buildRunDiagnosticsSnapshot: mockBuildRunDiagnosticsSnapshot,
+  downloadRunDiagnosticsLog: mockDownloadRunDiagnosticsLog
 }));
 
 const { App, mergeStateUpdate } = await import("./App");
@@ -1889,6 +1898,49 @@ describe("side panel host permission request flow", () => {
     const sendButton = container.querySelector("button.send-button[aria-label='发送消息']");
     expect(sendButton).toBeTruthy();
     expect(sendButton?.querySelector("svg.send-icon")).toBeTruthy();
+  });
+
+  it("exports diagnostics for the selected run", async () => {
+    const state = createAssistantState({
+      status: "done",
+      stream: {
+        runId: "run-1",
+        status: "done",
+        pendingQuestionId: null
+      },
+      currentRun: {
+        ...createCurrentRun(),
+        status: "done",
+        finalOutput: "最终回答",
+        updatedAt: "2026-04-02T00:00:03.000Z"
+      },
+      runEvents: [createRunEvent(1, { type: "result", message: "最终回答" })]
+    });
+    const { runtimeSendMessage } = setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: state
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const exportButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("导出诊断日志"));
+    await act(async () => {
+      exportButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "GET_STATE" });
+    expect(mockBuildRunDiagnosticsSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      source: expect.objectContaining({
+        scope: "live",
+        run: expect.objectContaining({ runId: "run-1" })
+      }),
+      backgroundState: state
+    }));
+    expect(mockDownloadRunDiagnosticsLog).toHaveBeenCalledWith(expect.objectContaining({ runMetadata: { runId: "run-1" } }));
   });
 
   it("shows part-local action buttons for terminal assistant content", async () => {

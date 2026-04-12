@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "已批准的 sidepanel transcript 重构本轮重新基线为 OpenCode Web Share 合同：以 source-ordered message.parts 作为唯一可见 transcript 流，强参考源码为 packages/web/src/components/Share.tsx、packages/web/src/components/share/part.tsx、packages/web/src/components/share/common.tsx、packages/web/src/components/share.module.css。旧 TASK-078~TASK-084 仅为错误切分的 planning seed，不能直接执行；本轮以新的 implementation tasks 为准。设计边界：reasoningTimeline.ts 负责按 typed filter 与 source part order 投影 flat part stream，并把 follow-up 表达为同一 transcript 流中的 suspension/resume 与尾部 summary part；reasoningTimelineView.tsx 负责移除 TranscriptMessageCard / message hover bar / 通用 part header-badge-timestamp 噪音，改为 Share 式 flat part renderer 与局部 part footer decoration；transcript.css 负责统一竖向 part stream 骨架，移除 user/assistant chat bubble 左右壳；MainStage 与 live/history 边界负责保证 summary/status 只以 transcript 流末尾 summary part 呈现，不再有 feed 外 footer 或顶部独立状态行；测试基线改为 reference-based contract，覆盖 source-ordered parts、typed visibility filter、single-stream follow-up suspension/resume、tail summary part、flat renderer、Share-style CSS skeleton。"
+      "value": "Issue-driven architecture remediation for persistent sidepanel transcript disappearance and streaming slowness. The approved design changes the sidepanel from render-time whole-transcript reprojection to an OpenCode-aligned stable transcript pipeline: immutable historical session snapshot plus one mutable live tail, incremental event application, stable message/part identity, and renderer consumption of a precomputed read model. Existing ApplicationComponents remain authoritative: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX owns history/session boundaries, ELM-APP-EXT-RUN-CONVERSATION-MAPPER owns transcript semantic merge logic, and ELM-APP-EXT-CONVERSATION-RENDERER owns display only. The implementation must introduce a dedicated Sidepanel Streaming Transcript Projection software unit instead of another localized patch."
     }
   ],
   "metadata": {
@@ -24,28 +24,25 @@
       "designSummary": "",
       "designDecisions": [],
       "runtime": {
-        "activeGoal": "调整当前对话框的消息样式，使整体显示更接近 OpenCode Web：用户消息右侧气泡显示，AI反馈内容保持左侧普通内容流样式",
+        "activeGoal": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题",
         "validations": {
           "qa": {
-            "status": "passed",
-            "summary": "QA passed for commit 86140ec917ac099cb1f032c8044c45c048bd5392 (TASK-093). Validated sidepanel transcript styling intent with targeted automated tests and regression checks in isolated worktree. Commands run: npm run test -- reasoningTimelineView.test.tsx; npm run test -- App.test.tsx; npm run typecheck; npm run build. Tagged intent coverage exercised broader Requirement ELM-001 and architecture elements ELM-APP-EXT-CONVERSATION-RENDERER, ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX, and ELM-APP-EXT-SIDEPANEL-DESIGN-SYSTEM. No defects found. Note: TASK-093 lacks explicit architectureElementId linkage in runtime metadata, so QA mapped coverage through touched-file architecture tags and commit scope.",
-            "details": "QA passed for commit 86140ec917ac099cb1f032c8044c45c048bd5392 (TASK-093). Validated sidepanel transcript styling intent with targeted automated tests and regression checks in isolated worktree. Commands run: npm run test -- reasoningTimelineView.test.tsx; npm run test -- App.test.tsx; npm run typecheck; npm run build. Tagged intent coverage exercised broader Requirement ELM-001 and architecture elements ELM-APP-EXT-CONVERSATION-RENDERER, ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX, and ELM-APP-EXT-SIDEPANEL-DESIGN-SYSTEM. No defects found. Note: TASK-093 lacks explicit architectureElementId linkage in runtime metadata, so QA mapped coverage through touched-file architecture tags and commit scope.",
-            "commitId": "86140ec917ac099cb1f032c8044c45c048bd5392",
-            "updatedAt": "2026-04-12T07:03:22.436Z"
+            "status": "not_run",
+            "summary": "QA not run for the current goal.",
+            "updatedAt": "2026-04-12T09:17:10.715Z"
           },
           "audit": {
             "status": "not_run",
             "summary": "Audit not run for the current goal.",
-            "updatedAt": "2026-04-12T06:45:02.648Z"
+            "updatedAt": "2026-04-12T09:17:10.715Z"
           }
         },
         "release": {
-          "status": "completed",
-          "summary": "Release completed for TASK-093 fast-track sidepanel transcript style update. Implementation commit: 86140ec917ac099cb1f032c8044c45c048bd5392. QA status: passed. Audit status: not_run. Summary: finalized transcript styling so user prompts render as compact right-side cards and assistant responses render as flatter left-side markdown flow. Traceability matrix generated for commit scope and recorded verification gaps because formal requirement/architecture/source mapping remains N/A with ❌ No matrix coverage.",
-          "releaseLogPath": "SprintRleaseLog.md",
-          "updatedAt": "2026-04-12T07:05:02.469Z"
+          "status": "not_started",
+          "summary": "Release not prepared for the current goal.",
+          "updatedAt": "2026-04-12T09:17:10.715Z"
         },
-        "updatedAt": "2026-04-12T07:03:22.437Z"
+        "updatedAt": "2026-04-12T09:17:10.716Z"
       }
     }
   },
@@ -517,34 +514,34 @@
         "type": "WorkPackage",
         "name": [
           {
-            "value": "调整当前对话框的消息样式，使整体显示更接近 OpenCode Web：用户消息右侧气泡显示，AI反馈内容保持左侧普通内容流样式"
+            "value": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题"
           }
         ],
         "documentation": [
           {
-            "value": "调整当前对话框的消息样式，使整体显示更接近 OpenCode Web：用户消息右侧气泡显示，AI反馈内容保持左侧普通内容流样式"
+            "value": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题"
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "调整当前对话框的消息样式，使整体显示更接近 OpenCode Web：用户消息右侧气泡显示，AI反馈内容保持左侧普通内容流样式",
+            "rawRequirement": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-093",
+        "identifier": "TASK-100",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "调整当前对话框的消息样式，使整体显示更接近 OpenCode Web：用户消息右侧气泡显示，AI反馈内容保持左侧普通内容流样式"
+            "value": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题"
           }
         ],
         "documentation": [
           {
-            "value": "Completed fast-track sidepanel transcript styling update. User prompts remain compact right-aligned cards, assistant content now renders as flatter left-aligned markdown flow with targeted DOM-class coverage tests. Validation passed: reasoningTimelineView.test.tsx, App.test.tsx, extension typecheck, and extension build."
+            "value": "Fast-track implementation started for localized diagnostics export in extension background/sidepanel modules."
           }
         ],
         "extensions": {
@@ -552,39 +549,15 @@
             "managedBy": "opencode-runtime",
             "kind": "Task",
             "taskKind": "planning",
-            "status": "Done",
+            "status": "InProgress",
             "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Completed fast-track sidepanel transcript styling update. User prompts remain compact right-aligned cards, assistant content now renders as flatter left-aligned markdown flow with targeted DOM-class coverage tests. Validation passed: reasoningTimelineView.test.tsx, App.test.tsx, extension typecheck, and extension build.",
-            "commitId": "86140ec917ac099cb1f032c8044c45c048bd5392",
+            "summary": "Fast-track implementation started for localized diagnostics export in extension background/sidepanel modules.",
+            "commitId": "",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-12T06:52:33.897Z"
-          }
-        }
-      },
-      {
-        "identifier": "RELEASE-LOG",
-        "type": "Artifact",
-        "name": [
-          {
-            "value": "SprintReleaseLog"
-          }
-        ],
-        "documentation": [
-          {
-            "value": "Release completed for TASK-093 fast-track sidepanel transcript style update. Implementation commit: 86140ec917ac099cb1f032c8044c45c048bd5392. QA status: passed. Audit status: not_run. Summary: finalized transcript styling so user prompts render as compact right-side cards and assistant responses render as flatter left-side markdown flow. Traceability matrix generated for commit scope and recorded verification gaps because formal requirement/architecture/source mapping remains N/A with ❌ No matrix coverage."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "ReleaseLog",
-            "version": "1.0.0",
-            "content": "Release completed for TASK-093 fast-track sidepanel transcript style update. Implementation commit: 86140ec917ac099cb1f032c8044c45c048bd5392. QA status: passed. Audit status: not_run. Summary: finalized transcript styling so user prompts render as compact right-side cards and assistant responses render as flatter left-side markdown flow. Traceability matrix generated for commit scope and recorded verification gaps because formal requirement/architecture/source mapping remains N/A with ❌ No matrix coverage.",
-            "timestamp": "2026-04-12T07:05:02.469Z",
-            "path": "SprintRleaseLog.md"
+            "updatedAt": "2026-04-12T09:18:45.630Z"
           }
         }
       }
@@ -921,15 +894,15 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-093",
+        "identifier": "REL-PROJECT-TASK-100",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-093"
+            "value": "Project aggregates TASK-100"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-093",
+        "target": "TASK-100",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."

@@ -1,47 +1,43 @@
 {
   "version": 2,
-  "activeGoal": "调整当前对话框的消息样式，使整体显示更接近 OpenCode Web：用户消息右侧气泡显示，AI反馈内容保持左侧普通内容流样式",
+  "activeGoal": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题",
   "designSummary": "",
   "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-093",
-      "title": "调整当前对话框的消息样式，使整体显示更接近 OpenCode Web：用户消息右侧气泡显示，AI反馈内容保持左侧普通内容流样式",
-      "status": "done",
+      "id": "TASK-100",
+      "title": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题",
+      "status": "in_progress",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
-      "summary": "Completed fast-track sidepanel transcript styling update. User prompts remain compact right-aligned cards, assistant content now renders as flatter left-aligned markdown flow with targeted DOM-class coverage tests. Validation passed: reasoningTimelineView.test.tsx, App.test.tsx, extension typecheck, and extension build.",
-      "details": "Completed fast-track sidepanel transcript styling update. User prompts remain compact right-aligned cards, assistant content now renders as flatter left-aligned markdown flow with targeted DOM-class coverage tests. Validation passed: reasoningTimelineView.test.tsx, App.test.tsx, extension typecheck, and extension build.",
-      "createdAt": "2026-04-12T06:45:02.648Z",
-      "updatedAt": "2026-04-12T06:52:33.897Z",
-      "commitId": "86140ec917ac099cb1f032c8044c45c048bd5392"
+      "summary": "Fast-track implementation started for localized diagnostics export in extension background/sidepanel modules.",
+      "details": "Fast-track implementation started for localized diagnostics export in extension background/sidepanel modules.",
+      "createdAt": "2026-04-12T09:17:10.715Z",
+      "updatedAt": "2026-04-12T09:18:45.630Z"
     }
   ],
   "issues": [],
   "validations": {
     "qa": {
-      "status": "passed",
-      "summary": "QA passed for commit 86140ec917ac099cb1f032c8044c45c048bd5392 (TASK-093). Validated sidepanel transcript styling intent with targeted automated tests and regression checks in isolated worktree. Commands run: npm run test -- reasoningTimelineView.test.tsx; npm run test -- App.test.tsx; npm run typecheck; npm run build. Tagged intent coverage exercised broader Requirement ELM-001 and architecture elements ELM-APP-EXT-CONVERSATION-RENDERER, ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX, and ELM-APP-EXT-SIDEPANEL-DESIGN-SYSTEM. No defects found. Note: TASK-093 lacks explicit architectureElementId linkage in runtime metadata, so QA mapped coverage through touched-file architecture tags and commit scope.",
-      "details": "QA passed for commit 86140ec917ac099cb1f032c8044c45c048bd5392 (TASK-093). Validated sidepanel transcript styling intent with targeted automated tests and regression checks in isolated worktree. Commands run: npm run test -- reasoningTimelineView.test.tsx; npm run test -- App.test.tsx; npm run typecheck; npm run build. Tagged intent coverage exercised broader Requirement ELM-001 and architecture elements ELM-APP-EXT-CONVERSATION-RENDERER, ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX, and ELM-APP-EXT-SIDEPANEL-DESIGN-SYSTEM. No defects found. Note: TASK-093 lacks explicit architectureElementId linkage in runtime metadata, so QA mapped coverage through touched-file architecture tags and commit scope.",
-      "commitId": "86140ec917ac099cb1f032c8044c45c048bd5392",
-      "updatedAt": "2026-04-12T07:03:22.436Z"
+      "status": "not_run",
+      "summary": "QA not run for the current goal.",
+      "updatedAt": "2026-04-12T09:17:10.715Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-12T06:45:02.648Z"
+      "updatedAt": "2026-04-12T09:17:10.715Z"
     }
   },
   "release": {
-    "status": "completed",
-    "summary": "Release completed for TASK-093 fast-track sidepanel transcript style update. Implementation commit: 86140ec917ac099cb1f032c8044c45c048bd5392. QA status: passed. Audit status: not_run. Summary: finalized transcript styling so user prompts render as compact right-side cards and assistant responses render as flatter left-side markdown flow. Traceability matrix generated for commit scope and recorded verification gaps because formal requirement/architecture/source mapping remains N/A with ❌ No matrix coverage.",
-    "releaseLogPath": "SprintRleaseLog.md",
-    "updatedAt": "2026-04-12T07:05:02.469Z"
+    "status": "not_started",
+    "summary": "Release not prepared for the current goal.",
+    "updatedAt": "2026-04-12T09:17:10.715Z"
   },
   "counters": {
-    "task": 93,
-    "issue": 1
+    "task": 100,
+    "issue": 2
   },
-  "updatedAt": "2026-04-12T07:05:02.469Z"
+  "updatedAt": "2026-04-12T09:18:45.630Z"
 }
