@@ -218,6 +218,7 @@ function TranscriptPartBlock({
   questionSubmitDisabled?: boolean;
 }) {
   const isUser = part.role === "user";
+  const hasMessageActions = part.supportsCopy || part.supportsRetry || part.supportsFeedback;
   const roleClassName = isUser ? "transcript-part-user" : "transcript-part-assistant";
   const feedbackMessage = part.feedbackState?.message || getDefaultFeedbackMessage(part.feedbackState?.status ?? "idle", part.feedbackState?.selected);
   const messageClassName = [
@@ -230,13 +231,15 @@ function TranscriptPartBlock({
 
   return (
     <section
-      className={`transcript-part transcript-part-${part.kind} ${roleClassName}`}
+      className={`transcript-part transcript-part-${part.kind} ${roleClassName} ${hasMessageActions ? "transcript-part-has-actions" : ""}`}
       data-section="part"
       data-part-kind={part.kind}
       data-part-anchor={part.anchorId}
       data-part-role={part.role}
       data-part-type={part.kind === "summary" ? "summary" : undefined}
       data-component={part.kind === "summary" ? "summary" : undefined}
+      data-has-message-actions={hasMessageActions ? "true" : undefined}
+      tabIndex={hasMessageActions ? 0 : undefined}
     >
       <div className={`transcript-part-body ${isUser ? "transcript-part-body-user" : "transcript-part-body-assistant"}`} data-section="content">
         {part.kind === "summary" ? (

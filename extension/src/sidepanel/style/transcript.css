@@ -126,6 +126,17 @@
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.transcript-part-has-actions:hover .transcript-part-footer-actions,
+.transcript-part-has-actions:focus-within .transcript-part-footer-actions {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 .icon-button {

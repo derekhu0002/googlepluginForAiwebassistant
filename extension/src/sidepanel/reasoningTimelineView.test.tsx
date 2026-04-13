@@ -446,4 +446,35 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(assistantTextParts).toHaveLength(1);
     expect(assistantTextParts[0]?.textContent).toContain("第一段第二段");
   });
+
+  it("marks transcript messages with actions as focusable hover targets for action visibility", async () => {
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          runId="run-1"
+          prompt="请回答"
+          events={[
+            {
+              id: "event-1",
+              runId: "run-1",
+              type: "result",
+              createdAt: "2026-04-02T00:00:01.000Z",
+              sequence: 1,
+              message: "最终回答",
+              data: { message_id: "msg-1" }
+            }
+          ]}
+          runStatus="done"
+          finalOutput="最终回答"
+        />
+      );
+    });
+
+    const actionPart = container.querySelector(".transcript-part[data-has-message-actions='true']");
+    expect(actionPart?.getAttribute("tabindex")).toBe("0");
+    expect(actionPart?.querySelector(".transcript-part-footer-actions")).toBeTruthy();
+
+    const summaryPart = container.querySelector(".transcript-part[data-part-kind='summary']");
+    expect(summaryPart?.hasAttribute("tabindex")).toBe(false);
+  });
 });
