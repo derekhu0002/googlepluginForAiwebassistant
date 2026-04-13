@@ -1413,6 +1413,17 @@ function dedupeFragmentSequence(items: ChatStreamItemModel[]) {
   return deduped;
 }
 
+function findAssistantOutputIndexByGroupAnchor(items: ChatStreamItemModel[], groupAnchorId: string) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.kind === "assistant_output" && item.groupAnchorId === groupAnchorId) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 function filterTranscriptFragments(items: ChatStreamItemModel[], includeToolCallParts: boolean) {
   if (includeToolCallParts) {
     return items;
@@ -1638,7 +1649,7 @@ function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, optio
     : -1;
 
   if (assistantDisplayText) {
-    const resolvedSegmentText = deriveVisibleAssistantSegmentText(assistantDisplayText, state.segmentBaselineText);
+    const resolvedSegmentText = sanitizeAssistantDisplayText(assistantDisplayText);
     if (resolvedSegmentText) {
       if (currentOutputIndex >= 0) {
         items[currentOutputIndex] = {
@@ -1834,17 +1845,21 @@ function upsertAssistantOutputSegmentInState(state: LiveTranscriptProjectionStat
   const currentOutputIndex = state.currentOutputItemId
     ? state.items.findIndex((item) => item.id === state.currentOutputItemId)
     : -1;
+  const existingOutputIndex = currentOutputIndex >= 0 && state.items[currentOutputIndex]?.groupAnchorId === groupAnchorId
+    ? currentOutputIndex
+    : findAssistantOutputIndexByGroupAnchor(state.items, groupAnchorId);
 
-  if (currentOutputIndex >= 0 && state.items[currentOutputIndex]?.groupAnchorId === groupAnchorId) {
-    state.items[currentOutputIndex] = {
-      ...state.items[currentOutputIndex],
-      anchorId: state.currentOutputAnchorId ?? anchorId,
+  if (existingOutputIndex >= 0) {
+    state.items[existingOutputIndex] = {
+      ...state.items[existingOutputIndex],
+      anchorId: state.items[existingOutputIndex].anchorId || state.currentOutputAnchorId || anchorId,
       summary: normalizedText,
       updatedAt: event.createdAt,
-      primaryType: event.type === "result" ? "result" : state.items[currentOutputIndex].primaryType,
-      originEventTypes: [...new Set([...state.items[currentOutputIndex].originEventTypes, event.type])]
+      primaryType: event.type === "result" ? "result" : state.items[existingOutputIndex].primaryType,
+      originEventTypes: [...new Set([...state.items[existingOutputIndex].originEventTypes, event.type])]
     };
-    state.currentOutputAnchorId = state.currentOutputAnchorId ?? anchorId;
+    state.currentOutputItemId = state.items[existingOutputIndex].id;
+    state.currentOutputAnchorId = state.items[existingOutputIndex].anchorId || anchorId;
     return;
   }
 
@@ -1923,7 +1938,7 @@ function processLiveProjectionEvent(
       state.hasResultEvent = true;
       state.latestResultText = sanitizeAssistantDisplayText(event.message);
     }
-    upsertAssistantOutputSegmentInState(state, event, deriveVisibleAssistantSegmentText(state.assistantTextSoFar, state.segmentBaselineText));
+    upsertAssistantOutputSegmentInState(state, event, state.assistantTextSoFar);
     return;
   }
 
@@ -2295,16 +2310,20 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
 
     const anchorId = getAssistantResponseMessageId(event);
     const groupAnchorId = getAssistantTranscriptGroupAnchorId(runId, event);
-    if (currentOutputIndex >= 0 && items[currentOutputIndex]?.groupAnchorId === groupAnchorId) {
-      items[currentOutputIndex] = {
-        ...items[currentOutputIndex],
-        anchorId: currentOutputAnchorId ?? anchorId,
+    const existingOutputIndex = currentOutputIndex >= 0 && items[currentOutputIndex]?.groupAnchorId === groupAnchorId
+      ? currentOutputIndex
+      : findAssistantOutputIndexByGroupAnchor(items, groupAnchorId);
+    if (existingOutputIndex >= 0) {
+      items[existingOutputIndex] = {
+        ...items[existingOutputIndex],
+        anchorId: items[existingOutputIndex].anchorId || currentOutputAnchorId || anchorId,
         summary: normalizedText,
         updatedAt: event.createdAt,
-        primaryType: event.type === "result" ? "result" : items[currentOutputIndex].primaryType,
-        originEventTypes: [...new Set([...items[currentOutputIndex].originEventTypes, event.type])]
+        primaryType: event.type === "result" ? "result" : items[existingOutputIndex].primaryType,
+        originEventTypes: [...new Set([...items[existingOutputIndex].originEventTypes, event.type])]
       };
-      currentOutputAnchorId = currentOutputAnchorId ?? anchorId;
+      currentOutputIndex = existingOutputIndex;
+      currentOutputAnchorId = items[existingOutputIndex].anchorId || anchorId;
       return;
     }
 
@@ -2357,7 +2376,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
         ? mergeAssistantResponseSnapshot(assistantTextSoFar, event.message)
         : mergeAssistantResponseDelta(assistantTextSoFar, event.message);
 
-      upsertAssistantOutputSegment(event, deriveVisibleAssistantSegmentText(assistantTextSoFar, segmentBaselineText));
+      upsertAssistantOutputSegment(event, assistantTextSoFar);
       continue;
     }
 
@@ -2481,7 +2500,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
   }
 
   if (assistantDisplayText) {
-    const resolvedSegmentText = deriveVisibleAssistantSegmentText(assistantDisplayText, segmentBaselineText);
+    const resolvedSegmentText = sanitizeAssistantDisplayText(assistantDisplayText);
     if (resolvedSegmentText) {
       if (currentOutputIndex >= 0) {
         items[currentOutputIndex] = {

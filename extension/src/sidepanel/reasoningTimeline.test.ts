@@ -267,6 +267,110 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(messages.map((message) => message.parts.map((part) => part.text).join(""))).toEqual(["继续分析", "第一段第二段", "其他消息"]);
   });
 
+  it("coalesces split Chinese assistant fragments into one visible message", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: "让我先加载这个",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "delta",
+            identity: "assistant_text:msg-1:part-1",
+            itemKind: "text",
+            messageId: "msg-1",
+            partId: "part-1"
+          }
+        }),
+        createEvent(2, {
+          type: "tool_call",
+          message: "读取技能列表",
+          semantic: {
+            channel: "tool",
+            emissionKind: "delta",
+            identity: "tool:msg-1:tool-1",
+            itemKind: "tool",
+            messageId: "msg-1",
+            partId: "tool-1"
+          }
+        }),
+        createEvent(3, {
+          type: "thinking",
+          message: "技能。",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "delta",
+            identity: "assistant_text:msg-1:part-2",
+            itemKind: "text",
+            messageId: "msg-1",
+            partId: "part-2"
+          }
+        })
+      ],
+      status: "streaming"
+    });
+
+    const assistantMessages = messages.filter((message) => message.role === "assistant");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?.parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(["让我先加载这个技能。"]);
+  });
+
+  it("preserves one visible assistant transcript message across tool-interleaved streaming updates", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续分析",
+      includeToolCallParts: true,
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: "第一段",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "delta",
+            identity: "assistant_text:msg-1:part-1",
+            itemKind: "text",
+            messageId: "msg-1",
+            partId: "part-1"
+          }
+        }),
+        createEvent(2, {
+          type: "tool_call",
+          message: "查询上下文",
+          semantic: {
+            channel: "tool",
+            emissionKind: "delta",
+            identity: "tool:msg-1:tool-1",
+            itemKind: "tool",
+            messageId: "msg-1",
+            partId: "tool-1"
+          }
+        }),
+        createEvent(3, {
+          type: "thinking",
+          message: "第二段",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "delta",
+            identity: "assistant_text:msg-1:part-2",
+            itemKind: "text",
+            messageId: "msg-1",
+            partId: "part-2"
+          }
+        })
+      ],
+      status: "streaming"
+    });
+
+    const assistantMessages = messages.filter((message) => message.role === "assistant");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?.parts.map((part) => ({ kind: part.kind, text: part.text }))).toEqual([
+      { kind: "text", text: "第一段第二段" },
+      { kind: "tool", text: "查询上下文" }
+    ]);
+  });
+
   it("prefers terminal answer text when leaked reasoning blocks are mixed into response deltas", () => {
     const finalOutput = "当前主要风险\n\n1. 数据最小化风险。\n\n2. 访问边界需要补强。";
     const events = [
@@ -310,6 +414,60 @@ describe("reasoning timeline share-aligned transcript contract", () => {
 
     expect(messages[1]?.parts).toHaveLength(1);
     expect(messages[1]?.parts[0]?.text).toBe("第一段第二段第三段");
+  });
+
+  it("suppresses duplicate final assistant text when snapshot and result finalize the same message", () => {
+    const parts = buildTranscriptPartStream({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: "让我先加载这个",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "delta",
+            identity: "assistant_text:msg-1:part-1",
+            itemKind: "text",
+            messageId: "msg-1",
+            partId: "part-1"
+          }
+        }),
+        createEvent(2, {
+          type: "tool_call",
+          message: "读取技能列表",
+          semantic: {
+            channel: "tool",
+            emissionKind: "delta",
+            identity: "tool:msg-1:tool-1",
+            itemKind: "tool",
+            messageId: "msg-1",
+            partId: "tool-1"
+          }
+        }),
+        createEvent(3, {
+          type: "thinking",
+          message: "让我先加载这个技能。",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "snapshot",
+            identity: "assistant_text:msg-1:part-2",
+            itemKind: "text",
+            messageId: "msg-1",
+            partId: "part-2"
+          }
+        }),
+        createEvent(4, {
+          type: "result",
+          message: "让我先加载这个技能。",
+          data: { message_id: "msg-1" }
+        })
+      ],
+      status: "done",
+      finalOutput: "让我先加载这个技能。"
+    });
+
+    expect(parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(["让我先加载这个技能。"]);
   });
 
   it("projects only the provided run segments without rebuilding a duplicate base transcript", () => {
