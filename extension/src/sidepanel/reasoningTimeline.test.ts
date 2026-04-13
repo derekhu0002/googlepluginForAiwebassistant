@@ -470,6 +470,112 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(["让我先加载这个技能。"]);
   });
 
+  it("dedupes adjacent assistant text snapshots when msg_ and prt_ anchors represent the same visible turn", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续分析",
+      includeToolCallParts: true,
+      events: [
+        createEvent(1, {
+          type: "tool_call",
+          message: "读取上下文",
+          semantic: {
+            channel: "tool",
+            emissionKind: "delta",
+            identity: "tool:msg-1:tool-1",
+            itemKind: "tool",
+            messageId: "msg-1",
+            partId: "tool-1"
+          }
+        }),
+        createEvent(2, {
+          type: "thinking",
+          message: "当前结论：需要补充权限范围",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "snapshot",
+            identity: "assistant_text:msg-1:part-1",
+            itemKind: "text",
+            messageId: "msg-1",
+            partId: "part-1"
+          }
+        }),
+        createEvent(3, {
+          type: "result",
+          message: "当前结论：需要补充权限范围\n\n建议同时校验最小授权。",
+          semantic: {
+            channel: "assistant_text",
+            emissionKind: "snapshot",
+            identity: "assistant_text:prt-9:part-9",
+            itemKind: "text",
+            messageId: "prt-9",
+            partId: "part-9"
+          },
+          data: { message_id: "prt-9" }
+        })
+      ],
+      status: "done",
+      finalOutput: "当前结论：需要补充权限范围\n\n建议同时校验最小授权。"
+    });
+
+    const assistantMessages = messages.filter((message) => message.role === "assistant");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?.parts.map((part) => ({ kind: part.kind, text: part.text }))).toEqual([
+      { kind: "tool", text: "读取上下文" },
+      { kind: "text", text: "当前结论：需要补充权限范围\n\n建议同时校验最小授权。" }
+    ]);
+  });
+
+  it("replaces an earlier incomplete assistant snapshot with the fuller adjacent snapshot", () => {
+    const parts = buildTranscriptPartStream({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: "第一段结论，正在补充",
+          data: { field: "text", message_id: "msg-early" }
+        }),
+        createEvent(2, {
+          type: "result",
+          message: "第一段结论，正在补充完整说明。",
+          data: { message_id: "prt-final" }
+        })
+      ],
+      status: "done",
+      finalOutput: "第一段结论，正在补充完整说明。"
+    });
+
+    expect(parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(["第一段结论，正在补充完整说明。"]);
+  });
+
+  it("does not swallow genuinely different adjacent assistant turns", () => {
+    const messages = buildTranscriptMessages({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, {
+          type: "result",
+          message: "这是第一条独立回答。",
+          data: { message_id: "msg-1" }
+        }),
+        createEvent(2, {
+          type: "result",
+          message: "这是第二条不同回答。",
+          data: { message_id: "msg-2" }
+        })
+      ],
+      status: "done",
+      finalOutput: "这是第二条不同回答。"
+    });
+
+    expect(messages.map((message) => message.parts.map((part) => part.text).join("\n"))).toEqual([
+      "继续分析",
+      "这是第一条独立回答。",
+      "这是第二条不同回答。"
+    ]);
+  });
+
   it("projects only the provided run segments without rebuilding a duplicate base transcript", () => {
     const parts = buildTranscriptPartStream({
       runId: "run-1",

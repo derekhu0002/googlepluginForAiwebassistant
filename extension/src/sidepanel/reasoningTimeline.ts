@@ -1547,6 +1547,157 @@ function mergeTranscriptMessageModels(current: TranscriptMessageModel, incoming:
   };
 }
 
+function getTranscriptMessageTextParts(message: TranscriptMessageModel) {
+  return message.parts.filter((part) => part.kind === "text");
+}
+
+function hasTranscriptMessageTextPart(message: TranscriptMessageModel) {
+  return message.parts.some((part) => part.kind === "text");
+}
+
+function getComparableAssistantMessageText(message: TranscriptMessageModel) {
+  return sanitizeAssistantDisplayText(joinUniqueParagraphs(getTranscriptMessageTextParts(message)
+    .map((part) => part.text)
+    .filter(Boolean)));
+}
+
+function shouldCoalesceAssistantTranscriptMessages(current: TranscriptMessageModel, incoming: TranscriptMessageModel) {
+  const currentText = getComparableAssistantMessageText(current);
+  const incomingText = getComparableAssistantMessageText(incoming);
+  if (!currentText || !incomingText) {
+    return false;
+  }
+
+  return shouldTreatComparableTextsAsDuplicate(currentText, incomingText);
+}
+
+function isAssistantTranscriptBoundaryMessage(message: TranscriptMessageModel) {
+  if (message.role !== "assistant") {
+    return true;
+  }
+
+  return message.parts.some((part) => part.kind === "question" || part.kind === "error");
+}
+
+function findLastTranscriptMessageTextIndex(messages: TranscriptMessageModel[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (hasTranscriptMessageTextPart(messages[index])) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function mergeAssistantTranscriptTurn(messages: TranscriptMessageModel[]) {
+  if (messages.length <= 1) {
+    return {
+      message: messages[0] ?? null,
+      changed: false
+    };
+  }
+
+  const latestTextMessageIndex = findLastTranscriptMessageTextIndex(messages);
+  if (latestTextMessageIndex < 0) {
+    return {
+      message: null,
+      changed: false
+    };
+  }
+
+  const baseMessage = messages[latestTextMessageIndex];
+  const parts = messages.flatMap((message, messageIndex) => message.parts.filter((part) => part.kind !== "text" || messageIndex === latestTextMessageIndex));
+  const createdAt = messages[0]?.createdAt ?? baseMessage.createdAt;
+  const updatedAt = messages[messages.length - 1]?.updatedAt ?? baseMessage.updatedAt;
+  const latestFeedbackState = [...messages].reverse().map((message) => message.feedbackState).find(Boolean);
+  const latestSourceQuestionPrompt = [...messages].reverse().map((message) => message.sourceQuestionPrompt).find(Boolean);
+  const latestActionAnchorId = [...messages].reverse().map((message) => message.actionAnchorId).find(Boolean);
+
+  return {
+    message: {
+      ...baseMessage,
+      createdAt,
+      updatedAt,
+      parts,
+      sourceQuestionPrompt: latestSourceQuestionPrompt ?? baseMessage.sourceQuestionPrompt,
+      supportsCopy: messages.some((message) => message.supportsCopy),
+      supportsRetry: messages.some((message) => message.supportsRetry),
+      supportsFeedback: messages.some((message) => message.supportsFeedback),
+      feedbackState: latestFeedbackState ?? baseMessage.feedbackState,
+      actionAnchorId: latestActionAnchorId ?? baseMessage.actionAnchorId
+    } satisfies TranscriptMessageModel,
+    changed: true
+  };
+}
+
+function coalesceAssistantTranscriptMessages(messages: TranscriptMessageModel[]) {
+  const result: TranscriptMessageModel[] = [];
+  let buffer: TranscriptMessageModel[] = [];
+  let changed = false;
+
+  const flushBuffer = () => {
+    if (!buffer.length) {
+      return;
+    }
+
+    if (!buffer.some((message) => hasTranscriptMessageTextPart(message))) {
+      result.push(...buffer);
+      buffer = [];
+      return;
+    }
+
+    const merged = mergeAssistantTranscriptTurn(buffer);
+    if (merged.message) {
+      result.push(merged.message);
+    } else {
+      result.push(...buffer);
+    }
+    changed = changed || merged.changed;
+    buffer = [];
+  };
+
+  for (const message of messages) {
+    if (isAssistantTranscriptBoundaryMessage(message)) {
+      flushBuffer();
+      result.push(message);
+      continue;
+    }
+
+    if (!buffer.length) {
+      buffer = [message];
+      continue;
+    }
+
+    const incomingHasText = hasTranscriptMessageTextPart(message);
+    const currentTextIndex = findLastTranscriptMessageTextIndex(buffer);
+
+    if (!incomingHasText || currentTextIndex < 0) {
+      buffer.push(message);
+      continue;
+    }
+
+    if (shouldCoalesceAssistantTranscriptMessages(buffer[currentTextIndex], message)) {
+      buffer.push(message);
+      changed = true;
+      continue;
+    }
+
+    const prefix = buffer.slice(0, currentTextIndex + 1);
+    const trailing = buffer.slice(currentTextIndex + 1);
+    const mergedPrefix = mergeAssistantTranscriptTurn(prefix);
+    if (mergedPrefix.message) {
+      result.push(mergedPrefix.message);
+    } else {
+      result.push(...prefix);
+    }
+    changed = changed || mergedPrefix.changed || trailing.length > 0;
+    buffer = [...trailing, message];
+  }
+
+  flushBuffer();
+  return changed ? result : messages;
+}
+
 function normalizeTranscriptMessages(messages: TranscriptMessageModel[]) {
   const deduped: TranscriptMessageModel[] = [];
   let changed = false;
@@ -1562,7 +1713,8 @@ function normalizeTranscriptMessages(messages: TranscriptMessageModel[]) {
     changed = true;
   }
 
-  return changed ? deduped : messages;
+  const normalized = changed ? deduped : messages;
+  return coalesceAssistantTranscriptMessages(normalized);
 }
 
 function canMergeTranscriptMessage(current: TranscriptMessageModel | null, item: ChatStreamItemModel) {
@@ -2164,7 +2316,7 @@ function buildTranscriptMessagesFromFragments(fragments: ChatStreamItemModel[]) 
     messages.push(createTranscriptMessage(item));
   }
 
-  return messages;
+  return normalizeTranscriptMessages(messages);
 }
 
 function buildTranscriptSegmentReadModel(options: BuildTranscriptSegmentReadModelOptions) {
@@ -2693,7 +2845,7 @@ export function buildTranscriptMessages(options: BuildChatStreamItemsOptions): T
     messages.push(createTranscriptMessage(item));
   }
 
-  return messages;
+  return normalizeTranscriptMessages(messages);
 }
 
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */

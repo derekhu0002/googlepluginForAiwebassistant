@@ -1,47 +1,43 @@
 {
   "version": 2,
-  "activeGoal": "修复会话中 assistant 文本重复渲染的问题，并减小两条消息之间的垂直间距",
+  "activeGoal": "修复浏览器扩展中 AI 消息内容重复、显示顺序不准确的问题，使 transcript 展示行为与 OPENCODE WEB 一致",
   "designSummary": "",
   "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-113",
-      "title": "修复会话中 assistant 文本重复渲染的问题，并减小两条消息之间的垂直间距",
-      "status": "done",
+      "id": "TASK-114",
+      "title": "修复浏览器扩展中 AI 消息内容重复、显示顺序不准确的问题，使 transcript 展示行为与 OPENCODE WEB 一致",
+      "status": "todo",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
-      "summary": "Completed fast-track localized transcript fix. Added identity-aware transcript message/part normalization to suppress overlapping duplicate assistant renderings across merged historical/live projections, tightened transcript spacing CSS, and added focused transcript/CSS tests. No architecture IDs touched for this localized fast-track fix.",
-      "details": "Completed fast-track localized transcript fix. Added identity-aware transcript message/part normalization to suppress overlapping duplicate assistant renderings across merged historical/live projections, tightened transcript spacing CSS, and added focused transcript/CSS tests. No architecture IDs touched for this localized fast-track fix.",
-      "createdAt": "2026-04-13T02:59:33.130Z",
-      "updatedAt": "2026-04-13T03:13:29.666Z",
-      "commitId": "9ab292c8baa93bf425b34c04b206d13256110803"
+      "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
+      "details": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks.",
+      "createdAt": "2026-04-13T06:52:01.352Z",
+      "updatedAt": "2026-04-13T06:52:01.352Z"
     }
   ],
   "issues": [],
   "validations": {
     "qa": {
-      "status": "passed",
-      "summary": "Validated TASK-113 against commit 9ab292c8baa93bf425b34c04b206d13256110803. Targeted extension tests passed (reasoningTimeline.test.ts, reasoningTimelineView.test.tsx) and extension typecheck passed. Verified duplicate suppression coverage for overlapping historical/live assistant transcript messages sharing the same logical anchor/group and CSS assertions for tightened adjacent transcript spacing. Tagged automated test coverage present for ArchitectureIDs ELM-APP-EXT-RUN-CONVERSATION-MAPPER, ELM-APP-EXT-CONVERSATION-RENDERER, and ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX. No RequirementID-tagged coverage identified. Runtime task TASK-113 remains architecture-unmapped in task metadata, but implementation-level architecture-tagged tests cover touched modules. No blocking defects found.",
-      "details": "Validated TASK-113 against commit 9ab292c8baa93bf425b34c04b206d13256110803. Targeted extension tests passed (reasoningTimeline.test.ts, reasoningTimelineView.test.tsx) and extension typecheck passed. Verified duplicate suppression coverage for overlapping historical/live assistant transcript messages sharing the same logical anchor/group and CSS assertions for tightened adjacent transcript spacing. Tagged automated test coverage present for ArchitectureIDs ELM-APP-EXT-RUN-CONVERSATION-MAPPER, ELM-APP-EXT-CONVERSATION-RENDERER, and ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX. No RequirementID-tagged coverage identified. Runtime task TASK-113 remains architecture-unmapped in task metadata, but implementation-level architecture-tagged tests cover touched modules. No blocking defects found.",
-      "commitId": "9ab292c8baa93bf425b34c04b206d13256110803",
-      "updatedAt": "2026-04-13T03:19:50.328Z"
+      "status": "not_run",
+      "summary": "QA not run for the current goal.",
+      "updatedAt": "2026-04-13T06:52:01.352Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-13T02:59:33.130Z"
+      "updatedAt": "2026-04-13T06:52:01.352Z"
     }
   },
   "release": {
-    "status": "completed",
-    "summary": "Release completed for TASK-113 fast-track transcript duplicate suppression and spacing adjustment. Implementation commit: 9ab292c8baa93bf425b34c04b206d13256110803. QA passed with targeted transcript duplicate suppression, spacing/CSS validation, and extension typecheck. Audit not run. Generated traceability matrix for commit scope shows verification gaps because Requirement, Architecture, and Reality mappings remain N/A. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md.",
-    "releaseLogPath": "SprintRleaseLog.md",
-    "updatedAt": "2026-04-13T03:22:46.909Z"
+    "status": "not_started",
+    "summary": "Release not prepared for the current goal.",
+    "updatedAt": "2026-04-13T06:52:01.352Z"
   },
   "counters": {
-    "task": 113,
+    "task": 114,
     "issue": 3
   },
-  "updatedAt": "2026-04-13T03:22:46.958Z"
+  "updatedAt": "2026-04-13T06:52:01.355Z"
 }
