@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "activeGoal": "Create the recovered brownfield architecture binding file `.opencode/architecture-mapping.yaml` using the already recove",
+  "designSummary": "",
+  "designDecisions": [],
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Create the recovered brownfield architecture binding file `",
+      "status": "todo",
+      "retryCount": 0,
+      "kind": "planning",
+      "owner": "SystemArchitect",
+      "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
+      "details": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks.",
+      "createdAt": "2026-04-13T16:43:35.913Z",
+      "updatedAt": "2026-04-13T16:43:35.913Z"
+    }
+  ],
+  "issues": [],
+  "validations": {
+    "qa": {
+      "status": "not_run",
+      "summary": "QA not run for the current goal.",
+      "updatedAt": "2026-04-13T16:43:35.913Z"
+    },
+    "audit": {
+      "status": "not_run",
+      "summary": "Audit not run for the current goal.",
+      "updatedAt": "2026-04-13T16:43:35.913Z"
+    }
+  },
+  "release": {
+    "status": "not_started",
+    "summary": "Release not prepared for the current goal.",
+    "updatedAt": "2026-04-13T16:43:35.913Z"
+  },
+  "counters": {
+    "task": 1,
+    "issue": 0
+  },
+  "updatedAt": "2026-04-13T16:43:35.916Z"
+}
