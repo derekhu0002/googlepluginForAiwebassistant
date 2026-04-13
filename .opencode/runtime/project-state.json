@@ -1,20 +1,20 @@
 {
   "version": 2,
-  "activeGoal": "Create the recovered brownfield architecture binding file `.opencode/architecture-mapping.yaml` using the already recove",
+  "activeGoal": "修复现有 Chrome 扩展侧边栏会话界面的 AI 内容重复与遗漏问题，并使扩展会话流程、消息组织和视觉样式对齐 opencode web 的会话体验；保持现有 session continuity、question/answer、retr",
   "designSummary": "",
   "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-001",
-      "title": "Create the recovered brownfield architecture binding file `",
+      "id": "TASK-002",
+      "title": "修复现有 Chrome 扩展侧边栏会话界面的 AI 内容重复与遗漏问题，并使扩展会话流程、消息组织和视觉样式对齐 opencode web 的会话体验；保持现有 session continuity、question/answer、retr",
       "status": "todo",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
       "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
       "details": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks.",
-      "createdAt": "2026-04-13T16:43:35.913Z",
-      "updatedAt": "2026-04-13T16:43:35.913Z"
+      "createdAt": "2026-04-13T17:17:17.354Z",
+      "updatedAt": "2026-04-13T17:17:17.354Z"
     }
   ],
   "issues": [],
@@ -22,22 +22,22 @@
     "qa": {
       "status": "not_run",
       "summary": "QA not run for the current goal.",
-      "updatedAt": "2026-04-13T16:43:35.913Z"
+      "updatedAt": "2026-04-13T17:17:17.354Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-13T16:43:35.913Z"
+      "updatedAt": "2026-04-13T17:17:17.354Z"
     }
   },
   "release": {
     "status": "not_started",
     "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-13T16:43:35.913Z"
+    "updatedAt": "2026-04-13T17:17:17.354Z"
   },
   "counters": {
-    "task": 1,
+    "task": 2,
     "issue": 0
   },
-  "updatedAt": "2026-04-13T17:04:57.884Z"
+  "updatedAt": "2026-04-13T17:17:17.355Z"
 }
