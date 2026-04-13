@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -476,5 +478,24 @@ describe("ReasoningTimeline transcript rendering", () => {
 
     const summaryPart = container.querySelector(".transcript-part[data-part-kind='summary']");
     expect(summaryPart?.hasAttribute("tabindex")).toBe(false);
+  });
+
+  /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
+  /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
+  it("keeps transcript action controls hidden by default and reveals them only on hover or focus-within selectors", () => {
+    const css = readFileSync(path.join(process.cwd(), "src/sidepanel/style/transcript.css"), "utf8");
+
+    expect(css).toMatch(/\.transcript-part-footer-actions\s*\{[^}]*opacity:\s*0;[^}]*visibility:\s*hidden;[^}]*pointer-events:\s*none;[^}]*\}/s);
+    expect(css).toContain(".transcript-part-has-actions:hover .transcript-part-footer-actions");
+    expect(css).toContain(".transcript-part-has-actions:focus-within .transcript-part-footer-actions");
+  });
+
+  it("uses tighter transcript spacing tokens for adjacent messages", () => {
+    const css = readFileSync(path.join(process.cwd(), "src/sidepanel/style/transcript.css"), "utf8");
+
+    expect(css).toMatch(/\.event-feed\s*\{[^}]*gap:\s*6px;[^}]*\}/s);
+    expect(css).toMatch(/\.transcript-feed\s*\{[^}]*gap:\s*6px;[^}]*\}/s);
+    expect(css).toMatch(/\.transcript-part-body\s*\{[^}]*gap:\s*6px;[^}]*padding:\s*0\s+0\s+0\.125rem;[^}]*\}/s);
+    expect(css).toMatch(/\.transcript-part-body-assistant,\s*\.transcript-part-assistant\s+\.transcript-part-body\s*\{[^}]*gap:\s*6px;[^}]*\}/s);
   });
 });

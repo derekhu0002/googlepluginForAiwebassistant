@@ -1478,6 +1478,93 @@ function createTranscriptPart(item: ChatStreamItemModel): TranscriptPartModel {
   };
 }
 
+function getTranscriptPartIdentity(part: TranscriptPartModel) {
+  return [part.runId, part.role, part.kind, part.groupAnchorId, part.anchorId].join(":");
+}
+
+function mergeTranscriptPartCollections(currentParts: TranscriptPartModel[], incomingParts: TranscriptPartModel[]) {
+  if (!incomingParts.length) {
+    return currentParts;
+  }
+
+  let nextParts = currentParts;
+
+  for (const part of incomingParts) {
+    const identity = getTranscriptPartIdentity(part);
+    let existingIndex = -1;
+
+    for (let index = nextParts.length - 1; index >= 0; index -= 1) {
+      if (getTranscriptPartIdentity(nextParts[index]) === identity) {
+        existingIndex = index;
+        break;
+      }
+    }
+
+    if (existingIndex < 0) {
+      if (nextParts === currentParts) {
+        nextParts = [...currentParts, part];
+      } else {
+        nextParts.push(part);
+      }
+      continue;
+    }
+
+    const existingPart = nextParts[existingIndex];
+    const mergedPart: TranscriptPartModel = {
+      ...existingPart,
+      ...part,
+      originEventTypes: [...new Set([...existingPart.originEventTypes, ...part.originEventTypes])],
+      badges: part.badges.length ? part.badges : existingPart.badges,
+      actionAnchorId: part.actionAnchorId ?? existingPart.actionAnchorId
+    };
+
+    if (mergedPart === existingPart) {
+      continue;
+    }
+
+    if (nextParts === currentParts) {
+      nextParts = [...currentParts];
+    }
+    nextParts[existingIndex] = mergedPart;
+  }
+
+  return nextParts;
+}
+
+function mergeTranscriptMessageModels(current: TranscriptMessageModel, incoming: TranscriptMessageModel): TranscriptMessageModel {
+  return {
+    ...current,
+    ...incoming,
+    createdAt: current.createdAt,
+    anchorId: current.anchorId || incoming.anchorId,
+    parts: mergeTranscriptPartCollections(current.parts, incoming.parts),
+    supportsCopy: current.supportsCopy || incoming.supportsCopy,
+    supportsRetry: current.supportsRetry || incoming.supportsRetry,
+    supportsFeedback: current.supportsFeedback || incoming.supportsFeedback,
+    feedbackState: incoming.feedbackState ?? current.feedbackState,
+    actionAnchorId: incoming.actionAnchorId ?? current.actionAnchorId,
+    sourceQuestionPrompt: incoming.sourceQuestionPrompt ?? current.sourceQuestionPrompt
+  };
+}
+
+function normalizeTranscriptMessages(messages: TranscriptMessageModel[]) {
+  const deduped: TranscriptMessageModel[] = [];
+  let changed = false;
+
+  for (const message of messages) {
+    const existingIndex = deduped.findIndex((candidate) => candidate.id === message.id);
+    if (existingIndex < 0) {
+      deduped.push(message);
+      continue;
+    }
+
+    deduped[existingIndex] = mergeTranscriptMessageModels(deduped[existingIndex], message);
+    changed = true;
+  }
+
+  return changed ? deduped : messages;
+}
+
 function canMergeTranscriptMessage(current: TranscriptMessageModel | null, item: ChatStreamItemModel) {
   if (!current) {
     return false;
@@ -1515,11 +1602,12 @@ function createTranscriptMessage(item: ChatStreamItemModel): TranscriptMessageMo
 }
 
 function mergeTranscriptMessage(current: TranscriptMessageModel, item: ChatStreamItemModel) {
+  const nextPart = createTranscriptPart(item);
   const next: TranscriptMessageModel = {
     ...current,
     anchorId: current.anchorId || item.anchorId,
     updatedAt: item.updatedAt,
-    parts: [...current.parts, createTranscriptPart(item)],
+    parts: mergeTranscriptPartCollections(current.parts, [nextPart]),
     sourceQuestionPrompt: item.sourceQuestionPrompt ?? current.sourceQuestionPrompt,
     supportsCopy: current.supportsCopy || item.supportsCopy,
     supportsRetry: current.supportsRetry || item.supportsRetry,
@@ -2117,21 +2205,27 @@ function mergeTranscriptMessageCollections(options: {
   liveProjectionState?: LiveTranscriptProjectionState | null;
   liveProjectionDebug?: LiveTranscriptProjectionDebug | null;
 }) {
-  const messages = options.liveMessages.length
-    ? [...options.historicalMessages, ...options.liveMessages]
-    : options.historicalMessages;
-  const parts = options.liveParts.length
-    ? [...options.historicalParts, ...options.liveParts]
-    : options.historicalParts;
+  const historicalMessages = normalizeTranscriptMessages(options.historicalMessages);
+  const liveMessages = normalizeTranscriptMessages(options.liveMessages);
+  const messages = normalizeTranscriptMessages(liveMessages.length
+    ? [...historicalMessages, ...liveMessages]
+    : historicalMessages);
+  const historicalParts = historicalMessages === options.historicalMessages
+    ? options.historicalParts
+    : flattenTranscriptMessages(historicalMessages);
+  const liveParts = liveMessages === options.liveMessages
+    ? options.liveParts
+    : flattenTranscriptMessages(liveMessages);
+  const parts = flattenTranscriptMessages(messages);
 
   return {
     messages,
     parts,
     summaryPart: options.summaryPart,
-    historicalMessages: options.historicalMessages,
-    historicalParts: options.historicalParts,
-    liveMessages: options.liveMessages,
-    liveParts: options.liveParts,
+    historicalMessages,
+    historicalParts,
+    liveMessages,
+    liveParts,
     historicalSignature: options.historicalSignature,
     liveSignature: options.liveSignature,
     liveProjectionState: options.liveProjectionState ?? null,

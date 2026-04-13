@@ -537,6 +537,33 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     });
   });
 
+  it("dedupes overlapping historical and live assistant messages with the same logical anchor", () => {
+    const overlappingSegment = {
+      runId: "run-current",
+      prompt: "当前问题",
+      events: [createEvent(1, {
+        runId: "run-current",
+        type: "result",
+        message: "当前回答",
+        data: { message_id: "msg-current" }
+      })],
+      status: "done" as const,
+      runStatus: "done" as const,
+      streamStatus: "done" as const,
+      finalOutput: "当前回答",
+      updatedAt: "2026-04-02T00:00:01.000Z"
+    };
+
+    const model = buildStableTranscriptProjection({
+      historicalSegments: [overlappingSegment],
+      liveSegment: overlappingSegment
+    });
+
+    expect(model.messages).toHaveLength(2);
+    expect(model.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(model.parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(["当前回答"]);
+  });
+
   it("does not replay the full live event array when only a new delta arrives", () => {
     const historicalSegments = [{
       runId: "run-history",
