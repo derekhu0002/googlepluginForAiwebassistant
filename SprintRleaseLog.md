@@ -1,65 +1,57 @@
-# Release Summary: full-model transcript contract/rendering remediation
+# Release Summary: fast-track transcript duplicate suppression and spacing adjustment
 
 ## Release Status
 
 - Status: completed
-- Date: 2026-04-12
-- Tasks: `TASK-105`, `TASK-106`, `TASK-107`, `TASK-108`
-- Main implementation commit: `35358ba3cec0e2661102a105fc0005fb93e1feea`
-- Audit-traceability rework commit: `b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6`
+- Date: 2026-04-13
+- Planning task: `TASK-113`
+- Implementation commit: `9ab292c8baa93bf425b34c04b206d13256110803`
 - QA status: `passed`
-- Audit status: `passed`
+- Audit status: `not_run`
 
 ## Release Summary
 
-- Finalized the full-model transcript contract/rendering remediation across the Python adapter, extension shared contract, transcript projection mapper, and sidepanel renderer/controller.
-- The release preserves transcript semantic metadata end-to-end, suppresses TOOL items from direct chat rendering while retaining internal state, and merges assistant text by logical message identity for stable projected transcript rendering.
+- Finalized the fast-track transcript rendering fix to suppress duplicate assistant transcript output when overlapping historical and live items resolve to the same logical anchor/group.
+- Tightened adjacent transcript spacing for a denser, cleaner conversation timeline presentation.
+- Confirmed targeted transcript and CSS-focused validation passed for the release commit.
 
 ## Completed Scope
 
-- `TASK-105`: Implement adapter transcript-preserving normalized event semantics in `python_adapter/app`
-- `TASK-106`: Update extension shared protocol/schema for transcript-preserving normalized events
-- `TASK-107`: Refactor transcript projection mapper to merge assistant text by logical message identity and suppress TOOL chat output
-- `TASK-108`: Align sidepanel renderer/controller with projected transcript-only conversation contract
+- `TASK-113`: Completed a localized transcript fix by adding identity-aware transcript message/part normalization to suppress overlapping duplicate assistant renderings across merged historical/live projections, tightening transcript spacing CSS, and adding focused transcript/CSS tests.
 
 ## Validation Results
 
-- QA: passed — validated commit `35358ba3cec0e2661102a105fc0005fb93e1feea` across adapter, shared contract, mapper, and renderer, including targeted pytest, vitest, typecheck, and build coverage.
-- Audit: passed — re-audit validated commit `b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6` after TASK-106 traceability rework closed the prior `IntentNotVerified` gap for `ELM-APP-EXT-SHARED-API-CONTRACT`.
+- QA: passed — validated commit `9ab292c8baa93bf425b34c04b206d13256110803`, confirming duplicate suppression for overlapping historical/live assistant transcript messages sharing the same logical anchor/group, tighter adjacent transcript spacing behavior, passing targeted tests (`reasoningTimeline.test.ts`, `reasoningTimelineView.test.tsx`), and passing extension typecheck.
+- Audit: not run — no audit was executed for this fast-track release.
 
 ## Commit Traceability
 
-- Primary implementation scope commit: `35358ba3cec0e2661102a105fc0005fb93e1feea`
-- Final validation/audit anchor commit: `b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6`
-- Traceability matrix scope: all completed runtime tasks in this remediation release
+- Release scope commit: `9ab292c8baa93bf425b34c04b206d13256110803`
+- Traceability matrix scope: commit `9ab292c8baa93bf425b34c04b206d13256110803`
 
 ## Intent Traceability Matrix
 
 # Traceability Matrix
 
-Scope: all completed runtime tasks
+Scope: commit 9ab292c8baa93bf425b34c04b206d13256110803
 
 | Requirement (Intent) | Architecture Component (Design) | Implemented Task | Source Files (Reality) | Verified by Tests? |
 | --- | --- | --- | --- | --- |
-| N/A | ELM-APP-008C Opencode Event Normalizer | TASK-105 Implement adapter transcript-preserving normalized event semantics in python_adapter/app (35358ba3cec0e2661102a105fc0005fb93e1feea) | python_adapter/app/models.py<br>python_adapter/app/opencode_adapter.py<br>python_adapter/tests/test_opencode_adapter.py | ✅ Yes |
-| N/A | ELM-APP-EXT-SHARED-API-CONTRACT Extension Stream Contract | TASK-106 Update extension shared protocol/schema for transcript-preserving normalized events (b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6) | N/A | ❌ No |
-| N/A | ELM-APP-EXT-RUN-CONVERSATION-MAPPER Reasoning Projection Mapper | TASK-107 Refactor transcript projection mapper to merge assistant text by logical message identity and suppress TOOL chat output (35358ba3cec0e2661102a105fc0005fb93e1feea) | N/A | ❌ No |
-| N/A | ELM-APP-EXT-CONVERSATION-RENDERER Conversation Renderer | TASK-108 Align sidepanel renderer/controller with projected transcript-only conversation contract (35358ba3cec0e2661102a105fc0005fb93e1feea) | N/A | ❌ No |
+| N/A | N/A | TASK-113 修复会话中 assistant 文本重复渲染的问题，并减小两条消息之间的垂直间距 (9ab292c8baa93bf425b34c04b206d13256110803) | N/A | ❌ No |
 
-100% of the intended sprint scope was not verified by tests. The generated traceability matrix contains one or more `❌ No` rows, so full intent verification was not achieved in the generated release artifact and the release package reflects verification gaps.
+100% of the intended sprint scope was not verified by tests. One or more traceability matrix rows remain `❌ No`, so this release contains verification gaps in graph-backed intent-to-code evidence despite passing QA.
 
 ## Release Artifacts
 
 - Release log: `SprintRleaseLog.md`
-- Main implementation commit: `35358ba3cec0e2661102a105fc0005fb93e1feea`
-- Audit rework commit: `b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6`
+- Implementation commit: `9ab292c8baa93bf425b34c04b206d13256110803`
+- QA evidence: targeted transcript duplicate suppression tests, transcript spacing/CSS validation, and extension typecheck
 
 ## Notable Follow-up Notes
 
-- Runtime validation records show QA and audit both passed, but the generated matrix still reports `❌ No` rows for TASK-106 through TASK-108 because graph/scanner traceability reality remains incomplete or normalized inconsistently for some TypeScript-tagged artifacts.
-- The audit itself called out minor non-blocking scanner normalization artifacts for TypeScript block-comment tags with trailing `*/`; this should be corrected so future release packaging can emit fully aligned matrix verification results.
-- A follow-up should improve graph-backed source-file linkage for the shared contract, mapper, and renderer so release traceability reflects the validated implementation reality instead of `N/A`/`❌ No` placeholders.
+- The generated traceability matrix still reports `Requirement (Intent)`, `Architecture Component (Design)`, and `Source Files (Reality)` as `N/A`, so end-to-end graph-backed traceability remains incomplete.
+- QA passed and no blocking defects were found, but release documentation must retain the verification-gap note until requirement, architecture, and reality mappings are populated for this change.
 
 ## Release Conclusion
 
-The completed full-model transcript contract/rendering remediation is finalized for release packaging. Delivery status is complete, QA passed, and audit passed after the TASK-106 traceability rework, with follow-up recommended to reconcile release-matrix evidence generation with the already-approved validation outcome.
+The fast-track transcript duplicate suppression and spacing adjustment for `TASK-113` is finalized and recorded as completed for commit `9ab292c8baa93bf425b34c04b206d13256110803`. The implementation passed QA, but the release artifact correctly records remaining traceability verification gaps from the generated matrix.
