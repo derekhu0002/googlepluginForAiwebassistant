@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "Issue-driven architecture remediation for persistent sidepanel transcript disappearance and streaming slowness. The approved design changes the sidepanel from render-time whole-transcript reprojection to an OpenCode-aligned stable transcript pipeline: immutable historical session snapshot plus one mutable live tail, incremental event application, stable message/part identity, and renderer consumption of a precomputed read model. Existing ApplicationComponents remain authoritative: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX owns history/session boundaries, ELM-APP-EXT-RUN-CONVERSATION-MAPPER owns transcript semantic merge logic, and ELM-APP-EXT-CONVERSATION-RENDERER owns display only. The implementation must introduce a dedicated Sidepanel Streaming Transcript Projection software unit instead of another localized patch."
+      "value": "ELM-006 remediation is a structural application-layer refinement across the Python adapter, shared extension protocol, transcript projection mapper, and conversation renderer. The adapter must preserve transcript-relevant message identity, part identity, channel semantics, emission kind, and compact tool metadata across the NormalizedRunEvent boundary. The extension contract must expose those semantics without promoting all preserved metadata to visible UI content. The projection mapper becomes the single authority for transcript assembly: TOOL items remain internally available but are suppressed from direct conversation rendering, while TEXT-bearing assistant items are merged by stable logical message identity so one assistant message renders once. Existing modules provide the correct ownership boundaries; no new software unit is required."
     }
   ],
   "metadata": {
@@ -19,30 +19,40 @@
     "ai4pb": {
       "managedBy": "opencode",
       "counters": {
-        "ELM": 5
+        "ELM": 6
       },
-      "designSummary": "",
-      "designDecisions": [],
+      "designSummary": "ELM-006 remediation is a structural application-layer refinement across the Python adapter, shared extension protocol, transcript projection mapper, and conversation renderer. The adapter must preserve transcript-relevant message identity, part identity, channel semantics, emission kind, and compact tool metadata across the NormalizedRunEvent boundary. The extension contract must expose those semantics without promoting all preserved metadata to visible UI content. The projection mapper becomes the single authority for transcript assembly: TOOL items remain internally available but are suppressed from direct conversation rendering, while TEXT-bearing assistant items are merged by stable logical message identity so one assistant message renders once. Existing modules provide the correct ownership boundaries; no new software unit is required.",
+      "designDecisions": [
+        "ADR-ELM-006-01: Extend existing software units instead of creating a new transcript module. Rationale: python_adapter/app/opencode_adapter.py and extension/src/sidepanel/reasoningTimeline.ts already own normalization and projection semantics, so adding a new unit would duplicate existing boundaries rather than improve separation of concerns.",
+        "ADR-ELM-006-02: Use semantic.messageId as the primary logical assistant-message anchor and semantic.partId as the secondary chunk/part anchor. Rationale: current projection logic already partially relies on message identity, but deterministic one-message rendering requires the adapter contract to preserve stable server-side logical message identity across delta, snapshot, and final emissions.",
+        "ADR-ELM-006-03: Preserve TOOL metadata across the adapter boundary but suppress TOOL items from direct conversation rendering. Rationale: the requirement forbids direct TOOL display in the conversation UI, but transcript/session assembly and future diagnostics still need compact tool state and identity metadata.",
+        "ADR-ELM-006-04: Keep transcript grouping and suppression policy inside the Reasoning Projection Mapper, not inside JSX rendering components. Rationale: grouping by logical message identity and hiding TOOL items are application behavior concerns; the renderer should consume the projected read-model without reinterpreting raw event semantics."
+      ],
       "runtime": {
-        "activeGoal": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题",
+        "activeGoal": "Preserve transcript-relevant OpenCode server information across the Python adapter to extension boundary so the extensio",
         "validations": {
           "qa": {
-            "status": "not_run",
-            "summary": "QA not run for the current goal.",
-            "updatedAt": "2026-04-12T09:17:10.715Z"
+            "status": "passed",
+            "summary": "QA passed for commit 35358ba3cec0e2661102a105fc0005fb93e1feea. Covered architecture IDs: ELM-APP-008C, ELM-APP-EXT-SHARED-API-CONTRACT, ELM-APP-EXT-RUN-CONVERSATION-MAPPER, ELM-APP-EXT-CONVERSATION-RENDERER. Added missing traceability tags to python_adapter/tests/test_opencode_adapter.py for adapter coverage, then ran targeted pytest and extension vitest suites plus extension typecheck/build. No functional defects found in transcript semantic preservation, TOOL suppression, logical-message text merging, or projected-transcript rendering authority.",
+            "details": "QA passed for commit 35358ba3cec0e2661102a105fc0005fb93e1feea. Covered architecture IDs: ELM-APP-008C, ELM-APP-EXT-SHARED-API-CONTRACT, ELM-APP-EXT-RUN-CONVERSATION-MAPPER, ELM-APP-EXT-CONVERSATION-RENDERER. Added missing traceability tags to python_adapter/tests/test_opencode_adapter.py for adapter coverage, then ran targeted pytest and extension vitest suites plus extension typecheck/build. No functional defects found in transcript semantic preservation, TOOL suppression, logical-message text merging, or projected-transcript rendering authority.",
+            "commitId": "35358ba3cec0e2661102a105fc0005fb93e1feea",
+            "updatedAt": "2026-04-12T13:04:45.166Z"
           },
           "audit": {
-            "status": "not_run",
-            "summary": "Audit not run for the current goal.",
-            "updatedAt": "2026-04-12T09:17:10.715Z"
+            "status": "passed",
+            "summary": "Re-audit passed for commit b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6. TASK-106 adds tagged automated test coverage in extension/src/shared/api.test.ts for ELM-APP-EXT-SHARED-API-CONTRACT, closing the prior IntentNotVerified gap. The shared contract test verifies semantic and compact tool metadata parsing, and the broader as-built transcript remediation remains aligned with approved architecture across adapter, mapper, and renderer. Minor scanner normalization artifacts remain for TS block-comment tags with trailing */, but they are non-blocking for this re-audit.",
+            "details": "Re-audit passed for commit b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6. TASK-106 adds tagged automated test coverage in extension/src/shared/api.test.ts for ELM-APP-EXT-SHARED-API-CONTRACT, closing the prior IntentNotVerified gap. The shared contract test verifies semantic and compact tool metadata parsing, and the broader as-built transcript remediation remains aligned with approved architecture across adapter, mapper, and renderer. Minor scanner normalization artifacts remain for TS block-comment tags with trailing */, but they are non-blocking for this re-audit.",
+            "commitId": "b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6",
+            "updatedAt": "2026-04-12T13:17:19.560Z"
           }
         },
         "release": {
-          "status": "not_started",
-          "summary": "Release not prepared for the current goal.",
-          "updatedAt": "2026-04-12T09:17:10.715Z"
+          "status": "completed",
+          "summary": "Release completed for full-model transcript contract/rendering remediation. Tasks: TASK-105, TASK-106, TASK-107, TASK-108. Main implementation commit: 35358ba3cec0e2661102a105fc0005fb93e1feea. Audit-traceability rework commit: b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6. QA passed and audit passed after TASK-106 traceability rework. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md.",
+          "releaseLogPath": "SprintRleaseLog.md",
+          "updatedAt": "2026-04-12T13:21:12.654Z"
         },
-        "updatedAt": "2026-04-12T09:17:10.716Z"
+        "updatedAt": "2026-04-12T13:17:19.561Z"
       }
     }
   },
@@ -289,7 +299,7 @@
         ],
         "documentation": [
           {
-            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Opencode Event Normalizer encapsulates the Python adapter logic that converts opencode SSE payloads into normalized run events with stable semantic metadata for reasoning, tool, question, result, and error emissions."
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Opencode Event Normalizer encapsulates the Python adapter logic that converts opencode SSE payloads into normalized run events while preserving transcript-relevant message identity, part identity, channel semantics, emission kind, and compact tool metadata required for downstream transcript assembly."
           }
         ],
         "extensions": {
@@ -309,7 +319,7 @@
         ],
         "documentation": [
           {
-            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Extension Stream Contract owns the shared TypeScript protocol and runtime schema validation for normalized run events consumed by the browser extension."
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Extension Stream Contract owns the shared TypeScript protocol and runtime schema validation for normalized run events consumed by the browser extension, including transcript-preserving semantic identifiers and internal-only metadata needed by projection logic without forcing all preserved fields into the visible chat surface."
           }
         ],
         "extensions": {
@@ -329,7 +339,7 @@
         ],
         "documentation": [
           {
-            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Reasoning Projection Mapper builds the read-model for Thinking, assistant body text, questions, and result/error turns from normalized run events and is the single authority for semantic merge behavior."
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Reasoning Projection Mapper builds the read-model for assistant text, questions, reasoning, and error turns from normalized run events and is the single authority for grouping text by stable logical message identity while suppressing TOOL items from direct conversation rendering."
           }
         ],
         "extensions": {
@@ -369,7 +379,7 @@
         ],
         "documentation": [
           {
-            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Conversation Renderer renders the projected assistant conversation, Thinking panel, and interaction affordances from the read-model supplied by the projection mapper without reinterpreting event semantics."
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Conversation Renderer renders only the already-projected conversation transcript and interaction affordances supplied by the projection mapper, without reinterpreting raw tool events or redefining message-grouping policy."
           }
         ],
         "extensions": {
@@ -510,38 +520,52 @@
         ]
       },
       {
-        "identifier": "PROJECT-CURRENT",
-        "type": "WorkPackage",
+        "identifier": "ELM-006",
+        "type": "Requirement",
         "name": [
           {
-            "value": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题"
+            "value": "Formal Requirement"
           }
         ],
         "documentation": [
           {
-            "value": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题"
+            "value": "# Formal Requirement Draft\n\n## Goal\nPreserve enough OpenCode server event information across the Python adapter → extension boundary so the extension can correctly assemble a coherent chat/session transcript, while improving transcript UX by suppressing direct display of TOOL items and aggregating TEXT content into user-visible conversational messages.\n\n## Scope\nThis requirement applies to:\n- The Python adapter that normalizes OpenCode server events into extension-facing `NormalizedRunEvent` items.\n- The extension-side transcript projection logic.\n- The sidepanel transcript rendering policy.\n\nThis requirement does **not** require:\n- New end-user-visible tooling output rendering in this change.\n- Changes to unrelated event types or unrelated UI surfaces unless they consume the same transcript projection contract.\n\n## Backward Compatibility & Resolved Conflicts\n- **Historical context check**: No relevant prior `Requirement`, `Constraint`, or `BusinessProcess` items were found in the architecture graph for this topic.\n- **Conflict analysis**: No explicit historical conflicts were detected.\n- **Compatibility intent**:\n  - Existing adapter normalization may continue, but it must no longer discard information that is needed for downstream transcript assembly.\n  - TOOL-type events may still cross the adapter boundary for internal processing, state derivation, or future use, but they must not be rendered as direct transcript messages in the conversation UI.\n  - TEXT-type streaming/chunked content must be combined into coherent displayed messages rather than shown as one message per chunk.\n\n## User Stories / Usage Scenarios\n1. **As a user**, I want the conversation transcript to read like a normal chat, not like a low-level stream of fragmented event chunks.\n2. **As a user**, I do not want raw TOOL activity displayed as if it were conversational content.\n3. **As the extension transcript layer**, I need enough preserved server-side event detail from the adapter to reconstruct and project the conversation accurately.\n4. **As a future implementer**, I need the adapter/extension contract to preserve semantically important fields even if the current UI does not display all of them.\n\n## Acceptance Criteria (Mandatory)\n1. **Information preservation across adapter boundary**\n   - Given the OpenCode server emits event data containing information needed to reconstruct the conversation/session transcript,\n   - When the Python adapter produces `NormalizedRunEvent` items for the extension,\n   - Then the adapter must preserve that key transcript-assembly information rather than dropping it during normalization.\n   - And the preserved information must remain available to extension-side projection logic even if some parts are not directly rendered to the user.\n\n2. **TOOL items are not directly displayed**\n   - Given the extension transcript projection receives TOOL-type items,\n   - When the sidepanel conversation UI assembles display messages,\n   - Then TOOL-type items must not be rendered directly as transcript/chat messages.\n\n3. **TEXT chunks are aggregated**\n   - Given the extension transcript projection receives multiple TEXT-type items or chunks that belong to the same logical conversational message,\n   - When the UI assembles the transcript,\n   - Then those TEXT items must be merged into a single displayed message rather than displayed as separate chunk-level messages.\n\n4. **Projection logic, not raw transport order, determines display grouping**\n   - Given a stream of normalized events from the adapter,\n   - When the extension builds the displayed transcript,\n   - Then the displayed conversation must be based on projection/assembly rules that group related TEXT content into coherent messages and exclude TOOL items from direct display.\n\n5. **No regression in transcript completeness**\n   - Given a session containing both TOOL and TEXT events,\n   - When the transcript is assembled for the conversation UI,\n   - Then user-visible conversational content must remain complete and understandable, and required context must not be lost because of adapter-side field omission.\n\n## Constraints & Non-functional Requirements\n- The adapter → extension contract semantics are part of scope and may need revision to explicitly preserve transcript-relevant fields.\n- The UI must favor readability and conversational coherence over raw event-by-event fidelity.\n- Hidden TOOL items may still be retained internally for state, traceability, debugging, or future transcript features; this requirement only forbids direct display in the conversation UI.\n- Aggregation behavior must be deterministic so the same event stream yields the same projected transcript.\n- This change is architecture-affecting because it alters cross-boundary data preservation expectations and transcript assembly policy.\n\n## Open Questions / Assumptions\n- **Assumption**: “Key information” means any event data required by extension logic to reconstruct a correct conversational transcript, even if not all of that data is displayed.\n- **Assumption**: TEXT aggregation should occur at the logical message level, not across separate conversational turns.\n- **Open implementation detail for architecture/design**: the exact preserved fields and the exact grouping boundary rules still need system design definition, but the product requirement is that transcript-relevant information must not be lost and chunk-level TEXT must not be exposed as separate displayed messages."
+          }
+        ]
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Preserve transcript-relevant OpenCode server information across the Python adapter to extension boundary so the extensio"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "ELM-006 remediation is a structural application-layer refinement across the Python adapter, shared extension protocol, transcript projection mapper, and conversation renderer. The adapter must preserve transcript-relevant message identity, part identity, channel semantics, emission kind, and compact tool metadata across the NormalizedRunEvent boundary. The extension contract must expose those semantics without promoting all preserved metadata to visible UI content. The projection mapper becomes the single authority for transcript assembly: TOOL items remain internally available but are suppressed from direct conversation rendering, while TEXT-bearing assistant items are merged by stable logical message identity so one assistant message renders once. Existing modules provide the correct ownership boundaries; no new software unit is required."
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题",
+            "rawRequirement": "Preserve transcript-relevant OpenCode server information across the Python adapter to extension boundary so the extensio",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-100",
+        "identifier": "TASK-104",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "为当前插件会话增加可导出的诊断日志文件，记录流式事件、状态流转、转录投影摘要与结束判定，便于分析内容丢失和未显示结束的问题"
+            "value": "Preserve transcript-relevant OpenCode server information across the Python adapter to extension boundary so the extensio"
           }
         ],
         "documentation": [
           {
-            "value": "Fast-track implementation started for localized diagnostics export in extension background/sidepanel modules."
+            "value": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks."
           }
         ],
         "extensions": {
@@ -549,15 +573,183 @@
             "managedBy": "opencode-runtime",
             "kind": "Task",
             "taskKind": "planning",
-            "status": "InProgress",
+            "status": "ToDo",
             "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Fast-track implementation started for localized diagnostics export in extension background/sidepanel modules.",
+            "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
             "commitId": "",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-12T09:18:45.630Z"
+            "updatedAt": "2026-04-12T12:16:16.494Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-105",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Implement adapter transcript-preserving normalized event semantics in python_adapter/app"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Completed adapter transcript-preserving normalized event semantics: preserved semantic item kinds plus compact tool metadata in normalized events and added adapter tests."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 0,
+            "assignee": "Implementation",
+            "summary": "Completed adapter transcript-preserving normalized event semantics: preserved semantic item kinds plus compact tool metadata in normalized events and added adapter tests.",
+            "commitId": "35358ba3cec0e2661102a105fc0005fb93e1feea",
+            "softwareUnitId": "SU-ADAPTER-TRANSCRIPT-NORMALIZER",
+            "softwareUnitTitle": "Adapter Transcript Normalizer",
+            "architectureElementId": "ELM-APP-008C",
+            "updatedAt": "2026-04-12T12:58:25.393Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-106",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Update extension shared protocol/schema for transcript-preserving normalized events"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Added tagged automated test coverage in extension/src/shared/api.test.ts verifying shared contract parsing preserves semantic and tool metadata for ELM-APP-EXT-SHARED-API-CONTRACT after audit rework."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "Added tagged automated test coverage in extension/src/shared/api.test.ts verifying shared contract parsing preserves semantic and tool metadata for ELM-APP-EXT-SHARED-API-CONTRACT after audit rework.",
+            "commitId": "b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6",
+            "softwareUnitId": "SU-EXT-STREAM-CONTRACT",
+            "softwareUnitTitle": "Extension Stream Contract",
+            "architectureElementId": "ELM-APP-EXT-SHARED-API-CONTRACT",
+            "updatedAt": "2026-04-12T13:14:30.608Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-107",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Refactor transcript projection mapper to merge assistant text by logical message identity and suppress TOOL chat output"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Completed transcript projection refactor: deterministic assistant text grouping now uses logical message identity and transcript projection suppresses TOOL items by default while retaining internal state."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 0,
+            "assignee": "Implementation",
+            "summary": "Completed transcript projection refactor: deterministic assistant text grouping now uses logical message identity and transcript projection suppresses TOOL items by default while retaining internal state.",
+            "commitId": "35358ba3cec0e2661102a105fc0005fb93e1feea",
+            "softwareUnitId": "SU-TRANSCRIPT-PROJECTION-MAPPER",
+            "softwareUnitTitle": "Transcript Projection Mapper",
+            "architectureElementId": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+            "updatedAt": "2026-04-12T12:58:25.495Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-108",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Align sidepanel renderer/controller with projected transcript-only conversation contract"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Completed sidepanel renderer/controller alignment: controller/view now consume projected transcript-only contract with TOOL suppression and merged assistant message rendering tests."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 0,
+            "assignee": "Implementation",
+            "summary": "Completed sidepanel renderer/controller alignment: controller/view now consume projected transcript-only contract with TOOL suppression and merged assistant message rendering tests.",
+            "commitId": "35358ba3cec0e2661102a105fc0005fb93e1feea",
+            "softwareUnitId": "SU-CONVERSATION-RENDERER-INTEGRATION",
+            "softwareUnitTitle": "Conversation Renderer Integration",
+            "architectureElementId": "ELM-APP-EXT-CONVERSATION-RENDERER",
+            "updatedAt": "2026-04-12T12:58:25.541Z"
+          }
+        }
+      },
+      {
+        "identifier": "ISSUE-003",
+        "type": "BusinessObject",
+        "name": [
+          {
+            "value": "IntentNotVerified for transcript stream contract audit"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "IntentNotVerified for commit 35358ba3cec0e2661102a105fc0005fb93e1feea. Missing verified intended IDs: ELM-APP-EXT-SHARED-API-CONTRACT. Reviewed task IDs: TASK-105, TASK-106, TASK-107, TASK-108. Existing tagged automated tests verify ELM-APP-008C, ELM-APP-EXT-RUN-CONVERSATION-MAPPER, and ELM-APP-EXT-CONVERSATION-RENDERER, but no tagged automated test verifies ELM-APP-EXT-SHARED-API-CONTRACT. QA must add tagged automated tests before release can continue."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Issue",
+            "issueType": "ArchGap",
+            "status": "Open",
+            "reporter": "OpenCode",
+            "category": "ArchitectureGap"
+          }
+        }
+      },
+      {
+        "identifier": "RELEASE-LOG",
+        "type": "Artifact",
+        "name": [
+          {
+            "value": "SprintReleaseLog"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Release completed for full-model transcript contract/rendering remediation. Tasks: TASK-105, TASK-106, TASK-107, TASK-108. Main implementation commit: 35358ba3cec0e2661102a105fc0005fb93e1feea. Audit-traceability rework commit: b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6. QA passed and audit passed after TASK-106 traceability rework. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ReleaseLog",
+            "version": "1.0.0",
+            "content": "Release completed for full-model transcript contract/rendering remediation. Tasks: TASK-105, TASK-106, TASK-107, TASK-108. Main implementation commit: 35358ba3cec0e2661102a105fc0005fb93e1feea. Audit-traceability rework commit: b487a2fd09499b10d7a52e9bf1f9a4c4f6f853a6. QA passed and audit passed after TASK-106 traceability rework. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md.",
+            "timestamp": "2026-04-12T13:21:12.654Z",
+            "path": "SprintRleaseLog.md"
           }
         }
       }
@@ -894,15 +1086,15 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-100",
+        "identifier": "REL-PROJECT-TASK-104",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-100"
+            "value": "Project aggregates TASK-104"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-100",
+        "target": "TASK-104",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -912,6 +1104,182 @@
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-105",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-105"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-105",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-105-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-105 traces to ELM-APP-008C"
+          }
+        ],
+        "source": "TASK-105",
+        "target": "ELM-APP-008C",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-106",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-106"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-106",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-106-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-106 traces to ELM-APP-EXT-SHARED-API-CONTRACT"
+          }
+        ],
+        "source": "TASK-106",
+        "target": "ELM-APP-EXT-SHARED-API-CONTRACT",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-107",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-107"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-107",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-107-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-107 traces to ELM-APP-EXT-RUN-CONVERSATION-MAPPER"
+          }
+        ],
+        "source": "TASK-107",
+        "target": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-108",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-108"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-108",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-108-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-108 traces to ELM-APP-EXT-CONVERSATION-RENDERER"
+          }
+        ],
+        "source": "TASK-108",
+        "target": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
           }
         }
       }

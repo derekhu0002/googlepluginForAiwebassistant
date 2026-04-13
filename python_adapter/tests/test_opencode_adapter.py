@@ -231,6 +231,7 @@ def test_reasoning_only_session_message_does_not_become_final_result_text() -> N
     anyio.run(scenario)
 
 
+# @ArchitectureID: ELM-APP-008C
 def test_reasoning_part_delta_is_buffered_and_emitted_as_thinking_after_part_type_is_known() -> None:
     session_payload = {
         "id": "ses-1",
@@ -285,6 +286,7 @@ def test_reasoning_part_delta_is_buffered_and_emitted_as_thinking_after_part_typ
     anyio.run(scenario)
 
 
+# @ArchitectureID: ELM-APP-008C
 def test_text_part_delta_is_buffered_and_emitted_as_answer_stream_after_part_type_is_known() -> None:
     session_payload = {
         "id": "ses-1",
@@ -345,6 +347,7 @@ def test_text_part_delta_is_buffered_and_emitted_as_answer_stream_after_part_typ
     anyio.run(scenario)
 
 
+# @ArchitectureID: ELM-APP-008C
 def test_tool_part_snapshot_preserves_compact_tool_metadata_and_semantics() -> None:
     session_payload = {
         "id": "ses-1",
@@ -449,6 +452,7 @@ def test_message_completed_does_not_emit_result_before_late_text_stream_finishes
     anyio.run(scenario)
 
 
+# @ArchitectureID: ELM-APP-008C
 def test_text_part_snapshot_uses_assistant_text_snapshot_semantics() -> None:
     session_payload = {
         "id": "ses-1",
