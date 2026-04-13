@@ -1,20 +1,20 @@
 {
   "version": 2,
-  "activeGoal": "修复浏览器扩展中 AI 消息内容重复、显示顺序不准确的问题，使 transcript 展示行为与 OPENCODE WEB 一致",
+  "activeGoal": "在扩展 sidepanel 的 host-permission-callout 中显示当前待授权域名",
   "designSummary": "",
   "designDecisions": [],
   "tasks": [
     {
-      "id": "TASK-114",
-      "title": "修复浏览器扩展中 AI 消息内容重复、显示顺序不准确的问题，使 transcript 展示行为与 OPENCODE WEB 一致",
+      "id": "TASK-116",
+      "title": "在扩展 sidepanel 的 host-permission-callout 中显示当前待授权域名",
       "status": "todo",
       "retryCount": 0,
       "kind": "planning",
       "owner": "SystemArchitect",
       "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
       "details": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks.",
-      "createdAt": "2026-04-13T06:52:01.352Z",
-      "updatedAt": "2026-04-13T06:52:01.352Z"
+      "createdAt": "2026-04-13T10:19:43.445Z",
+      "updatedAt": "2026-04-13T10:19:43.445Z"
     }
   ],
   "issues": [],
@@ -22,22 +22,22 @@
     "qa": {
       "status": "not_run",
       "summary": "QA not run for the current goal.",
-      "updatedAt": "2026-04-13T06:52:01.352Z"
+      "updatedAt": "2026-04-13T10:19:43.445Z"
     },
     "audit": {
       "status": "not_run",
       "summary": "Audit not run for the current goal.",
-      "updatedAt": "2026-04-13T06:52:01.352Z"
+      "updatedAt": "2026-04-13T10:19:43.445Z"
     }
   },
   "release": {
     "status": "not_started",
     "summary": "Release not prepared for the current goal.",
-    "updatedAt": "2026-04-13T06:52:01.352Z"
+    "updatedAt": "2026-04-13T10:19:43.445Z"
   },
   "counters": {
-    "task": 114,
+    "task": 116,
     "issue": 3
   },
-  "updatedAt": "2026-04-13T06:52:01.355Z"
+  "updatedAt": "2026-04-13T10:19:43.446Z"
 }

@@ -62,6 +62,10 @@ export function MainStage({
   shouldShowPermissionCallout: boolean;
   state: AssistantState;
 }) {
+  const pendingPermissionTarget = [activeContext?.permissionOrigin, activeContext?.hostname, activeContext?.url].find(
+    (value): value is string => Boolean(value?.trim())
+  );
+
   return (
     <section className="panel-block chat-primary-panel opencode-stage-panel">
       {shouldShowPermissionCallout ? (
@@ -69,6 +73,7 @@ export function MainStage({
           <div>
             <strong>当前页面需要先授权域名访问</strong>
             <p>{activeContext?.message || "授权当前域名后，扩展才能继续读取页面上下文并正常工作。"}</p>
+            {pendingPermissionTarget ? <p>待授权域名：<code>{pendingPermissionTarget}</code></p> : null}
             {!canShowPermissionButton ? (
               <p>
                 当前构建尚未把这个域名加入可申请授权清单。请先确认已将 extension/.env.example 复制为 extension/.env，重新执行 npm run build --workspace extension，然后在 chrome://extensions 里重新加载 extension/dist。

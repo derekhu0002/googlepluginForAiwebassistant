@@ -319,6 +319,7 @@ describe("side panel host permission request flow", () => {
     const callout = container.querySelector(".host-permission-callout");
     expect(callout).toBeTruthy();
     expect(callout?.textContent).toContain("当前页面需要先授权域名访问");
+    expect(callout?.textContent).toContain("待授权域名：https://example.com/*");
 
     const calloutButton = callout?.querySelector("button");
     expect(calloutButton?.textContent).toContain("授权当前域名");
@@ -390,10 +391,31 @@ describe("side panel host permission request flow", () => {
     const callout = container.querySelector(".host-permission-callout");
     expect(callout).toBeTruthy();
     expect(callout?.textContent).toContain("当前页面需要先授权域名访问");
+    expect(callout?.textContent).toContain("待授权域名：https://example.com/*");
     expect(callout?.textContent).toContain("extension/.env");
     expect(callout?.textContent).toContain("npm run build --workspace extension");
     expect(callout?.textContent).toContain("chrome://extensions");
     expect(callout?.textContent).not.toContain("授权当前域名");
+  });
+
+  it("falls back to hostname when permission origin is unavailable", async () => {
+    setupChromeStub({
+      contexts: [createContext({
+        permissionOrigin: null,
+        canRequestPermission: false,
+        hostname: "127.0.0.1",
+        url: "http://127.0.0.1/demo"
+      })]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const callout = container.querySelector(".host-permission-callout");
+    expect(callout).toBeTruthy();
+    expect(callout?.textContent).toContain("待授权域名：127.0.0.1");
   });
 
   it("shows explicit error when user rejects the permission prompt", async () => {
