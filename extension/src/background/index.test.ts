@@ -731,6 +731,34 @@ describe("background rule-driven capture flow", () => {
             runId: "run-1",
             status: "done",
             pendingQuestionId: null
+          },
+          runEventState: {
+            frontier: {
+              version: 1,
+              acceptedEventCount: 1,
+              lastSequence: 1,
+              contiguousSequence: 1,
+              lastAcceptedCanonicalKey: "run-1:1:result",
+              lastAcceptedRawEventId: "event-1",
+              lastAcceptedAt: "2026-04-02T00:00:01.000Z"
+            },
+            acceptedCanonicalKeys: ["run-1:1:result"],
+            diagnostics: []
+          },
+          syncMetadata: {
+            origin: "sidepanel",
+            snapshotVersion: 1,
+            generatedAt: "2026-04-02T00:00:01.100Z",
+            frontier: {
+              version: 1,
+              acceptedEventCount: 1,
+              lastSequence: 1,
+              contiguousSequence: 1,
+              lastAcceptedCanonicalKey: "run-1:1:result",
+              lastAcceptedRawEventId: "event-1",
+              lastAcceptedAt: "2026-04-02T00:00:01.000Z"
+            },
+            lastAcceptedCanonicalKey: "run-1:1:result"
           }
         }
       }, {}, resolve);
@@ -739,6 +767,179 @@ describe("background rule-driven capture flow", () => {
     expect(response.ok).toBe(true);
     expect((storageState["ai-web-assistant-state"] as { currentRun: { finalOutput: string }; stream: { status: string } }).currentRun.finalOutput).toBe("最终回答");
     expect((storageState["ai-web-assistant-state"] as { stream: { status: string } }).stream.status).toBe("done");
+  });
+
+  it("rejects stale replayed sidepanel snapshots for the same run", async () => {
+    const storageState: Record<string, unknown> = {
+      "ai-web-assistant-state": {
+        ...initialAssistantState,
+        status: "done",
+        runEvents: [{
+          id: "event-2",
+          runId: "run-1",
+          type: "result",
+          createdAt: "2026-04-02T00:00:02.000Z",
+          sequence: 2,
+          message: "更新回答",
+          canonical: {
+            key: "run-1:2:result",
+            identitySource: "run_sequence_type",
+            orderKey: "run-1:2:2026-04-02T00:00:02.000Z:run-1:2:result:event-2",
+            rawEventId: "event-2"
+          }
+        }],
+        currentRun: {
+          runId: "run-1",
+          selectedAgent: DEFAULT_MAIN_AGENT,
+          prompt: "hello",
+          username: "alice",
+          usernameSource: "dom_text",
+          softwareVersion: "",
+          selectedSr: "",
+          pageTitle: "",
+          pageUrl: "",
+          status: "done",
+          startedAt: "2026-04-02T00:00:00.000Z",
+          updatedAt: "2026-04-02T00:00:02.000Z",
+          finalOutput: "更新回答"
+        },
+        runEventState: {
+          frontier: {
+            version: 1,
+            acceptedEventCount: 1,
+            lastSequence: 2,
+            contiguousSequence: 2,
+            lastAcceptedCanonicalKey: "run-1:2:result",
+            lastAcceptedRawEventId: "event-2",
+            lastAcceptedAt: "2026-04-02T00:00:02.000Z"
+          },
+          acceptedCanonicalKeys: ["run-1:2:result"],
+          diagnostics: []
+        },
+        syncMetadata: {
+          origin: "sidepanel",
+          snapshotVersion: 1,
+          generatedAt: "2026-04-02T00:00:02.100Z",
+          frontier: {
+            version: 1,
+            acceptedEventCount: 1,
+            lastSequence: 2,
+            contiguousSequence: 2,
+            lastAcceptedCanonicalKey: "run-1:2:result",
+            lastAcceptedRawEventId: "event-2",
+            lastAcceptedAt: "2026-04-02T00:00:02.000Z"
+          },
+          lastAcceptedCanonicalKey: "run-1:2:result"
+        }
+      }
+    };
+    const listenerRegistry: { handler?: (message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean } = {};
+
+    vi.stubGlobal("chrome", {
+      tabs: {
+        query: vi.fn().mockResolvedValue([{ id: 1, url: "https://example.com/page" }]),
+        get: vi.fn().mockResolvedValue({ id: 1, url: "https://example.com/page" }),
+        sendMessage: vi.fn()
+      },
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: storageState[key] })),
+          set: vi.fn(async (payload: Record<string, unknown>) => Object.assign(storageState, payload))
+        }
+      },
+      permissions: {
+        contains: vi.fn().mockResolvedValue(true),
+        request: vi.fn().mockResolvedValue(true)
+      },
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        onMessage: { addListener: vi.fn((handler) => { listenerRegistry.handler = handler; }) },
+        onInstalled: { addListener: vi.fn() }
+      },
+      sidePanel: {
+        setOptions: vi.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
+        setPanelBehavior: vi.fn().mockResolvedValue(undefined)
+      },
+      scripting: {
+        executeScript: vi.fn().mockResolvedValue(undefined)
+      }
+    } as unknown as typeof chrome);
+
+    await import("./index");
+
+    const response = await new Promise<unknown>((resolve) => {
+      listenerRegistry.handler?.({
+        type: "SYNC_RUN_STATE",
+        payload: {
+          status: "done",
+          activeSessionId: null,
+          capturedFields: null,
+          runPrompt: "hello",
+          runEvents: [{
+            id: "event-1",
+            runId: "run-1",
+            type: "result",
+            createdAt: "2026-04-02T00:00:01.000Z",
+            sequence: 1,
+            message: "旧回答"
+          }],
+          currentRun: {
+            runId: "run-1",
+            selectedAgent: DEFAULT_MAIN_AGENT,
+            prompt: "hello",
+            username: "alice",
+            usernameSource: "dom_text",
+            softwareVersion: "",
+            selectedSr: "",
+            pageTitle: "",
+            pageUrl: "",
+            status: "done",
+            startedAt: "2026-04-02T00:00:00.000Z",
+            updatedAt: "2026-04-02T00:00:01.000Z",
+            finalOutput: "旧回答"
+          },
+          answers: [],
+          error: null,
+          errorMessage: "",
+          matchedRule: null,
+          lastCapturedUrl: null,
+          usernameContext: null,
+          stream: { runId: "run-1", status: "done", pendingQuestionId: null },
+          runEventState: {
+            frontier: {
+              version: 1,
+              acceptedEventCount: 1,
+              lastSequence: 1,
+              contiguousSequence: 1,
+              lastAcceptedCanonicalKey: "run-1:1:result",
+              lastAcceptedRawEventId: "event-1",
+              lastAcceptedAt: "2026-04-02T00:00:01.000Z"
+            },
+            acceptedCanonicalKeys: ["run-1:1:result"],
+            diagnostics: []
+          },
+          syncMetadata: {
+            origin: "sidepanel",
+            snapshotVersion: 1,
+            generatedAt: "2026-04-02T00:00:01.100Z",
+            frontier: {
+              version: 1,
+              acceptedEventCount: 1,
+              lastSequence: 1,
+              contiguousSequence: 1,
+              lastAcceptedCanonicalKey: "run-1:1:result",
+              lastAcceptedRawEventId: "event-1",
+              lastAcceptedAt: "2026-04-02T00:00:01.000Z"
+            },
+            lastAcceptedCanonicalKey: "run-1:1:result"
+          }
+        }
+      }, {}, resolve);
+    }) as { ok: boolean };
+
+    expect(response.ok).toBe(true);
+    expect((storageState["ai-web-assistant-state"] as { currentRun: { finalOutput: string } }).currentRun.finalOutput).toBe("更新回答");
   });
 
   it("returns context with controlled permission request and activeTab fallback hint", async () => {

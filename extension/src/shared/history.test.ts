@@ -59,4 +59,60 @@ describe("indexedDB history store", () => {
     expect(detail?.events).toHaveLength(1);
     expect(detail?.answers[0]?.answer).toBe("yes");
   });
+
+  it("suppresses duplicate event persistence by canonical identity while keeping deterministic order", async () => {
+    const run: RunRecord = {
+      runId: "run-dup",
+      selectedAgent: DEFAULT_MAIN_AGENT,
+      prompt: "prompt",
+      username: "alice",
+      usernameSource: "dom_text",
+      softwareVersion: "v1.2.3",
+      selectedSr: "SR-001",
+      pageTitle: "Title",
+      pageUrl: "https://example.com",
+      status: "streaming",
+      startedAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+      finalOutput: ""
+    };
+
+    await store.saveRun(run);
+    await store.saveEvent({
+      id: "raw-1",
+      runId: "run-dup",
+      type: "thinking",
+      createdAt: "2026-04-01T00:00:01.000Z",
+      sequence: 1,
+      message: "Hello",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    });
+    await store.saveEvent({
+      id: "raw-2",
+      runId: "run-dup",
+      type: "thinking",
+      createdAt: "2026-04-01T00:00:02.000Z",
+      sequence: 2,
+      message: "Hello world",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    });
+
+    const detail = await store.getRunDetail("run-dup");
+    expect(detail?.events).toHaveLength(1);
+    expect(detail?.events[0]?.message).toBe("Hello world");
+  });
 });

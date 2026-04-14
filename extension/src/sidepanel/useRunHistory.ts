@@ -54,6 +54,7 @@ export function useRunHistory() {
 
   async function saveEvent(event: NormalizedRunEvent) {
     await historyStore.saveEvent(event);
+    await refresh();
   }
 
   async function saveAnswer(answer: AnswerRecord) {

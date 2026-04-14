@@ -1,4 +1,4 @@
-import { DEFAULT_MAIN_AGENT } from "./protocol";
+import { DEFAULT_MAIN_AGENT, createEmptyRunEventState } from "./protocol";
 import type { AssistantState } from "./types";
 
 export const STORAGE_KEY = "ai-web-assistant-state";
@@ -24,6 +24,9 @@ export const initialAssistantState: AssistantState = {
   stream: {
     runId: null,
     status: "idle",
-    pendingQuestionId: null
-  }
+    pendingQuestionId: null,
+    reconnectCount: 0
+  },
+  runEventState: createEmptyRunEventState(),
+  syncMetadata: null
 };

@@ -1,6 +1,19 @@
 import type { AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } from "../shared/types";
 import { createDefaultFieldTemplates, createDefaultRule, createId } from "../shared/rules";
-import type { NormalizedRunEvent, RunRecord } from "../shared/protocol";
+import {
+  appendRunEventDiagnostic,
+  compareRunEventFrontiers,
+  createEmptyRunEventFrontier,
+  createEmptyRunEventState,
+  deriveRunEventFrontier,
+  sortNormalizedRunEvents,
+  withCanonicalEventMetadata,
+  type NormalizedRunEvent,
+  type RunEventDiagnostic,
+  type RunEventState,
+  type RunStateSyncMetadata,
+  type RunRecord
+} from "../shared/protocol";
 import { collectRunAssistantResponseText, isAssistantResponseDeltaEvent } from "./reasoningTimeline";
 import { getNextPendingQuestionId } from "./questionState";
 
@@ -38,6 +51,19 @@ export interface SessionNavigationItem {
 }
 
 export const DRAFT_SESSION_KEY = "draft:new-session";
+
+export interface RunEventAcceptanceResult {
+  accepted: boolean;
+  decision: RunEventDiagnostic["decision"];
+  event: NormalizedRunEvent;
+  nextEvents: NormalizedRunEvent[];
+  nextRunEventState: RunEventState;
+  diagnostic: RunEventDiagnostic;
+}
+
+function logRunAcceptance(entry: Record<string, unknown>) {
+  console.info("[sidepanel-run-acceptance]", entry);
+}
 
 function isTerminalAssistantStatus(status: AssistantState["status"]) {
   return status === "done" || status === "error";
@@ -81,19 +107,157 @@ export function toTimestamp(value: string | null | undefined) {
 }
 
 function isSameRunEvent(current: NormalizedRunEvent, incoming: NormalizedRunEvent) {
-  return current.id === incoming.id || (current.runId === incoming.runId && current.sequence === incoming.sequence);
+  const currentCanonical = current.canonical?.key ?? withCanonicalEventMetadata(current).canonical?.key;
+  const incomingCanonical = incoming.canonical?.key ?? withCanonicalEventMetadata(incoming).canonical?.key;
+  return current.id === incoming.id
+    || (Boolean(currentCanonical) && currentCanonical === incomingCanonical)
+    || (current.runId === incoming.runId && current.sequence === incoming.sequence && current.type === incoming.type);
 }
 
 export function mergeRunEvent(currentEvents: NormalizedRunEvent[], incomingEvent: NormalizedRunEvent) {
-  const existingIndex = currentEvents.findIndex((event) => isSameRunEvent(event, incomingEvent));
+  const normalizedIncomingEvent = withCanonicalEventMetadata(incomingEvent);
+  const normalizedCurrentEvents = currentEvents.map((event) => withCanonicalEventMetadata(event));
+  const existingIndex = normalizedCurrentEvents.findIndex((event) => isSameRunEvent(event, normalizedIncomingEvent));
 
   if (existingIndex < 0) {
-    return [...currentEvents, incomingEvent];
+    return sortNormalizedRunEvents([...normalizedCurrentEvents, normalizedIncomingEvent]);
   }
 
-  const nextEvents = [...currentEvents];
-  nextEvents[existingIndex] = incomingEvent;
-  return nextEvents;
+  const nextEvents = [...normalizedCurrentEvents];
+  nextEvents[existingIndex] = {
+    ...nextEvents[existingIndex],
+    ...normalizedIncomingEvent,
+    id: nextEvents[existingIndex]?.id ?? normalizedIncomingEvent.id,
+    canonical: normalizedIncomingEvent.canonical ?? nextEvents[existingIndex]?.canonical
+  };
+  return sortNormalizedRunEvents(nextEvents);
+}
+
+export function normalizeRunEventState(runEvents: NormalizedRunEvent[], runEventState?: RunEventState | null): RunEventState {
+  const acceptedEvents = sortNormalizedRunEvents(runEvents);
+  const acceptedCanonicalKeys = acceptedEvents.map((event) => event.canonical?.key ?? withCanonicalEventMetadata(event).canonical!.key);
+  const frontier = deriveRunEventFrontier(acceptedEvents);
+  return {
+    frontier,
+    acceptedCanonicalKeys,
+    diagnostics: runEventState?.diagnostics ?? []
+  };
+}
+
+export function createRunStateSyncMetadata(origin: RunStateSyncMetadata["origin"], runEventState: RunEventState): RunStateSyncMetadata {
+  return {
+    origin,
+    snapshotVersion: runEventState.frontier.version,
+    generatedAt: new Date().toISOString(),
+    frontier: runEventState.frontier,
+    lastAcceptedCanonicalKey: runEventState.frontier.lastAcceptedCanonicalKey
+  };
+}
+
+/** @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM */
+export function acceptIncomingRunEvent(
+  currentEvents: NormalizedRunEvent[],
+  incomingEvent: NormalizedRunEvent,
+  runEventState?: RunEventState | null
+): RunEventAcceptanceResult {
+  const normalizedCurrentEvents = sortNormalizedRunEvents(currentEvents);
+  const currentState = normalizeRunEventState(normalizedCurrentEvents, runEventState);
+  const event = withCanonicalEventMetadata(incomingEvent);
+  const priorFrontier = currentState.frontier ?? createEmptyRunEventFrontier();
+  const canonicalKey = event.canonical?.key ?? null;
+  const currentAcceptedCanonicalKeys = new Set(currentState.acceptedCanonicalKeys);
+  const sequence = Number.isFinite(event.sequence) ? event.sequence : null;
+
+  let decision: RunEventDiagnostic["decision"] = "accepted";
+  let classification: RunEventDiagnostic["classification"] = "in_order";
+  let accepted = true;
+
+  if (!canonicalKey) {
+    decision = "invalid";
+    classification = undefined;
+    accepted = false;
+  } else if (currentAcceptedCanonicalKeys.has(canonicalKey)) {
+    decision = "duplicate";
+    accepted = false;
+  } else if (
+    sequence !== null
+    && priorFrontier.contiguousSequence !== null
+    && sequence <= priorFrontier.contiguousSequence
+  ) {
+    decision = "stale_replay";
+    accepted = false;
+  } else if (
+    sequence !== null
+    && priorFrontier.lastSequence !== null
+    && sequence > priorFrontier.lastSequence + 1
+  ) {
+    decision = "gap";
+    classification = "gap";
+  } else if (
+    sequence !== null
+    && priorFrontier.lastSequence !== null
+    && sequence <= priorFrontier.lastSequence
+  ) {
+    decision = "out_of_order";
+    classification = "out_of_order";
+  }
+
+  const nextEvents = accepted ? mergeRunEvent(normalizedCurrentEvents, event) : normalizedCurrentEvents;
+  const nextRunEventStateBase = normalizeRunEventState(nextEvents, currentState);
+  const diagnostic: RunEventDiagnostic = {
+    runId: event.runId,
+    source: "sidepanel",
+    decision,
+    classification,
+    createdAt: new Date().toISOString(),
+    rawEventId: event.id,
+    canonicalEventKey: canonicalKey,
+    sequence,
+    priorFrontierSequence: priorFrontier.lastSequence,
+    resultingFrontierSequence: nextRunEventStateBase.frontier.lastSequence,
+    semanticIdentity: event.semantic?.identity,
+    messageId: event.semantic?.messageId,
+    partId: event.semantic?.partId,
+    channel: event.semantic?.channel,
+    emissionKind: event.semantic?.emissionKind,
+    identitySource: event.canonical?.identitySource,
+    reason: accepted ? undefined : decision === "stale_replay"
+      ? "incoming event did not advance accepted contiguous frontier"
+      : decision === "duplicate"
+        ? "canonical key already accepted"
+        : decision === "invalid"
+          ? "missing canonical identity"
+          : undefined
+  };
+  const nextRunEventState: RunEventState = {
+    ...nextRunEventStateBase,
+    diagnostics: appendRunEventDiagnostic(currentState.diagnostics, diagnostic)
+  };
+
+  logRunAcceptance({
+    runId: event.runId,
+    rawEventId: event.id,
+    canonicalEventKey: canonicalKey,
+    decision,
+    sequence,
+    priorFrontierSequence: priorFrontier.lastSequence,
+    resultingFrontierSequence: nextRunEventState.frontier.lastSequence,
+    identitySource: event.canonical?.identitySource,
+    semanticIdentity: event.semantic?.identity,
+    messageId: event.semantic?.messageId,
+    partId: event.semantic?.partId,
+    channel: event.semantic?.channel,
+    emissionKind: event.semantic?.emissionKind
+  });
+
+  return {
+    accepted,
+    decision,
+    event,
+    nextEvents,
+    nextRunEventState,
+    diagnostic
+  };
 }
 
 export function deriveRunFinalOutput(currentFinalOutput: string, event: NormalizedRunEvent) {
@@ -149,11 +313,14 @@ export function deriveLifecycleStatus(current: AssistantState, event: Normalized
 
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL */
 export function mergeStateUpdate(current: AssistantState, payload: AssistantState, history: AssistantState["history"], selectedHistoryDetail: AssistantState["selectedHistoryDetail"]): AssistantState {
+  const normalizedCurrentRunEventState = normalizeRunEventState(current.runEvents, current.runEventState);
+  const normalizedPayloadRunEventState = normalizeRunEventState(payload.runEvents, payload.runEventState);
   const mergedState: AssistantState = {
     ...current,
     ...payload,
     history,
-    selectedHistoryDetail
+    selectedHistoryDetail,
+    runEventState: normalizedPayloadRunEventState
   };
 
   const currentRunId = getStateRunId(current);
@@ -168,7 +335,7 @@ export function mergeStateUpdate(current: AssistantState, payload: AssistantStat
     return mergedState;
   }
 
-  const keepLocalRunEvents = current.runEvents.length > payload.runEvents.length;
+  const keepLocalRunEvents = compareRunEventFrontiers(normalizedCurrentRunEventState.frontier, normalizedPayloadRunEventState.frontier) > 0;
   const currentVisibleAssistantText = collectRunAssistantResponseText(current.runEvents, current.currentRun?.finalOutput ?? "");
   const payloadVisibleAssistantText = collectRunAssistantResponseText(payload.runEvents, payload.currentRun?.finalOutput ?? "");
   const keepLocalAssistantBody = Boolean(
@@ -207,6 +374,7 @@ export function mergeStateUpdate(current: AssistantState, payload: AssistantStat
 
   if (keepLocalRunEvents) {
     mergedState.runEvents = current.runEvents;
+    mergedState.runEventState = normalizedCurrentRunEventState;
   }
 
   if (keepLocalCurrentRun && current.currentRun) {
@@ -219,6 +387,19 @@ export function mergeStateUpdate(current: AssistantState, payload: AssistantStat
 
   if (keepLocalStatus) {
     mergedState.status = current.status;
+  }
+
+  if (!keepLocalRunEvents) {
+    mergedState.runEvents = sortNormalizedRunEvents(payload.runEvents);
+    mergedState.runEventState = normalizedPayloadRunEventState;
+  }
+
+  if (
+    current.syncMetadata
+    && payload.syncMetadata
+    && compareRunEventFrontiers(normalizedCurrentRunEventState.frontier, normalizedPayloadRunEventState.frontier) > 0
+  ) {
+    mergedState.syncMetadata = current.syncMetadata;
   }
 
   return mergedState;

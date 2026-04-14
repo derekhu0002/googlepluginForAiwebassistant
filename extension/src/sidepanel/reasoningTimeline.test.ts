@@ -785,6 +785,86 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(model.liveParts.map((part) => part.text)).toEqual(["当前问题", "当前回答"]);
   });
 
+  it("keeps deterministic order when accepted events arrive out of order", () => {
+    const model = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [
+          createEvent(3, {
+            runId: "run-live",
+            type: "thinking",
+            message: "第三段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-1:part-3",
+              itemKind: "text",
+              messageId: "msg-1",
+              partId: "part-3"
+            }
+          }),
+          createEvent(1, {
+            runId: "run-live",
+            type: "thinking",
+            message: "第一段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-1:part-1",
+              itemKind: "text",
+              messageId: "msg-1",
+              partId: "part-1"
+            }
+          }),
+          createEvent(2, {
+            runId: "run-live",
+            type: "thinking",
+            message: "第二段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-1:part-2",
+              itemKind: "text",
+              messageId: "msg-1",
+              partId: "part-2"
+            }
+          })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    expect(model.liveParts.map((part) => part.text)).toEqual(["当前问题", "第一段第二段第三段"]);
+  });
+
+  it("surfaces projection anomalies for terminal reopen conditions", () => {
+    const model = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, { runId: "run-live", type: "result", message: "最终回答", data: { message_id: "msg-1" } }),
+          createEvent(2, { runId: "run-live", type: "thinking", message: "终态后重放", data: { field: "text", message_id: "msg-1" } })
+        ],
+        status: "done",
+        runStatus: "done",
+        streamStatus: "done",
+        finalOutput: "最终回答",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    expect(model.anomalies?.some((anomaly) => anomaly.anomalyType === "terminal_reopen")).toBe(true);
+  });
+
   it("derives conservative timeline and cockpit states from terminal evidence", () => {
     expect(resolveTimelinePresentationState({
       events: [createEvent(1, { type: "thinking", message: "读取页面上下文" })],

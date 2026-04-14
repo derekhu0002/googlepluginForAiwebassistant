@@ -5,8 +5,16 @@ import { createDomainError, normalizeDomainError, toDisplayMessage } from "../sh
 import { evaluatePageAccess, matchesChromePattern, toOriginPermissionPattern } from "../shared/pageAccess";
 import { ensureContentScriptReady, isReceivingEndMissingError } from "../shared/scripting";
 import { findMatchingRule, getStoredRules, removeRule, RULES_STORAGE_KEY, saveRules, toCanonicalCapturedFields, upsertRule } from "../shared/rules";
-import type { ActiveTabContext, AssistantState, CapturedFields, PageRule, RuntimeMessage, UsernameContext } from "../shared/types";
-import { DEFAULT_MAIN_AGENT, type MainAgent, type RunRecord } from "../shared/protocol";
+import type { ActiveTabContext, AssistantState, CapturedFields, PageRule, RuntimeMessage, SyncableAssistantRunState, UsernameContext } from "../shared/types";
+import {
+  compareRunEventFrontiers,
+  createEmptyRunEventState,
+  deriveRunEventFrontier,
+  sortNormalizedRunEvents,
+  type MainAgent,
+  type RunRecord
+} from "../shared/protocol";
+import { DEFAULT_MAIN_AGENT } from "../shared/protocol";
 
 async function getState(): Promise<AssistantState> {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
@@ -40,13 +48,89 @@ async function patchState(partial: Partial<AssistantState>) {
   });
 }
 
-async function syncRunState(partial: Pick<AssistantState, "status" | "activeSessionId" | "capturedFields" | "runPrompt" | "runEvents" | "currentRun" | "answers" | "error" | "errorMessage" | "matchedRule" | "lastCapturedUrl" | "usernameContext" | "stream">) {
-  const current = await getState();
-  await setState({
+function logBackgroundSync(entry: Record<string, unknown>) {
+  console.info("[background-run-sync]", entry);
+}
+
+function normalizeSyncableState(state: SyncableAssistantRunState): SyncableAssistantRunState {
+  const runEvents = sortNormalizedRunEvents(state.runEvents ?? []);
+  const runEventState = state.runEventState ?? createEmptyRunEventState();
+  const frontier = deriveRunEventFrontier(runEvents);
+  return {
+    ...state,
+    runEvents,
+    runEventState: {
+      ...runEventState,
+      frontier,
+      acceptedCanonicalKeys: runEvents.map((event) => event.canonical?.key ?? event.id)
+    }
+  };
+}
+
+function reconcileRunState(current: AssistantState, incomingPartial: SyncableAssistantRunState) {
+  const incoming = normalizeSyncableState(incomingPartial);
+  const currentRunId = current.currentRun?.runId ?? current.stream.runId;
+  const incomingRunId = incoming.currentRun?.runId ?? incoming.stream.runId;
+  const currentFrontier = current.runEventState.frontier;
+  const incomingFrontier = incoming.runEventState.frontier;
+
+  if (currentRunId && incomingRunId && currentRunId !== incomingRunId) {
+    return {
+      decision: "ignored_cross_run" as const,
+      nextState: current,
+      shouldBroadcast: false
+    };
+  }
+
+  const frontierCompare = compareRunEventFrontiers(currentFrontier, incomingFrontier);
+  if (frontierCompare > 0) {
+    return {
+      decision: currentFrontier.lastAcceptedCanonicalKey === incomingFrontier.lastAcceptedCanonicalKey ? "rejected_replay" as const : "rejected_stale" as const,
+      nextState: current,
+      shouldBroadcast: false
+    };
+  }
+
+  const mergedState: AssistantState = {
     ...current,
-    ...partial,
+    ...incoming,
+    runEvents: frontierCompare === 0
+      ? current.runEvents.length >= incoming.runEvents.length ? current.runEvents : incoming.runEvents
+      : incoming.runEvents,
+    runEventState: frontierCompare === 0 && current.runEventState.frontier.acceptedEventCount >= incoming.runEventState.frontier.acceptedEventCount
+      ? current.runEventState
+      : incoming.runEventState,
+    syncMetadata: incoming.syncMetadata,
     lastUpdatedAt: new Date().toISOString()
+  };
+
+  return {
+    decision: frontierCompare === 0 ? "merged" as const : "accepted" as const,
+    nextState: mergedState,
+    shouldBroadcast: true
+  };
+}
+
+/** @ArchitectureID: ELM-FUNC-EXT-RECONCILE-RUN-STATE */
+async function syncRunState(partial: SyncableAssistantRunState) {
+  const current = await getState();
+  const normalizedIncoming = normalizeSyncableState(partial);
+  const reconciled = reconcileRunState(current, normalizedIncoming);
+  logBackgroundSync({
+    runId: normalizedIncoming.currentRun?.runId ?? normalizedIncoming.stream.runId,
+    origin: normalizedIncoming.syncMetadata?.origin ?? "sidepanel",
+    incomingVersion: normalizedIncoming.syncMetadata?.snapshotVersion ?? normalizedIncoming.runEventState.frontier.version ?? 0,
+    storedVersion: current.syncMetadata?.snapshotVersion ?? 0,
+    decision: reconciled.decision,
+    incomingFrontier: normalizedIncoming.runEventState.frontier.lastSequence,
+    storedFrontier: current.runEventState.frontier.lastSequence,
+    eventCountDelta: (normalizedIncoming.runEventState.frontier.acceptedEventCount ?? 0) - (current.runEventState.frontier.acceptedEventCount ?? 0),
+    answerCountDelta: (normalizedIncoming.answers?.length ?? 0) - (current.answers?.length ?? 0)
   });
+  if (!reconciled.shouldBroadcast) {
+    return;
+  }
+  await setState(reconciled.nextState);
 }
 
 async function getActiveTabId(): Promise<number> {
@@ -253,7 +337,9 @@ async function startRunFromActiveTab(options: { prompt: string; selectedAgent: M
     status: shouldCapture ? "collecting" : "streaming",
     error: null,
     errorMessage: "",
-    matchedRule: matchedRule ? { id: matchedRule.id, name: matchedRule.name } : null
+    matchedRule: matchedRule ? { id: matchedRule.id, name: matchedRule.name } : null,
+    runEventState: createEmptyRunEventState(),
+    syncMetadata: null
   });
 
   const capturedFields = shouldCapture ? await collectFromActiveTab() : null;
@@ -298,8 +384,11 @@ async function startRunFromActiveTab(options: { prompt: string; selectedAgent: M
     stream: {
       runId: currentRun.runId,
       status: "streaming",
-      pendingQuestionId: null
-    }
+      pendingQuestionId: null,
+      reconnectCount: 0
+    },
+    runEventState: createEmptyRunEventState(),
+    syncMetadata: null
   });
 
   return {

@@ -16,6 +16,77 @@ export type NormalizedEventChannel = typeof NORMALIZED_EVENT_CHANNELS[number];
 export type NormalizedEventEmissionKind = typeof NORMALIZED_EVENT_EMISSION_KINDS[number];
 export type NormalizedEventItemKind = typeof NORMALIZED_EVENT_ITEM_KINDS[number];
 
+export type CanonicalEventIdentitySource =
+  | "semantic_identity"
+  | "semantic_message_part_channel_emission"
+  | "run_sequence_type"
+  | "raw_id";
+
+export type RunEventDecision = "accepted" | "duplicate" | "stale_replay" | "gap" | "out_of_order" | "invalid";
+
+export interface RunEventCanonicalMetadata {
+  key: string;
+  identitySource: CanonicalEventIdentitySource;
+  orderKey: string;
+  rawEventId: string;
+  semanticIdentity?: string;
+  semanticMessageId?: string;
+  semanticPartId?: string;
+  semanticChannel?: NormalizedEventChannel;
+  semanticEmissionKind?: NormalizedEventEmissionKind;
+}
+
+export interface RunEventTransportMetadata {
+  rawEventId: string;
+  receivedAt: string;
+  reconnectCount: number;
+  streamStatus: "connecting" | "streaming" | "reconnecting" | "closed" | "error";
+}
+
+export interface RunEventFrontier {
+  version: number;
+  acceptedEventCount: number;
+  lastSequence: number | null;
+  contiguousSequence: number | null;
+  lastAcceptedCanonicalKey: string | null;
+  lastAcceptedRawEventId: string | null;
+  lastAcceptedAt: string | null;
+}
+
+export interface RunEventDiagnostic {
+  runId: string;
+  source: "transport" | "sidepanel" | "background" | "history" | "projection";
+  decision: RunEventDecision;
+  createdAt: string;
+  rawEventId: string | null;
+  canonicalEventKey: string | null;
+  sequence: number | null;
+  priorFrontierSequence: number | null;
+  resultingFrontierSequence: number | null;
+  semanticIdentity?: string;
+  messageId?: string;
+  partId?: string;
+  channel?: NormalizedEventChannel;
+  emissionKind?: NormalizedEventEmissionKind;
+  identitySource?: CanonicalEventIdentitySource;
+  classification?: "in_order" | "gap" | "out_of_order";
+  reason?: string;
+}
+
+export interface RunEventState {
+  frontier: RunEventFrontier;
+  acceptedCanonicalKeys: string[];
+  diagnostics: RunEventDiagnostic[];
+}
+
+export interface RunStateSyncMetadata {
+  origin: "sidepanel" | "background";
+  snapshotVersion: number;
+  generatedAt: string;
+  frontier: RunEventFrontier;
+  lastAcceptedCanonicalKey: string | null;
+}
+
 export type UsernameSource =
   | "dom_data_attribute"
   | "dom_text"
@@ -64,6 +135,8 @@ export interface NormalizedRunEvent {
     messageId?: string;
     partId?: string;
   };
+  canonical?: RunEventCanonicalMetadata;
+  transport?: RunEventTransportMetadata;
 }
 
 export interface RunStreamLifecycle {
@@ -144,4 +217,179 @@ export interface RunHistoryDetail {
   run: RunRecord;
   events: NormalizedRunEvent[];
   answers: AnswerRecord[];
+}
+
+export function createEmptyRunEventFrontier(): RunEventFrontier {
+  return {
+    version: 0,
+    acceptedEventCount: 0,
+    lastSequence: null,
+    contiguousSequence: null,
+    lastAcceptedCanonicalKey: null,
+    lastAcceptedRawEventId: null,
+    lastAcceptedAt: null
+  };
+}
+
+export function createEmptyRunEventState(): RunEventState {
+  return {
+    frontier: createEmptyRunEventFrontier(),
+    acceptedCanonicalKeys: [],
+    diagnostics: []
+  };
+}
+
+function toCanonicalPart(value?: string | null) {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+export function deriveCanonicalEventMetadata(event: NormalizedRunEvent): RunEventCanonicalMetadata {
+  const semanticIdentity = toCanonicalPart(event.semantic?.identity);
+  const semanticMessageId = toCanonicalPart(event.semantic?.messageId);
+  const semanticPartId = toCanonicalPart(event.semantic?.partId);
+  const semanticChannel = event.semantic?.channel;
+  const semanticEmissionKind = event.semantic?.emissionKind;
+
+  let identitySource: CanonicalEventIdentitySource = "raw_id";
+  let key = event.id;
+
+  if (semanticIdentity) {
+    identitySource = "semantic_identity";
+    key = semanticIdentity;
+  } else if (semanticMessageId && semanticPartId && semanticChannel && semanticEmissionKind) {
+    identitySource = "semantic_message_part_channel_emission";
+    key = `${semanticMessageId}:${semanticPartId}:${semanticChannel}:${semanticEmissionKind}`;
+  } else if (Number.isFinite(event.sequence)) {
+    identitySource = "run_sequence_type";
+    key = `${event.runId}:${event.sequence}:${event.type}`;
+  }
+
+  return {
+    key,
+    identitySource,
+    orderKey: [
+      event.runId,
+      String(Number.isFinite(event.sequence) ? event.sequence : Number.MAX_SAFE_INTEGER),
+      event.createdAt,
+      key,
+      event.id
+    ].join(":"),
+    rawEventId: event.id,
+    semanticIdentity,
+    semanticMessageId,
+    semanticPartId,
+    semanticChannel,
+    semanticEmissionKind
+  };
+}
+
+export function withCanonicalEventMetadata(event: NormalizedRunEvent): NormalizedRunEvent {
+  const canonical = deriveCanonicalEventMetadata(event);
+  if (
+    event.canonical?.key === canonical.key
+    && event.canonical.identitySource === canonical.identitySource
+    && event.canonical.orderKey === canonical.orderKey
+  ) {
+    return event;
+  }
+
+  return {
+    ...event,
+    canonical
+  };
+}
+
+export function compareNormalizedRunEvents(left: NormalizedRunEvent, right: NormalizedRunEvent) {
+  const leftCanonical = left.canonical ?? deriveCanonicalEventMetadata(left);
+  const rightCanonical = right.canonical ?? deriveCanonicalEventMetadata(right);
+  const leftSequence = Number.isFinite(left.sequence) ? left.sequence : Number.MAX_SAFE_INTEGER;
+  const rightSequence = Number.isFinite(right.sequence) ? right.sequence : Number.MAX_SAFE_INTEGER;
+
+  if (leftSequence !== rightSequence) {
+    return leftSequence - rightSequence;
+  }
+
+  const createdAtCompare = left.createdAt.localeCompare(right.createdAt);
+  if (createdAtCompare !== 0) {
+    return createdAtCompare;
+  }
+
+  const orderKeyCompare = leftCanonical.orderKey.localeCompare(rightCanonical.orderKey);
+  if (orderKeyCompare !== 0) {
+    return orderKeyCompare;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+export function sortNormalizedRunEvents(events: NormalizedRunEvent[]) {
+  return [...events]
+    .map((event) => withCanonicalEventMetadata(event))
+    .sort(compareNormalizedRunEvents);
+}
+
+export function deriveRunEventFrontier(events: NormalizedRunEvent[]): RunEventFrontier {
+  const acceptedEvents = sortNormalizedRunEvents(events);
+  if (!acceptedEvents.length) {
+    return createEmptyRunEventFrontier();
+  }
+
+  let contiguousSequence: number | null = null;
+  let previousSequence: number | null = null;
+  for (const event of acceptedEvents) {
+    if (!Number.isFinite(event.sequence)) {
+      continue;
+    }
+    if (contiguousSequence === null) {
+      contiguousSequence = event.sequence;
+      previousSequence = event.sequence;
+      continue;
+    }
+    if (previousSequence !== null && event.sequence === previousSequence + 1) {
+      contiguousSequence = event.sequence;
+      previousSequence = event.sequence;
+      continue;
+    }
+    if (previousSequence !== null && event.sequence <= previousSequence) {
+      continue;
+    }
+    break;
+  }
+
+  const lastAccepted = acceptedEvents[acceptedEvents.length - 1];
+  const lastCanonical = lastAccepted.canonical ?? deriveCanonicalEventMetadata(lastAccepted);
+  return {
+    version: acceptedEvents.length,
+    acceptedEventCount: acceptedEvents.length,
+    lastSequence: Number.isFinite(lastAccepted.sequence) ? lastAccepted.sequence : null,
+    contiguousSequence,
+    lastAcceptedCanonicalKey: lastCanonical.key,
+    lastAcceptedRawEventId: lastAccepted.id,
+    lastAcceptedAt: lastAccepted.createdAt
+  };
+}
+
+export function compareRunEventFrontiers(left?: RunEventFrontier | null, right?: RunEventFrontier | null) {
+  const safeLeft = left ?? createEmptyRunEventFrontier();
+  const safeRight = right ?? createEmptyRunEventFrontier();
+  if (safeLeft.version !== safeRight.version) {
+    return safeLeft.version - safeRight.version;
+  }
+  if ((safeLeft.lastSequence ?? -1) !== (safeRight.lastSequence ?? -1)) {
+    return (safeLeft.lastSequence ?? -1) - (safeRight.lastSequence ?? -1);
+  }
+  if (safeLeft.acceptedEventCount !== safeRight.acceptedEventCount) {
+    return safeLeft.acceptedEventCount - safeRight.acceptedEventCount;
+  }
+  return (safeLeft.lastAcceptedAt ?? "").localeCompare(safeRight.lastAcceptedAt ?? "");
+}
+
+export function appendRunEventDiagnostic(
+  diagnostics: RunEventDiagnostic[],
+  diagnostic: RunEventDiagnostic,
+  limit = 50
+) {
+  const next = [...diagnostics, diagnostic];
+  return next.length > limit ? next.slice(next.length - limit) : next;
 }

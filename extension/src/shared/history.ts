@@ -1,7 +1,7 @@
-import type { AnswerRecord, NormalizedRunEvent, RunHistoryDetail, RunRecord } from "./protocol";
+import { compareNormalizedRunEvents, withCanonicalEventMetadata, type AnswerRecord, type NormalizedRunEvent, type RunHistoryDetail, type RunRecord } from "./protocol";
 
 const DB_NAME = "ai-web-assistant-history";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const RUNS_STORE = "runs";
 const EVENTS_STORE = "events";
 const ANSWERS_STORE = "answers";
@@ -9,7 +9,8 @@ const ANSWERS_STORE = "answers";
 const memoryDb = {
   runs: new Map<string, RunRecord>(),
   events: new Map<string, NormalizedRunEvent>(),
-  answers: new Map<string, AnswerRecord>()
+  answers: new Map<string, AnswerRecord>(),
+  canonicalEventIndex: new Map<string, string>()
 };
 
 export interface HistoryStore {
@@ -53,6 +54,7 @@ function openDatabase() {
         const store = db.createObjectStore(EVENTS_STORE, { keyPath: "id" });
         store.createIndex("by_run", "runId", { unique: false });
         store.createIndex("by_run_sequence", ["runId", "sequence"], { unique: false });
+        store.createIndex("by_run_canonical", ["runId", "canonical.key"], { unique: false });
       }
 
       if (!db.objectStoreNames.contains(ANSWERS_STORE)) {
@@ -63,6 +65,19 @@ function openDatabase() {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+function toCanonicalHistoryEvent(event: NormalizedRunEvent) {
+  return withCanonicalEventMetadata(event);
+}
+
+function orderHistoryEvents(events: NormalizedRunEvent[]) {
+  return [...events].map(toCanonicalHistoryEvent).sort(compareNormalizedRunEvents);
+}
+
+function getCanonicalStorageKey(event: NormalizedRunEvent) {
+  const canonicalEvent = toCanonicalHistoryEvent(event);
+  return `${canonicalEvent.runId}:${canonicalEvent.canonical?.key ?? canonicalEvent.id}`;
 }
 
 async function withStore<T>(storeNames: string[], mode: IDBTransactionMode, fn: (tx: IDBTransaction) => Promise<T>) {
@@ -80,6 +95,7 @@ async function withStore<T>(storeNames: string[], mode: IDBTransactionMode, fn: 
   }
 }
 
+/** @ArchitectureID: ELM-FUNC-EXT-CALL-ADAPTER-API */
 export function createIndexedDbHistoryStore(): HistoryStore {
   return {
     async saveRun(run) {
@@ -108,7 +124,7 @@ export function createIndexedDbHistoryStore(): HistoryStore {
         }
         return {
           run,
-          events: [...memoryDb.events.values()].filter((event) => event.runId === runId).sort((left, right) => left.sequence - right.sequence),
+          events: orderHistoryEvents([...memoryDb.events.values()].filter((event) => event.runId === runId)),
           answers: [...memoryDb.answers.values()].filter((answer) => answer.runId === runId).sort((left, right) => left.submittedAt.localeCompare(right.submittedAt))
         };
       }
@@ -123,18 +139,39 @@ export function createIndexedDbHistoryStore(): HistoryStore {
 
         return {
           run,
-          events: events.sort((left, right) => left.sequence - right.sequence),
+          events: orderHistoryEvents(events),
           answers: answers.sort((left, right) => left.submittedAt.localeCompare(right.submittedAt))
         };
       });
     },
     async saveEvent(event) {
+      const canonicalEvent = toCanonicalHistoryEvent(event);
+      const canonicalStorageKey = getCanonicalStorageKey(canonicalEvent);
       if (typeof indexedDB === "undefined") {
-        memoryDb.events.set(event.id, event);
+        const existingId = memoryDb.canonicalEventIndex.get(canonicalStorageKey);
+        if (existingId) {
+          const existingEvent = memoryDb.events.get(existingId);
+          memoryDb.events.set(existingId, existingEvent ? { ...existingEvent, ...canonicalEvent, canonical: canonicalEvent.canonical } : canonicalEvent);
+          return;
+        }
+        memoryDb.events.set(canonicalEvent.id, canonicalEvent);
+        memoryDb.canonicalEventIndex.set(canonicalStorageKey, canonicalEvent.id);
         return;
       }
       await withStore([EVENTS_STORE], "readwrite", async (tx) => {
-        tx.objectStore(EVENTS_STORE).put(event);
+        const store = tx.objectStore(EVENTS_STORE);
+        const existingEvents = await promisifyRequest(store.index("by_run_canonical").getAll([canonicalEvent.runId, canonicalEvent.canonical?.key ?? canonicalEvent.id]) as IDBRequest<NormalizedRunEvent[]>);
+        const existingEvent = existingEvents[0];
+        if (existingEvent) {
+          store.put({
+            ...existingEvent,
+            ...canonicalEvent,
+            id: existingEvent.id,
+            canonical: canonicalEvent.canonical
+          });
+          return;
+        }
+        store.put(canonicalEvent);
       });
     },
     async saveAnswer(answer) {

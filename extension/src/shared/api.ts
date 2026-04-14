@@ -2,7 +2,7 @@ import { z } from "zod";
 import { extensionConfig } from "./config";
 import { createDomainError, ERROR_CODES } from "./errors";
 import type { AnswerApiResponse, CapturedFields, FeedbackApiResponse, StartRunApiResponse, UsernameContext } from "./types";
-import { MAIN_AGENTS, type MainAgent, type MessageFeedbackRequest, type NormalizedRunEvent, type QuestionAnswerRequest, type RunStartRequest } from "./protocol";
+import { MAIN_AGENTS, type MainAgent, type MessageFeedbackRequest, type NormalizedRunEvent, type QuestionAnswerRequest, type RunStartRequest, withCanonicalEventMetadata } from "./protocol";
 
 const failureSchema = z.object({
   ok: z.literal(false),
@@ -142,10 +142,12 @@ export async function startRun(prompt: string, capture: CapturedFields | null, u
 }
 
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
+/** @ArchitectureID: ELM-FUNC-EXT-CALL-ADAPTER-API */
 export function createRunEventStream(runId: string, handlers: {
   onEvent: (event: NormalizedRunEvent) => void;
   onError: (error: Error) => void;
   onStatusChange?: (status: "connecting" | "streaming" | "reconnecting") => void;
+  onTransportLog?: (entry: Record<string, unknown>) => void;
   shouldClose?: (event: NormalizedRunEvent) => boolean;
 }): EventSource {
   const streamUrl = new URL(`${extensionConfig.apiBaseUrl}/api/runs/${runId}/events`);
@@ -158,6 +160,15 @@ export function createRunEventStream(runId: string, handlers: {
   let hasConnected = false;
   let hasReceivedEvent = false;
   let closedByClient = false;
+  let reconnectCount = 0;
+
+  const logTransport = (entry: Record<string, unknown>) => {
+    handlers.onTransportLog?.({
+      runId,
+      source: "transport",
+      ...entry
+    });
+  };
 
   const closeStream = () => {
     if (closedByClient) {
@@ -170,22 +181,49 @@ export function createRunEventStream(runId: string, handlers: {
   eventSource.close = closeStream;
 
   handlers.onStatusChange?.("connecting");
+  logTransport({ transition: "connecting", reconnectCount, closeReason: null });
 
   eventSource.addEventListener("open", () => {
     hasConnected = true;
     handlers.onStatusChange?.("streaming");
+    logTransport({ transition: reconnectCount > 0 ? "reopen" : "open", reconnectCount, closeReason: null });
   });
 
   eventSource.addEventListener("message", (event) => {
     try {
-      const parsed = streamEventSchema.parse(JSON.parse((event as MessageEvent<string>).data));
+      const parsed = withCanonicalEventMetadata(streamEventSchema.parse(JSON.parse((event as MessageEvent<string>).data)));
       hasReceivedEvent = true;
       handlers.onStatusChange?.("streaming");
-      handlers.onEvent(parsed);
+      const transportedEvent: NormalizedRunEvent = {
+        ...parsed,
+        transport: {
+          rawEventId: parsed.id,
+          receivedAt: new Date().toISOString(),
+          reconnectCount,
+          streamStatus: "streaming"
+        }
+      };
+      logTransport({
+        transition: "message",
+        reconnectCount,
+        rawEventId: transportedEvent.id,
+        canonicalEventKey: transportedEvent.canonical?.key,
+        semanticIdentity: transportedEvent.semantic?.identity,
+        messageId: transportedEvent.semantic?.messageId,
+        partId: transportedEvent.semantic?.partId,
+        parseSuccess: true
+      });
+      handlers.onEvent(transportedEvent);
       if (handlers.shouldClose?.(parsed)) {
         closeStream();
       }
     } catch (error) {
+      logTransport({
+        transition: "message_error",
+        reconnectCount,
+        parseSuccess: false,
+        reason: error instanceof Error ? error.message : "Invalid stream event"
+      });
       handlers.onError(error instanceof Error ? error : new Error("Invalid stream event"));
     }
   });
@@ -196,11 +234,14 @@ export function createRunEventStream(runId: string, handlers: {
     }
 
     if (!hasConnected && !hasReceivedEvent) {
+      logTransport({ transition: "error", reconnectCount, closeReason: "connection_failed" });
       handlers.onError(new Error("SSE connection failed"));
       return;
     }
 
+    reconnectCount += 1;
     handlers.onStatusChange?.("reconnecting");
+    logTransport({ transition: "reconnecting", reconnectCount, closeReason: "eventsource_error" });
   });
 
   return eventSource;

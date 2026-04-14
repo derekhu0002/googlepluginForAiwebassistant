@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createRunEventStream, submitQuestionAnswer } from "../shared/api";
 import { toDisplayMessage } from "../shared/errors";
 import { initialAssistantState } from "../shared/state";
-import { DEFAULT_MAIN_AGENT, MAIN_AGENTS, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
-import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
+import { DEFAULT_MAIN_AGENT, MAIN_AGENTS, createEmptyRunEventState, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
+import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage, SyncableAssistantRunState } from "../shared/types";
 import { getActiveQuestionEvent, hasPendingQuestion } from "./questionState";
 import { buildRunDiagnosticsSnapshot, downloadRunDiagnosticsLog, type RunDiagnosticsSource } from "./diagnostics";
 import { buildStableTranscriptProjection, resolveCockpitStatusModel, resolveTimelinePresentationState, type BuildChatStreamItemsOptions, type TranscriptReadModel } from "./reasoningTimeline";
 import {
+  acceptIncomingRunEvent,
+  createRunStateSyncMetadata,
   DRAFT_SESSION_KEY,
   buildSessionNavigationItems,
   cloneRule,
@@ -19,7 +21,6 @@ import {
   deriveRunTitle,
   deriveSessionKey,
   hasTerminalRunEvidence,
-  mergeRunEvent,
   mergeStateUpdate,
   sendMessage,
   toTimestamp,
@@ -43,7 +44,18 @@ export interface MainAgentOption {
   description: string;
 }
 
-async function syncRunStateToBackground(nextState: Pick<AssistantState, "status" | "activeSessionId" | "capturedFields" | "runPrompt" | "runEvents" | "currentRun" | "answers" | "error" | "errorMessage" | "matchedRule" | "lastCapturedUrl" | "usernameContext" | "stream">) {
+function logSidepanelRunEvent(entry: Record<string, unknown>) {
+  console.info("[sidepanel-run-event]", entry);
+}
+
+async function syncRunStateToBackground(nextState: SyncableAssistantRunState) {
+  logSidepanelRunEvent({
+    phase: "sync_to_background",
+    runId: nextState.currentRun?.runId ?? nextState.stream.runId,
+    acceptedEventCount: nextState.runEventState.frontier.acceptedEventCount,
+    lastAcceptedCanonicalKey: nextState.runEventState.frontier.lastAcceptedCanonicalKey,
+    snapshotVersion: nextState.syncMetadata?.snapshotVersion ?? 0
+  });
   await sendMessage<{ ok: boolean }>({
     type: "SYNC_RUN_STATE",
     payload: nextState
@@ -577,10 +589,13 @@ export function useSidepanelController() {
       runEvents: [],
       answers: [],
       status: "streaming",
+      runEventState: createEmptyRunEventState(),
+      syncMetadata: null,
       stream: {
         runId: responseData.runId,
         status: "connecting",
-        pendingQuestionId: null
+        pendingQuestionId: null,
+        reconnectCount: 0
       }
     }));
 
@@ -588,32 +603,60 @@ export function useSidepanelController() {
     setSelectedSessionKey(deriveSessionKey(responseData.currentRun));
 
     eventSourceRef.current = createRunEventStream(responseData.runId, {
+      onTransportLog: (entry) => {
+        logSidepanelRunEvent(entry);
+      },
       onEvent: async (event) => {
-        await saveEvent(event);
-
         setState((current) => {
-          const nextEvents = mergeRunEvent(current.runEvents, event);
-          const lifecycleStatus = deriveLifecycleStatus(current, event, nextEvents);
+          const acceptance = acceptIncomingRunEvent(current.runEvents, event, current.runEventState);
+          logSidepanelRunEvent({
+            phase: "accept_event",
+            runId: event.runId,
+            rawEventId: event.id,
+            canonicalEventKey: acceptance.event.canonical?.key,
+            sequence: event.sequence,
+            semanticIdentity: event.semantic?.identity,
+            messageId: event.semantic?.messageId,
+            partId: event.semantic?.partId,
+            decision: acceptance.decision,
+            priorFrontierSequence: current.runEventState.frontier.lastSequence,
+            resultingFrontierSequence: acceptance.nextRunEventState.frontier.lastSequence
+          });
+
+          if (!acceptance.accepted) {
+            return {
+              ...current,
+              runEventState: acceptance.nextRunEventState
+            };
+          }
+
+          void saveEvent(acceptance.event).catch(() => undefined);
+
+          const nextEvents = acceptance.nextEvents;
+          const lifecycleStatus = deriveLifecycleStatus(current, acceptance.event, nextEvents);
           const nextRun = current.currentRun && current.currentRun.runId === event.runId
             ? {
                 ...current.currentRun,
                 status: lifecycleStatus.runStatus,
-                updatedAt: event.createdAt,
-                finalOutput: deriveRunFinalOutput(current.currentRun.finalOutput, event),
-                errorMessage: event.type === "error" ? event.message : current.currentRun.errorMessage
+                updatedAt: acceptance.event.createdAt,
+                finalOutput: deriveRunFinalOutput(current.currentRun.finalOutput, acceptance.event),
+                errorMessage: acceptance.event.type === "error" ? acceptance.event.message : current.currentRun.errorMessage
               }
             : current.currentRun;
 
-          const nextState = {
+          const nextState: AssistantState = {
             ...current,
             runEvents: nextEvents,
+            runEventState: acceptance.nextRunEventState,
             currentRun: nextRun,
             status: lifecycleStatus.assistantStatus,
-            errorMessage: event.type === "error" ? event.message : current.errorMessage,
+            errorMessage: acceptance.event.type === "error" ? acceptance.event.message : current.errorMessage,
+            syncMetadata: createRunStateSyncMetadata("sidepanel", acceptance.nextRunEventState),
             stream: {
-              runId: event.runId,
+              runId: acceptance.event.runId,
               status: lifecycleStatus.streamStatus,
-              pendingQuestionId: lifecycleStatus.pendingQuestionId
+              pendingQuestionId: lifecycleStatus.pendingQuestionId,
+              reconnectCount: current.stream.reconnectCount ?? 0
             }
           };
 
@@ -634,7 +677,9 @@ export function useSidepanelController() {
             matchedRule: nextState.matchedRule,
             lastCapturedUrl: nextState.lastCapturedUrl,
             usernameContext: nextState.usernameContext,
-            stream: nextState.stream
+            stream: nextState.stream,
+            runEventState: nextState.runEventState,
+            syncMetadata: nextState.syncMetadata
           }).catch(() => undefined);
 
           return nextState;
@@ -654,7 +699,10 @@ export function useSidepanelController() {
           ...current,
           stream: {
             ...current.stream,
-            status: current.stream.status === "done" || current.stream.status === "error" ? current.stream.status : status
+            status: current.stream.status === "done" || current.stream.status === "error" ? current.stream.status : status,
+            reconnectCount: status === "reconnecting"
+              ? (current.stream.reconnectCount ?? 0) + 1
+              : current.stream.reconnectCount ?? 0
           }
         }));
       },
@@ -729,8 +777,11 @@ export function useSidepanelController() {
       stream: {
         ...state.stream,
         status: "streaming",
-        pendingQuestionId: null
-      }
+        pendingQuestionId: null,
+        reconnectCount: state.stream.reconnectCount ?? 0
+      },
+      runEventState: state.runEventState,
+      syncMetadata: createRunStateSyncMetadata("sidepanel", state.runEventState)
     });
     refreshHistoryRef.current().catch(() => undefined);
   }

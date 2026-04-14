@@ -585,4 +585,47 @@ describe("streaming api client", () => {
       "streaming"
     ]);
   });
+
+  it("emits transport telemetry with canonical identity and reconnect count", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    global.EventSource = FakeEventSource as unknown as typeof EventSource;
+    const { createRunEventStream } = await import("./api");
+    const onTransportLog = vi.fn();
+    const stream = createRunEventStream("run-telemetry", {
+      onEvent() {},
+      onError() {},
+      onTransportLog
+    }) as unknown as FakeEventSource;
+
+    stream.emit("open");
+    stream.emit("error");
+    stream.emit("message", JSON.stringify({
+      id: "event-telemetry",
+      runId: "run-telemetry",
+      type: "thinking",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      message: "delta",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    }));
+
+    expect(onTransportLog).toHaveBeenCalledWith(expect.objectContaining({ transition: "connecting", runId: "run-telemetry" }));
+    expect(onTransportLog).toHaveBeenCalledWith(expect.objectContaining({ transition: "reconnecting", reconnectCount: 1 }));
+    expect(onTransportLog).toHaveBeenCalledWith(expect.objectContaining({
+      transition: "message",
+      rawEventId: "event-telemetry",
+      canonicalEventKey: "assistant_text:msg-1:part-1",
+      semanticIdentity: "assistant_text:msg-1:part-1"
+    }));
+  });
 });

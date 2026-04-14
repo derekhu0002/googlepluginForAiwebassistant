@@ -1,4 +1,4 @@
-import type { AnswerRecord, MessageFeedbackValue, NormalizedEventType, NormalizedRunEvent, QuestionPayload, RunRecord } from "../shared/protocol";
+import { sortNormalizedRunEvents, type AnswerRecord, type MessageFeedbackValue, type NormalizedEventType, type NormalizedRunEvent, type QuestionPayload, type RunRecord } from "../shared/protocol";
 import type { MessageFeedbackUiState } from "../shared/types";
 
 const DEFAULT_EVENT_TITLES: Record<NormalizedEventType, string> = {
@@ -207,6 +207,16 @@ export interface TranscriptReadModel {
   liveSignature: string | null;
   liveProjectionState?: LiveTranscriptProjectionState | null;
   liveProjectionDebug?: LiveTranscriptProjectionDebug | null;
+  anomalies?: ProjectionAnomalyRecord[];
+}
+
+export interface ProjectionAnomalyRecord {
+  runId: string;
+  anomalyType: "duplicate_group" | "sequence_regression" | "missing_predecessor" | "terminal_reopen" | "coalesced_presentation";
+  logicalMessageId?: string;
+  groupAnchorId?: string;
+  sourceEventIds: string[];
+  resolution: string;
 }
 
 interface LiveTranscriptProjectionState {
@@ -2273,12 +2283,17 @@ function buildIncrementalLiveTranscriptSegmentReadModel(
   options: BuildTranscriptSegmentReadModelOptions,
   previousModel?: TranscriptReadModel | null
 ) {
+  const orderedEvents = sortNormalizedRunEvents(options.events);
+  const normalizedOptions = {
+    ...options,
+    events: orderedEvents
+  };
   const previousState = previousModel?.liveProjectionState;
-  const canReuse = canIncrementallyReuseLiveProjection(previousState, options);
+  const canReuse = canIncrementallyReuseLiveProjection(previousState, normalizedOptions);
   const liveState = canReuse && previousState
     ? cloneLiveTranscriptProjectionState(previousState)
-    : createEmptyLiveProjectionState(options);
-  const answers = sortAnswers(options.answers ?? []);
+    : createEmptyLiveProjectionState(normalizedOptions);
+  const answers = sortAnswers(normalizedOptions.answers ?? []);
   const answersByQuestionId = new Map<string, AnswerRecord[]>();
 
   for (const answer of answers) {
@@ -2287,16 +2302,16 @@ function buildIncrementalLiveTranscriptSegmentReadModel(
     answersByQuestionId.set(answer.questionId, bucket);
   }
 
-  const deltaEvents = options.events.slice(liveState.eventCount);
+  const deltaEvents = normalizedOptions.events.slice(liveState.eventCount);
   for (const event of deltaEvents) {
-    processLiveProjectionEvent(liveState, event, answersByQuestionId, options.feedbackByMessageId, options.pendingQuestionId);
+    processLiveProjectionEvent(liveState, event, answersByQuestionId, normalizedOptions.feedbackByMessageId, normalizedOptions.pendingQuestionId);
   }
 
   for (const answer of answers) {
     appendLiveAnswerItem(liveState, answer);
   }
 
-  const finalized = finalizeLiveProjectionState(liveState, options);
+  const finalized = finalizeLiveProjectionState(liveState, normalizedOptions);
   return {
     ...finalized,
     debug: buildLiveProjectionDebug(canReuse, deltaEvents.length)
@@ -2317,6 +2332,62 @@ function buildTranscriptMessagesFromFragments(fragments: ChatStreamItemModel[]) 
   }
 
   return normalizeTranscriptMessages(messages);
+}
+
+function logProjection(entry: Record<string, unknown>) {
+  console.info("[transcript-projection]", entry);
+}
+
+function collectProjectionAnomalies(messages: TranscriptMessageModel[], events: NormalizedRunEvent[], runId: string) {
+  const anomalies: ProjectionAnomalyRecord[] = [];
+  const seenGroups = new Set<string>();
+  let previousSequence = -1;
+  let sawTerminal = false;
+
+  for (const event of sortNormalizedRunEvents(events)) {
+    if (Number.isFinite(event.sequence) && event.sequence < previousSequence) {
+      anomalies.push({
+        runId,
+        anomalyType: "sequence_regression",
+        logicalMessageId: event.semantic?.messageId,
+        groupAnchorId: event.canonical?.key,
+        sourceEventIds: [event.id],
+        resolution: "retained deterministic canonical event ordering"
+      });
+    }
+    if (Number.isFinite(event.sequence)) {
+      previousSequence = Math.max(previousSequence, event.sequence);
+    }
+    if (event.type === "result" || event.type === "error") {
+      sawTerminal = true;
+    } else if (sawTerminal) {
+      anomalies.push({
+        runId,
+        anomalyType: "terminal_reopen",
+        logicalMessageId: event.semantic?.messageId,
+        groupAnchorId: event.canonical?.key,
+        sourceEventIds: [event.id],
+        resolution: "kept post-terminal event visible while flagging replay anomaly"
+      });
+    }
+  }
+
+  for (const message of messages) {
+    if (seenGroups.has(message.groupAnchorId)) {
+      anomalies.push({
+        runId,
+        anomalyType: "duplicate_group",
+        logicalMessageId: message.anchorId,
+        groupAnchorId: message.groupAnchorId,
+        sourceEventIds: message.parts.map((part) => part.anchorId),
+        resolution: "merged duplicate transcript group by stable anchor"
+      });
+      continue;
+    }
+    seenGroups.add(message.groupAnchorId);
+  }
+
+  return anomalies;
 }
 
 function buildTranscriptSegmentReadModel(options: BuildTranscriptSegmentReadModelOptions) {
@@ -2369,7 +2440,6 @@ function mergeTranscriptMessageCollections(options: {
     ? options.liveParts
     : flattenTranscriptMessages(liveMessages);
   const parts = flattenTranscriptMessages(messages);
-
   return {
     messages,
     parts,
@@ -2381,7 +2451,8 @@ function mergeTranscriptMessageCollections(options: {
     historicalSignature: options.historicalSignature,
     liveSignature: options.liveSignature,
     liveProjectionState: options.liveProjectionState ?? null,
-    liveProjectionDebug: options.liveProjectionDebug ?? null
+    liveProjectionDebug: options.liveProjectionDebug ?? null,
+    anomalies: []
   } satisfies TranscriptReadModel;
 }
 
@@ -2420,8 +2491,15 @@ export function buildTranscriptReadModel(options: BuildTranscriptSegmentReadMode
   });
 }
 
+/** @ArchitectureID: ELM-FUNC-EXT-PROJECT-TRANSCRIPT */
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildStableTranscriptProjection(options: StableTranscriptProjectionOptions): TranscriptReadModel {
+  logProjection({
+    phase: "start",
+    historicalEventCount: options.historicalSegments.reduce((total, segment) => total + segment.events.length, 0),
+    liveEventCount: options.liveSegment?.events.length ?? 0,
+    reusedProjectionState: Boolean(options.previousModel?.liveProjectionState)
+  });
   const historySignature = createHistorySegmentsSignature(options.historicalSegments);
   const canReuseHistory = Boolean(
     options.previousModel
@@ -2473,7 +2551,7 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
     includeToolCallParts: options.liveSegment.includeToolCallParts ?? false
   }, options.previousModel);
 
-  return mergeTranscriptMessageCollections({
+  const projection = mergeTranscriptMessageCollections({
     historicalMessages,
     historicalParts,
     liveMessages: liveSegment.messages,
@@ -2484,6 +2562,31 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
     liveProjectionState: liveSegment.liveState,
     liveProjectionDebug: liveSegment.debug
   });
+  const anomalies = collectProjectionAnomalies(
+    projection.messages,
+    sortNormalizedRunEvents([
+      ...options.historicalSegments.flatMap((segment) => segment.events),
+      ...(options.liveSegment?.events ?? [])
+    ]),
+    options.liveSegment?.runId ?? options.historicalSegments.at(-1)?.runId ?? "transcript"
+  );
+  if (anomalies.length) {
+    for (const anomaly of anomalies) {
+      logProjection({ ...anomaly });
+    }
+  }
+  const projectionWithAnomalies: TranscriptReadModel = {
+    ...projection,
+    anomalies
+  };
+  logProjection({
+    phase: "complete",
+    messageCount: projectionWithAnomalies.messages.length,
+    partCount: projectionWithAnomalies.parts.length,
+    anomalyCount: projectionWithAnomalies.anomalies?.length ?? 0,
+    runId: options.liveSegment?.runId ?? options.historicalSegments.at(-1)?.runId ?? null
+  });
+  return projectionWithAnomalies;
 }
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
@@ -2494,34 +2597,38 @@ export function buildTranscriptPartStream(options: BuildTranscriptSegmentReadMod
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildFragmentSequence(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
-  if (hasStableLiveProjectionInputs(options)) {
+  const orderedOptions = {
+    ...options,
+    events: sortNormalizedRunEvents(options.events)
+  };
+  if (hasStableLiveProjectionInputs(orderedOptions)) {
     const projection = buildIncrementalLiveTranscriptSegmentReadModel({
-      ...options,
-      runStatus: options.status,
+      ...orderedOptions,
+      runStatus: orderedOptions.status,
       includeSummary: false,
-      includeToolCallParts: options.includeToolCallParts ?? false
+      includeToolCallParts: orderedOptions.includeToolCallParts ?? false
     });
     return projection.liveState.items;
   }
 
-  const runId = options.runId ?? "standalone-run";
-  const prompt = options.prompt?.trim() || "";
-  const events = options.events;
-  const includeToolCallParts = options.includeToolCallParts ?? false;
+  const runId = orderedOptions.runId ?? "standalone-run";
+  const prompt = orderedOptions.prompt?.trim() || "";
+  const events = orderedOptions.events;
+  const includeToolCallParts = orderedOptions.includeToolCallParts ?? false;
   const answersByQuestionId = new Map<string, AnswerRecord[]>();
   const consumedQuestionAnswerIds = new Set<string>();
   const items: ChatStreamItemModel[] = [];
-  const fallbackTimestamp = options.updatedAt ?? events[events.length - 1]?.createdAt ?? "1970-01-01T00:00:00.000Z";
-  const assistantResponse = collectAssistantResponseAggregation(events, options.finalOutput);
+  const fallbackTimestamp = orderedOptions.updatedAt ?? events[events.length - 1]?.createdAt ?? "1970-01-01T00:00:00.000Z";
+  const assistantResponse = collectAssistantResponseAggregation(events, orderedOptions.finalOutput);
   const latestResultText = collectLatestAssistantResultText(events);
   const reasoningOnlyText = getReasoningOnlyText(events);
   const assistantDisplayText = resolveAssistantDisplayText(assistantResponse.text, options.finalOutput, options.status)
     || latestResultText
     || deriveAssistantDisplayTextFromReasoning(reasoningOnlyText);
-  const errorMessage = trimTerminalText(options.errorMessage);
+  const errorMessage = trimTerminalText(orderedOptions.errorMessage);
   const presentationState = resolveTimelinePresentationState({
     events,
-    runStatus: options.status,
+    runStatus: orderedOptions.status,
     finalOutput: assistantDisplayText,
     errorMessage
   });
@@ -2594,7 +2701,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
     currentOutputAnchorId = anchorId;
   };
 
-  for (const answer of sortAnswers(options.answers ?? [])) {
+  for (const answer of sortAnswers(orderedOptions.answers ?? [])) {
     const bucket = answersByQuestionId.get(answer.questionId) ?? [];
     bucket.push(answer);
     answersByQuestionId.set(answer.questionId, bucket);
@@ -2641,15 +2748,15 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
         createdAt: event.createdAt,
         updatedAt: event.createdAt,
         primaryType: "question",
-        badges: getQuestionBadges(event.question?.questionId === options.pendingQuestionId),
+        badges: getQuestionBadges(event.question?.questionId === orderedOptions.pendingQuestionId),
         originEventTypes: ["question"],
         question: event.question,
-        pendingQuestion: event.question?.questionId === options.pendingQuestionId,
+        pendingQuestion: event.question?.questionId === orderedOptions.pendingQuestionId,
         sourceQuestionPrompt: prompt,
         supportsCopy: true,
         supportsRetry: true,
         supportsFeedback: true,
-        feedbackState: options.feedbackByMessageId?.[anchorId] ?? createIdleFeedbackState()
+        feedbackState: orderedOptions.feedbackByMessageId?.[anchorId] ?? createIdleFeedbackState()
       }));
 
       for (const answer of answersByQuestionId.get(questionId) ?? []) {
@@ -2723,7 +2830,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
     }
   }
 
-  for (const answer of sortAnswers(options.answers ?? [])) {
+  for (const answer of sortAnswers(orderedOptions.answers ?? [])) {
     if (consumedQuestionAnswerIds.has(answer.id)) {
       continue;
     }
@@ -2810,7 +2917,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
       supportsRetry: terminal,
       supportsFeedback: terminal,
       feedbackState: terminal
-        ? options.feedbackByMessageId?.[lastAssistantOutputItem.anchorId] ?? createIdleFeedbackState()
+        ? orderedOptions.feedbackByMessageId?.[lastAssistantOutputItem.anchorId] ?? createIdleFeedbackState()
         : undefined,
       originEventTypes: [...new Set(items
         .filter((item) => item.kind === "assistant_output")

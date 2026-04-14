@@ -1,5 +1,17 @@
 import type { DomainError } from "./errors";
-import type { AnswerRecord, MainAgent, MessageFeedbackRequest, MessageFeedbackResponse, NormalizedRunEvent, QuestionAnswerRequest, RunHistoryDetail, RunRecord, UsernameSource } from "./protocol";
+import type {
+  AnswerRecord,
+  MainAgent,
+  MessageFeedbackRequest,
+  MessageFeedbackResponse,
+  NormalizedRunEvent,
+  QuestionAnswerRequest,
+  RunEventState,
+  RunStateSyncMetadata,
+  RunHistoryDetail,
+  RunRecord,
+  UsernameSource
+} from "./protocol";
 
 export type CapturedFields = Record<string, string>;
 
@@ -71,6 +83,7 @@ export interface StreamConnectionState {
   runId: string | null;
   status: "idle" | "connecting" | "streaming" | "reconnecting" | "waiting_for_answer" | "done" | "error";
   pendingQuestionId: string | null;
+  reconnectCount?: number;
 }
 
 export interface AssistantState {
@@ -92,7 +105,27 @@ export interface AssistantState {
   lastCapturedUrl: string | null;
   usernameContext: UsernameContext | null;
   stream: StreamConnectionState;
+  runEventState: RunEventState;
+  syncMetadata: RunStateSyncMetadata | null;
 }
+
+export type SyncableAssistantRunState = Pick<AssistantState,
+  "status"
+  | "activeSessionId"
+  | "capturedFields"
+  | "runPrompt"
+  | "runEvents"
+  | "currentRun"
+  | "answers"
+  | "error"
+  | "errorMessage"
+  | "matchedRule"
+  | "lastCapturedUrl"
+  | "usernameContext"
+  | "stream"
+  | "runEventState"
+  | "syncMetadata"
+>;
 
 export interface StartRunResponse {
   ok: true;
@@ -163,7 +196,7 @@ export type RuntimeMessage =
   | { type: "SET_MAIN_AGENT"; payload: { selectedAgent: MainAgent } }
   | {
       type: "SYNC_RUN_STATE";
-      payload: Pick<AssistantState, "status" | "activeSessionId" | "capturedFields" | "runPrompt" | "runEvents" | "currentRun" | "answers" | "error" | "errorMessage" | "matchedRule" | "lastCapturedUrl" | "usernameContext" | "stream">;
+      payload: SyncableAssistantRunState;
     }
   | { type: "SUBMIT_QUESTION_ANSWER"; payload: QuestionAnswerRequest }
   | { type: "RECAPTURE" }
