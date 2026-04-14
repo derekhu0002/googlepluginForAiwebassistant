@@ -1,0 +1,1542 @@
+{
+  "identifier": "ai4pb-shared-knowledge-graph",
+  "version": "1.0.0",
+  "name": [
+    {
+      "value": "AI4PB Shared Knowledge Graph"
+    }
+  ],
+  "documentation": [
+    {
+      "value": "Schema-compliant shared knowledge graph maintained by OpenCode tools."
+    }
+  ],
+  "metadata": {
+    "schema": "./.opencode/schema/archimate3.1/archimate3.1-exchange-model.schema.json",
+    "schemaversion": "3.1"
+  },
+  "extensions": {
+    "ai4pb": {
+      "managedBy": "opencode",
+      "counters": {},
+      "designSummary": "",
+      "designDecisions": [],
+      "runtime": {
+        "activeGoal": "",
+        "validations": {
+          "qa": {
+            "status": "not_run",
+            "summary": "No validation has been recorded yet.",
+            "updatedAt": "1970-01-01T00:00:00.000Z"
+          },
+          "audit": {
+            "status": "not_run",
+            "summary": "No validation has been recorded yet.",
+            "updatedAt": "1970-01-01T00:00:00.000Z"
+          }
+        },
+        "release": {
+          "status": "not_started",
+          "summary": "Release has not been prepared yet.",
+          "updatedAt": "2026-04-14T01:46:01.029Z"
+        },
+        "updatedAt": "2026-04-14T01:55:48.254Z"
+      }
+    }
+  },
+  "elements": {
+    "element": [
+      {
+        "identifier": "ELM-STRATEGY-GOAL",
+        "type": "Goal",
+        "name": [
+          {
+            "value": "Deliver Context-Aware Browser AI Assistance"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Confirmed brownfield goal: enable analysts and acceptance operators to launch AI-assisted analysis directly from a browser page by capturing page context such as software_version and selected_sr, sending the request to a remote OpenCode agent, and completing the interaction with streaming answers, clarifying questions, history retention, and feedback."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "strategy",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-STRATEGY-CAPABILITY",
+        "type": "Capability",
+        "name": [
+          {
+            "value": "Context-Aware Browser Analysis Capability"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as a capability: an ability that an organization, person, or system possesses to achieve an outcome. In this architecture, Context-Aware Browser Analysis Capability defines, constrains, or supports traceable solution intent within the managed model. Confirmed business capability: combine browser-page capture, agent-backed AI analysis, normalized event streaming, conversational continuation, answer logging, and feedback handling into one operable local MVP workflow."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "strategy",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-STRATEGY-COURSE",
+        "type": "CourseOfAction",
+        "name": [
+          {
+            "value": "Chrome To OpenCode MVP Delivery Approach"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Confirmed course of action: implement the assistant as a Chrome MV3 side-panel experience backed by a Python adapter that discovers and brokers the remote OpenCode agent, plus a separate feedback backend and deterministic local test site for end-to-end acceptance."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "strategy",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-BUSINESS-ACTOR",
+        "type": "BusinessActor",
+        "name": [
+          {
+            "value": "Analyst Or Acceptance Operator"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Confirmed primary actor: a local integration tester, analyst, support engineer, or acceptance operator who works on a live business page, needs contextual AI assistance, and may continue the conversation through follow-up questions and feedback."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "business",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-BUSINESS-PROCESS",
+        "type": "BusinessProcess",
+        "name": [
+          {
+            "value": "Browser-Based AI Analysis Workflow"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Confirmed core business process: open a target page, authorize the current domain, configure or match page rules, capture page fields and user context, start an AI analysis run, review streamed progress and final output, answer clarifying questions, inspect saved history, and optionally provide message feedback."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "business",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-BUSINESS-SERVICE",
+        "type": "BusinessService",
+        "name": [
+          {
+            "value": "Context-Aware AI Analysis Service"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Confirmed business service: an operator-facing browser assistant service that turns the current page context into a structured AI analysis conversation with normalized streaming events, continuation support, historical traceability, and feedback capture."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "business",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APPLICATION-COMPONENT",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Core Application System"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as an application component: a modular application building block that encapsulates automated behavior and data. In this architecture, Core Application System is the modular software building block that automates and supports the business process behind Current Product Goal."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APPLICATION-SERVICE",
+        "type": "ApplicationService",
+        "name": [
+          {
+            "value": "Normalized Assistant Run Service"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Primary application service exposed by the recovered system: capture authorized browser context, submit analysis runs through the adapter, stream normalized run events back to the side panel, preserve session history, and support answer/feedback operations across the conversation lifecycle."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APPLICATION-DATA",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "Captured Page Context And Conversation History"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Primary application data managed by the recovered system: captured page fields, username provenance, run/session ids, normalized event history, question/answer state, final outputs, feedback payloads, and invocation logs used for local debugging and acceptance."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-TECHNOLOGY-NODE",
+        "type": "Node",
+        "name": [
+          {
+            "value": "Core Technology Runtime"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as a node: a computational or physical resource that hosts, executes, or supports technology and application behavior. In this architecture, Core Technology Runtime is the runtime environment that hosts and executes the technology and application behavior required for Current Product Goal."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "technology",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-TECHNOLOGY-ARTIFACT",
+        "type": "Artifact",
+        "name": [
+          {
+            "value": "Deployable Solution Artifact"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the element as an artifact: a physical or deployable piece of information used or produced in technology or application realization. In this architecture, Deployable Solution Artifact is the deployable solution package generated from the core application system for operation on the target runtime node."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "technology",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-COMP-EXT-BACKGROUND",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Background Orchestrator"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Chrome extension background module responsible for active-tab inspection, rule matching, runtime permission checks, page capture orchestration, run bootstrap, and shared assistant state synchronization. Evidence: README main flow, extension/src/background/index.ts, and acceptance guide sections on authorization, capture, and run start."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-COMP-EXT-CONTENT",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Content Integration"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Content-script module responsible for in-page field extraction, username discovery, floating AI entrypoint injection, and embedded panel fallback on authorized business pages. Evidence: extension/src/content/index.ts and acceptance guide page-data expectations."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-COMP-EXT-SIDEPANEL",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Side Panel Experience"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "React side-panel module responsible for conversation control, SSE stream consumption, transcript projection, question answering, session navigation, diagnostics export, and rule/context management for the operator-facing assistant UI. Evidence: README interaction model, extension/src/sidepanel/useSidepanelController.ts, and docs/opencode-contracts.md plugin consumption sections."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-COMP-EXT-SHARED",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Extension Shared Contract Layer"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Shared browser-extension library for API contracts, protocol schemas, configuration, history persistence, rule evaluation, page-access checks, and reusable state models that keep background, sidepanel, and content modules aligned. Evidence: extension/src/shared/api.ts, rules.ts, pageAccess.ts, protocol.ts, and history.ts."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-COMP-PY-ADAPTER",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Python OpenCode Adapter"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "FastAPI adapter that exposes stable run, SSE, answer, feedback, and health endpoints to the extension while brokering canonical-agent discovery, session bootstrap, event normalization, result assembly, and invocation logging against opencode serve. Evidence: README, python_adapter/README.md, python_adapter/app/main.py, and python_adapter/app/opencode_adapter.py."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-COMP-BACKEND-FEEDBACK",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Feedback Backend Service"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "TypeScript Express service that validates authenticated HTTP requests and accepts like/dislike message feedback used during complete local integration testing. Evidence: README feedback path and backend/src/app.ts."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-COMP-TEST-SITE",
+        "type": "ApplicationComponent",
+        "name": [
+          {
+            "value": "Local Acceptance Test Site"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Repo-local demo site and lightweight HTTP server used to exercise authorization, rule matching, field capture, username extraction, SSE run initiation, and manual acceptance of the assistant workflow. Evidence: README test_site references, test_site/index.html, test_site/server.py, and TEST_SITE_127001_ACCEPTANCE_GUIDE.md."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-VALIDATE-PAGE-ACCESS",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Validate Page Access"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Active browser tab URL, optional host permission patterns, stored page rules, and Chrome runtime permission state.\n[Processing]: Check whether the page is restricted, whether the domain is within the controllable authorization list, whether an enabled rule matches the page, and whether runtime host permission has been granted before capture or run startup.\n[Output]: A page-access decision containing allowed or blocked state, matched-rule context, permission guidance, or a domain error.\n[Acceptance Criteria]: Restricted pages are rejected; unmatched rules block capture; unauthorized domains surface an explicit authorization path; authorized matched pages proceed consistently."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-START-RUN",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Start Assisted Run From Active Tab"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: User prompt, selected main agent, optional session id, capture flag, active-tab metadata, captured page fields, and username context.\n[Processing]: Optionally capture page data, derive username context, normalize captured fields, reuse or create the session context, call the adapter start-run API, and initialize run state for downstream SSE streaming.\n[Output]: A started run with run id, selected agent, optional session id, and initialized extension run record.\n[Acceptance Criteria]: Capture-plus-run and follow-up flows both work; startup failures surface normalized errors; successful startup persists active run and session state for the side panel."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-SYNC-STATE",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Synchronize Assistant State"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Partial or full assistant state updates from background actions, run lifecycle changes, and side-panel sync requests.\n[Processing]: Merge state with defaults, persist it to chrome.storage.local, timestamp the update, and broadcast STATE_UPDATED so background and side-panel consumers stay aligned.\n[Output]: Durable shared extension state for capture, run, error, and session context.\n[Acceptance Criteria]: State writes preserve main-agent and run context; broadcasts follow persistence; refreshed UI views observe coherent status and error data."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-COLLECT-FIELDS",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Collect Page Fields"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Requested field definitions, authorized document context, window context, DOM selectors, and optional fallback values.\n[Processing]: For each enabled field rule, read the configured source such as document title, URL, selected text, meta tag, selector text, or selector attribute, normalize whitespace, and apply fallback values when extraction is empty.\n[Output]: A captured field map keyed by configured field identifiers such as software_version, selected_sr, pageTitle, pageUrl, or selectedText.\n[Acceptance Criteria]: Enabled configured fields are extracted deterministically; missing values fall back as configured; unauthorized or unavailable pages do not silently fabricate capture results."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-EXTRACT-USERNAME",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Extract Username Context"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Authorized document and window objects containing DOM attributes, text nodes, meta tags, and optional global user variables.\n[Processing]: Search supported DOM selectors first, then configured user-related meta tags, then page-global variables, and normalize the first reliable username evidence with its source classification.\n[Output]: A username context containing username text and source such as dom_data_attribute, dom_text, meta_tag, page_global, unknown_fallback, or unresolved_login_state.\n[Acceptance Criteria]: DOM-based identity evidence takes precedence over meta and globals; the result includes a provenance label; pages lacking evidence fall back to unknown rather than incorrect identities."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-INJECT-ENTRYPOINT",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Inject In-Page Assistant Entrypoint"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Authorized page DOM readiness state and extension runtime messaging capabilities.\n[Processing]: Create a floating AI button once per page, wire its click action to request panel opening, and toggle an embedded iframe panel only when side-panel APIs are unavailable and fallback is needed.\n[Output]: An in-page assistant entrypoint that opens the side panel or embedded fallback UI for the current business page.\n[Acceptance Criteria]: The floating button appears at most once per page; clicking it triggers extension messaging; embedded fallback panels can be opened and closed without duplicating UI containers."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Consume Normalized Run Stream"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Run id, adapter SSE endpoint, normalized run events, and current side-panel state.\n[Processing]: Open the EventSource stream, validate incoming event payloads, merge events into local run history and live state, derive lifecycle status, refresh persisted run summaries, and keep the UI stream status synchronized.\n[Output]: An updated live conversation state containing ordered run events, derived run status, final output snapshots, and stream connection state.\n[Acceptance Criteria]: Valid events are appended without duplication; terminal evidence updates run status correctly; reconnect states are surfaced; event history persists for later replay."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Project Transcript Read Model"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Historical run details, live normalized events, answer records, final output snapshots, and prior transcript projection state.\n[Processing]: Convert raw events into fragments, classify assistant text versus reasoning and questions, group them into transcript messages, and merge historical plus live segments into a stable conversation read model.\n[Output]: A transcript projection suitable for side-panel chat rendering, summaries, and cockpit status displays.\n[Acceptance Criteria]: Assistant streamed text remains distinguishable from reasoning; history and live segments merge stably; question and answer turns render in the correct conversational order."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-SUBMIT-QUESTION-ANSWER",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Submit Question Answer"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Current run id, active normalized question payload, chosen option id and/or free-text answer.\n[Processing]: Post the answer to the adapter, persist an AnswerRecord locally, clear pending question state, restore streaming status, and synchronize the updated answer set back to background storage.\n[Output]: Accepted question-answer state with persisted answer history and resumed conversation streaming.\n[Acceptance Criteria]: Answers are rejected only when the adapter reports failure; accepted answers are stored once; pending-question UI clears and the run returns to streaming state."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Call Adapter API"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Prompt payloads, capture payloads, username context, selected agent, optional session id, feedback requests, and optional API key configuration.\n[Processing]: Build validated HTTP request bodies and headers for run start, answer submission, feedback submission, and SSE stream setup, then parse normalized success or failure responses with schema validation.\n[Output]: Typed extension-side API results and stream connections aligned to the adapter contract.\n[Acceptance Criteria]: Requests include authentication when configured; invalid or failed responses are normalized; run, answer, and feedback endpoints remain contract-compatible with the adapter."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-EVALUATE-RULES",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Evaluate Rules And Canonical Capture"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Current page URL, stored page rules, field definitions, and raw captured field values.\n[Processing]: Match enabled rules using hostname and path wildcards, provide default rule templates, and transform raw capture output into canonical fields such as pageTitle, pageUrl, software_version, selected_sr, and selectedText.\n[Output]: Matching-rule decisions plus canonicalized capture payloads used by background and UI workflows.\n[Acceptance Criteria]: Rule matching respects hostname-only and pathname-plus-search semantics; default templates remain available; canonical capture output consistently exposes software_version and selected_sr when collected."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-PERSIST-HISTORY",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Persist Run History"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Run records, normalized run events, answer records, and session identifiers from active or completed conversations.\n[Processing]: Persist run artifacts in browser storage, reload run detail views on demand, group runs into sessions, and keep historical details available after UI refresh or reopen.\n[Output]: A durable browser-side run history with per-run detail, answer history, and session navigation views.\n[Acceptance Criteria]: Multiple runs remain queryable after side-panel reloads; events and answers stay associated with the correct run; session grouping is stable when session ids are present."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-PY-START-RUN",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Broker Run Startup"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: RunStartRequest containing prompt, selected agent, optional capture payload, optional session id, and extension context metadata.\n[Processing]: Validate the selected main agent, discover the canonical remote agent from /agent, reuse or create an OpenCode session, dispatch prompt_async to the selected session, initialize run state, and record startup diagnostics.\n[Output]: A registered adapter run id with selected agent, optional session id, and initial tool-call events that describe startup progress.\n[Acceptance Criteria]: Only allowed main agents are accepted; remote /agent discovery must precede session bootstrap; reused sessions skip session creation; startup failures are surfaced as normalized analysis or validation errors."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-PY-NORMALIZE-EVENTS",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Normalize OpenCode Events"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Raw OpenCode global SSE events, run session context, buffered part deltas, and canonical remote-agent evidence.\n[Processing]: Filter events by session, enforce primary-agent consistency, transform OpenCode status, text, reasoning, tool, question, idle, and error events into NormalizedRunEvent records, and buffer part deltas until part type is known.\n[Output]: A browser-consumable stream of normalized thinking, tool_call, question, result, or error events.\n[Acceptance Criteria]: Session-unrelated events are ignored; assistant text and reasoning are distinguished semantically; question and tool events are normalized for UI use; agent mismatches produce explicit runtime failure."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-PY-HANDLE-ANSWER-AND-FEEDBACK",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Handle Answers And Feedback"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Run-specific question answers and message-feedback requests from the extension plus cached upstream question payloads and backend settings.\n[Processing]: Resolve answer payloads for upstream question replies, submit answers to OpenCode question endpoints, proxy message feedback to the separate backend service, and write per-phase invocation logs.\n[Output]: Accepted answer acknowledgements and accepted feedback responses aligned to the extension contract.\n[Acceptance Criteria]: Unknown runs return RUN_NOT_FOUND; answer submissions clear waiting question state and reach the upstream reply endpoint; feedback is proxied to the backend and invalid backend payloads are rejected."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-BACKEND-ACCEPT-FEEDBACK",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Accept Message Feedback"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Authenticated HTTP message-feedback payload containing runId, messageId, and like/dislike feedback.\n[Processing]: Enforce API-key policy when configured, validate the feedback request shape, timestamp the acceptance, and return the normalized feedback response expected by the adapter and extension.\n[Output]: A successful feedback acknowledgement containing accepted=true, runId, messageId, feedback value, and updatedAt timestamp.\n[Acceptance Criteria]: Invalid auth is rejected; malformed payloads return validation errors; valid feedback requests always produce the normalized response shape used by upstream callers."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-FUNC-TEST-SITE-SERVE-SCENARIO",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Serve Acceptance Scenario"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Browser requests to the local test-site server and the static acceptance page assets embedded in the repository.\n[Processing]: Serve the local HTML page on 127.0.0.1:4173 with deterministic DOM markers, sample username evidence, software_version, and selected_sr values used by extension capture and manual acceptance testing.\n[Output]: A stable local browser page for validating authorization, rule matching, username extraction, and run initiation.\n[Acceptance Criteria]: The server binds to 127.0.0.1:4173; the page exposes the documented username, software_version, and selected_sr markers; the scenario remains suitable for repeatable manual acceptance."
+          }
+        ]
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Current Project Goal"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Current OpenCode project goal."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Project",
+            "rawRequirement": "",
+            "status": "InProgress"
+          }
+        }
+      }
+    ]
+  },
+  "relationships": {
+    "relationship": [
+      {
+        "identifier": "REL-CAPABILITY-REALIZES-GOAL",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Capability realizes goal"
+          }
+        ],
+        "source": "ELM-STRATEGY-CAPABILITY",
+        "target": "ELM-STRATEGY-GOAL",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Product Capability makes Product Delivery Goal concrete by providing the ability needed to achieve that strategic outcome."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-COURSE-REALIZES-CAPABILITY",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Course realizes capability"
+          }
+        ],
+        "source": "ELM-STRATEGY-COURSE",
+        "target": "ELM-STRATEGY-CAPABILITY",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, MVP Delivery Course Of Action gives concrete form to Core Product Capability by prescribing how that capability will be established."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-BUSINESS-REALIZES-STRATEGY",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Business realizes strategy"
+          }
+        ],
+        "source": "ELM-BUSINESS-PROCESS",
+        "target": "ELM-STRATEGY-CAPABILITY",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Business Flow operationalizes Core Product Capability through executable business behavior."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ACTOR-ASSIGNED-BUSINESS",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Actor participates in business flow"
+          }
+        ],
+        "source": "ELM-BUSINESS-ACTOR",
+        "target": "ELM-BUSINESS-PROCESS",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an assignment: the allocation of responsibility, behavior, or execution from an active structure element to a behavior element, or vice versa where appropriate in ArchiMate. In this architecture, Primary User is allocated participation responsibility in Core Business Flow from a business perspective."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-BUSINESS-PROCESS-REALIZES-SERVICE",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Business process realizes service"
+          }
+        ],
+        "source": "ELM-BUSINESS-PROCESS",
+        "target": "ELM-BUSINESS-SERVICE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Business Flow implements and makes Core User Service concrete as externally visible behavior."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-BUSINESS-SERVICE-SERVES-ACTOR",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Business service serves actor"
+          }
+        ],
+        "source": "ELM-BUSINESS-SERVICE",
+        "target": "ELM-BUSINESS-ACTOR",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Core User Service provides business value and externally visible behavior to Primary User."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-APPLICATION-SERVICE-SERVES-BUSINESS",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Application service serves business service"
+          }
+        ],
+        "source": "ELM-APPLICATION-SERVICE",
+        "target": "ELM-BUSINESS-SERVICE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Core Application Service provides the automated support needed by the business-facing Core User Service."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-APPLICATION-REALIZES-SERVICE",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Application component realizes application service"
+          }
+        ],
+        "source": "ELM-APPLICATION-COMPONENT",
+        "target": "ELM-APPLICATION-SERVICE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Core Application System implements and makes Core Application Service concrete as the exposed application service boundary."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-APPLICATION-ACCESSES-DATA",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Application accesses domain data"
+          }
+        ],
+        "source": "ELM-APPLICATION-COMPONENT",
+        "target": "ELM-APPLICATION-DATA",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an access relationship: the source behavior or active structure concept reads, writes, or otherwise uses the target passive structure concept. In this architecture, Core Application System reads and writes Core Domain Data in order to execute application behavior."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TECHNOLOGY-SUPPORTS-APPLICATION",
+        "type": "Association",
+        "name": [
+          {
+            "value": "Technology supports application"
+          }
+        ],
+        "source": "ELM-TECHNOLOGY-NODE",
+        "target": "ELM-APPLICATION-COMPONENT",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an association: a generic structural or semantic link used when no more specific ArchiMate relationship type applies. In this architecture, Core Technology Runtime has a structural support link with Core Application System where no more specific baseline relationship is modeled."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TECHNOLOGY-HOSTS-APPLICATION-SERVICE",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Technology hosts application service"
+          }
+        ],
+        "source": "ELM-TECHNOLOGY-NODE",
+        "target": "ELM-APPLICATION-SERVICE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving relationship: the source concept provides functionality or value that is used by the target concept. In this architecture, Core Technology Runtime provides the infrastructure behavior required to host and expose Core Application Service."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ARTIFACT-REALIZES-APPLICATION",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Artifact realizes application deliverable"
+          }
+        ],
+        "source": "ELM-TECHNOLOGY-ARTIFACT",
+        "target": "ELM-APPLICATION-COMPONENT",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Deployable Solution Artifact is the concrete deployable manifestation of Core Application System."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "baseline": "core"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-BACKGROUND-VALIDATE-ACCESS",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Background performs page access validation"
+          }
+        ],
+        "source": "ELM-COMP-EXT-BACKGROUND",
+        "target": "ELM-FUNC-EXT-VALIDATE-PAGE-ACCESS",
+        "documentation": [
+          {
+            "value": "The extension background orchestrator is responsible for validating page accessibility, rule match state, and runtime authorization before capture or run startup."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-BACKGROUND-START-RUN",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Background starts assisted run"
+          }
+        ],
+        "source": "ELM-COMP-EXT-BACKGROUND",
+        "target": "ELM-FUNC-EXT-START-RUN",
+        "documentation": [
+          {
+            "value": "The extension background orchestrator owns active-tab run startup and bridges captured browser context into the backend adapter flow."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-BACKGROUND-SYNC-STATE",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Background synchronizes state"
+          }
+        ],
+        "source": "ELM-COMP-EXT-BACKGROUND",
+        "target": "ELM-FUNC-EXT-SYNC-STATE",
+        "documentation": [
+          {
+            "value": "The extension background orchestrator maintains the authoritative shared browser state for capture, run, and error updates."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-CONTENT-COLLECT-FIELDS",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Content script collects fields"
+          }
+        ],
+        "source": "ELM-COMP-EXT-CONTENT",
+        "target": "ELM-FUNC-EXT-COLLECT-FIELDS",
+        "documentation": [
+          {
+            "value": "The extension content integration module performs DOM-based field extraction according to configured page rules."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-CONTENT-EXTRACT-USERNAME",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Content script extracts username"
+          }
+        ],
+        "source": "ELM-COMP-EXT-CONTENT",
+        "target": "ELM-FUNC-EXT-EXTRACT-USERNAME",
+        "documentation": [
+          {
+            "value": "The extension content integration module owns browser-page username discovery and source attribution."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-CONTENT-INJECT-ENTRYPOINT",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Content script injects entrypoint"
+          }
+        ],
+        "source": "ELM-COMP-EXT-CONTENT",
+        "target": "ELM-FUNC-EXT-INJECT-ENTRYPOINT",
+        "documentation": [
+          {
+            "value": "The extension content integration module injects the floating AI trigger and embedded panel fallback into authorized pages."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-SIDEPANEL-CONSUME-STREAM",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Side panel consumes run stream"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "documentation": [
+          {
+            "value": "The side-panel experience is responsible for receiving, validating, and projecting the normalized SSE run stream."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-SIDEPANEL-PROJECT-TRANSCRIPT",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Side panel projects transcript"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "documentation": [
+          {
+            "value": "The side-panel experience owns transcript reconstruction from live and historical normalized events."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-SIDEPANEL-SUBMIT-ANSWER",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Side panel submits answers"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-FUNC-EXT-SUBMIT-QUESTION-ANSWER",
+        "documentation": [
+          {
+            "value": "The side-panel experience captures and submits question answers during an interactive run."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-SHARED-CALL-API",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Shared layer calls adapter API"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+        "documentation": [
+          {
+            "value": "The shared extension contract layer constructs and validates adapter HTTP and SSE calls used across the extension."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-SHARED-EVALUATE-RULES",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Shared layer evaluates rules"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-FUNC-EXT-EVALUATE-RULES",
+        "documentation": [
+          {
+            "value": "The shared extension contract layer owns page-rule matching and canonical capture normalization."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-SHARED-PERSIST-HISTORY",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Shared layer persists history"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-FUNC-EXT-PERSIST-HISTORY",
+        "documentation": [
+          {
+            "value": "The shared extension contract layer provides run-history persistence and retrieval services for the UI."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-PY-ADAPTER-START-RUN",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Adapter brokers run startup"
+          }
+        ],
+        "source": "ELM-COMP-PY-ADAPTER",
+        "target": "ELM-FUNC-PY-START-RUN",
+        "documentation": [
+          {
+            "value": "The Python OpenCode adapter owns canonical agent discovery, session bootstrap, and run registration."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-PY-ADAPTER-NORMALIZE-EVENTS",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Adapter normalizes events"
+          }
+        ],
+        "source": "ELM-COMP-PY-ADAPTER",
+        "target": "ELM-FUNC-PY-NORMALIZE-EVENTS",
+        "documentation": [
+          {
+            "value": "The Python OpenCode adapter converts raw OpenCode activity into normalized browser-facing events."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-PY-ADAPTER-HANDLE-ANSWER-FEEDBACK",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Adapter handles answers and feedback"
+          }
+        ],
+        "source": "ELM-COMP-PY-ADAPTER",
+        "target": "ELM-FUNC-PY-HANDLE-ANSWER-AND-FEEDBACK",
+        "documentation": [
+          {
+            "value": "The Python OpenCode adapter manages question replies, feedback proxying, and invocation logging for interactive runs."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-BACKEND-FEEDBACK-ACCEPT",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Backend accepts feedback"
+          }
+        ],
+        "source": "ELM-COMP-BACKEND-FEEDBACK",
+        "target": "ELM-FUNC-BACKEND-ACCEPT-FEEDBACK",
+        "documentation": [
+          {
+            "value": "The feedback backend service is responsible for validating and acknowledging like/dislike message feedback."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-TEST-SITE-SERVE-SCENARIO",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Test site serves acceptance scenario"
+          }
+        ],
+        "source": "ELM-COMP-TEST-SITE",
+        "target": "ELM-FUNC-TEST-SITE-SERVE-SCENARIO",
+        "documentation": [
+          {
+            "value": "The local acceptance test site is responsible for hosting the deterministic browser page used during manual end-to-end validation."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-BACKGROUND-APP-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Background realizes assistant run service"
+          }
+        ],
+        "source": "ELM-COMP-EXT-BACKGROUND",
+        "target": "ELM-APPLICATION-SERVICE",
+        "documentation": [
+          {
+            "value": "The extension background orchestrator realizes the normalized assistant run service by initiating capture, run startup, and shared state coordination."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-CONTENT-APP-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Content module realizes assistant run service"
+          }
+        ],
+        "source": "ELM-COMP-EXT-CONTENT",
+        "target": "ELM-APPLICATION-SERVICE",
+        "documentation": [
+          {
+            "value": "The extension content integration module realizes the normalized assistant run service by collecting on-page context and providing an entrypoint into the assistant experience."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-SIDEPANEL-APP-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Side panel realizes assistant run service"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-APPLICATION-SERVICE",
+        "documentation": [
+          {
+            "value": "The extension side-panel experience realizes the normalized assistant run service by rendering the conversation, handling questions, and presenting streaming outcomes."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-SHARED-APP-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Shared layer realizes assistant run service"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-APPLICATION-SERVICE",
+        "documentation": [
+          {
+            "value": "The extension shared contract layer realizes the normalized assistant run service by enforcing shared API, rule, state, and history contracts."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-PY-ADAPTER-APP-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Adapter realizes assistant run service"
+          }
+        ],
+        "source": "ELM-COMP-PY-ADAPTER",
+        "target": "ELM-APPLICATION-SERVICE",
+        "documentation": [
+          {
+            "value": "The Python OpenCode adapter realizes the normalized assistant run service by bridging extension requests into remote OpenCode session and event flows."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-BACKEND-FEEDBACK-APP-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Feedback backend realizes assistant run service"
+          }
+        ],
+        "source": "ELM-COMP-BACKEND-FEEDBACK",
+        "target": "ELM-APPLICATION-SERVICE",
+        "documentation": [
+          {
+            "value": "The feedback backend realizes the normalized assistant run service's message-feedback boundary used during full interaction cycles."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-SERVE-APP-SVC-BUSINESS-SVC",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Application service serves business service"
+          }
+        ],
+        "source": "ELM-APPLICATION-SERVICE",
+        "target": "ELM-BUSINESS-SERVICE",
+        "documentation": [
+          {
+            "value": "The normalized assistant run service provides the automation that underpins the context-aware AI analysis service."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-BUSINESS-PROCESS-BUSINESS-SERVICE",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Business workflow realizes AI analysis service"
+          }
+        ],
+        "source": "ELM-BUSINESS-PROCESS",
+        "target": "ELM-BUSINESS-SERVICE",
+        "documentation": [
+          {
+            "value": "The browser-based AI analysis workflow makes the context-aware AI analysis service concrete for the operator."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSOC-TEST-SITE-BUSINESS-PROCESS",
+        "type": "Association",
+        "name": [
+          {
+            "value": "Test site supports AI analysis workflow"
+          }
+        ],
+        "source": "ELM-COMP-TEST-SITE",
+        "target": "ELM-BUSINESS-PROCESS",
+        "documentation": [
+          {
+            "value": "The local acceptance test site provides the deterministic browser scenario used to exercise and validate the browser-based AI analysis workflow during local integration and acceptance."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-PY-ADAPTER-APP-DATA",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Adapter accesses conversation data"
+          }
+        ],
+        "source": "ELM-COMP-PY-ADAPTER",
+        "target": "ELM-APPLICATION-DATA",
+        "documentation": [
+          {
+            "value": "The Python OpenCode adapter reads and writes run identifiers, normalized events, question state, feedback payloads, and invocation logs as part of the conversation lifecycle."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-SHARED-APP-DATA",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Shared layer accesses captured history data"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-APPLICATION-DATA",
+        "documentation": [
+          {
+            "value": "The extension shared layer stores and retrieves captured page fields, session history, answers, and run records used across the assistant experience."
+          }
+        ]
+      }
+    ]
+  },
+  "organizations": [
+    {
+      "identifier": "ORG-INTENTION-ROOT",
+      "label": [
+        {
+          "value": "Intention Architecture"
+        }
+      ],
+      "documentation": [
+        {
+          "value": "Core layered intention model maintained by SystemArchitect."
+        }
+      ],
+      "item": [
+        {
+          "identifier": "ORG-INTENTION-STRATEGY",
+          "label": [
+            {
+              "value": "Strategy Layer"
+            }
+          ],
+          "item": [
+            {
+              "identifier": "ORG-REF-STRATEGY-GOAL",
+              "label": [
+                {
+                  "value": "Goal"
+                }
+              ],
+              "elementRef": "ELM-STRATEGY-GOAL"
+            },
+            {
+              "identifier": "ORG-REF-STRATEGY-CAPABILITY",
+              "label": [
+                {
+                  "value": "Capability"
+                }
+              ],
+              "elementRef": "ELM-STRATEGY-CAPABILITY"
+            },
+            {
+              "identifier": "ORG-REF-STRATEGY-COURSE",
+              "label": [
+                {
+                  "value": "Course Of Action"
+                }
+              ],
+              "elementRef": "ELM-STRATEGY-COURSE"
+            }
+          ],
+          "extensions": {
+            "ai4pb": {
+              "managedBy": "system-architect",
+              "baseline": "core"
+            }
+          }
+        },
+        {
+          "identifier": "ORG-INTENTION-BUSINESS",
+          "label": [
+            {
+              "value": "Business Layer"
+            }
+          ],
+          "item": [
+            {
+              "identifier": "ORG-REF-BUSINESS-ACTOR",
+              "label": [
+                {
+                  "value": "Business Actor"
+                }
+              ],
+              "elementRef": "ELM-BUSINESS-ACTOR"
+            },
+            {
+              "identifier": "ORG-REF-BUSINESS-PROCESS",
+              "label": [
+                {
+                  "value": "Business Process"
+                }
+              ],
+              "elementRef": "ELM-BUSINESS-PROCESS"
+            },
+            {
+              "identifier": "ORG-REF-BUSINESS-SERVICE",
+              "label": [
+                {
+                  "value": "Business Service"
+                }
+              ],
+              "elementRef": "ELM-BUSINESS-SERVICE"
+            }
+          ],
+          "extensions": {
+            "ai4pb": {
+              "managedBy": "system-architect",
+              "baseline": "core"
+            }
+          }
+        },
+        {
+          "identifier": "ORG-INTENTION-APPLICATION",
+          "label": [
+            {
+              "value": "Application Layer"
+            }
+          ],
+          "item": [
+            {
+              "identifier": "ORG-REF-APPLICATION-COMPONENT",
+              "label": [
+                {
+                  "value": "Application Component"
+                }
+              ],
+              "elementRef": "ELM-APPLICATION-COMPONENT"
+            },
+            {
+              "identifier": "ORG-REF-APPLICATION-SERVICE",
+              "label": [
+                {
+                  "value": "Application Service"
+                }
+              ],
+              "elementRef": "ELM-APPLICATION-SERVICE"
+            },
+            {
+              "identifier": "ORG-REF-APPLICATION-DATA",
+              "label": [
+                {
+                  "value": "Data Object"
+                }
+              ],
+              "elementRef": "ELM-APPLICATION-DATA"
+            }
+          ],
+          "extensions": {
+            "ai4pb": {
+              "managedBy": "system-architect",
+              "baseline": "core"
+            }
+          }
+        },
+        {
+          "identifier": "ORG-INTENTION-TECHNOLOGY",
+          "label": [
+            {
+              "value": "Technology Layer"
+            }
+          ],
+          "item": [
+            {
+              "identifier": "ORG-REF-TECHNOLOGY-NODE",
+              "label": [
+                {
+                  "value": "Node"
+                }
+              ],
+              "elementRef": "ELM-TECHNOLOGY-NODE"
+            },
+            {
+              "identifier": "ORG-REF-TECHNOLOGY-ARTIFACT",
+              "label": [
+                {
+                  "value": "Artifact"
+                }
+              ],
+              "elementRef": "ELM-TECHNOLOGY-ARTIFACT"
+            }
+          ],
+          "extensions": {
+            "ai4pb": {
+              "managedBy": "system-architect",
+              "baseline": "core"
+            }
+          }
+        }
+      ],
+      "extensions": {
+        "ai4pb": {
+          "managedBy": "system-architect",
+          "baseline": "core"
+        }
+      }
+    }
+  ]
+}

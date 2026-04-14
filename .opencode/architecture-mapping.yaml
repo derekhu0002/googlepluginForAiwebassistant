@@ -1,21 +1,28 @@
 mappings:
   - architectureId: ELM-COMP-EXT-BACKGROUND
-    paths: ["extension/src/background/**"]
+    paths:
+      - "extension/src/background/**"
 
   - architectureId: ELM-COMP-EXT-CONTENT
-    paths: ["extension/src/content/**"]
+    paths:
+      - "extension/src/content/**"
 
   - architectureId: ELM-COMP-EXT-SIDEPANEL
-    paths: ["extension/src/sidepanel/**"]
+    paths:
+      - "extension/src/sidepanel/**"
 
   - architectureId: ELM-COMP-EXT-SHARED
-    paths: ["extension/src/shared/**"]
+    paths:
+      - "extension/src/shared/**"
 
   - architectureId: ELM-COMP-PY-ADAPTER
-    paths: ["python_adapter/app/**"]
+    paths:
+      - "python_adapter/app/**"
 
   - architectureId: ELM-COMP-BACKEND-FEEDBACK
-    paths: ["backend/src/**"]
+    paths:
+      - "backend/src/**"
 
   - architectureId: ELM-COMP-TEST-SITE
-    paths: ["test_site/**"]
+    paths:
+      - "test_site/**"
