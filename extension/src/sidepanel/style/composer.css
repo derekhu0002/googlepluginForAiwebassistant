@@ -49,6 +49,14 @@
   margin-top: 10px;
 }
 
+.composer-command-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
 .chat-console-dock {
   display: flex;
   flex-wrap: nowrap;
@@ -157,6 +165,26 @@
   box-shadow: none;
 }
 
+.utility-icon-button-labeled {
+  width: auto;
+  min-width: 108px;
+  padding: 0 12px;
+  gap: 8px;
+  border: 1px solid var(--copilot-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--copilot-text);
+  white-space: nowrap;
+}
+
+.capture-entry-button {
+  flex: 0 0 auto;
+}
+
+.utility-button-label {
+  font-size: 12px;
+  line-height: 1;
+}
+
 .utility-icon-badge {
   position: absolute;
   top: -4px;
@@ -183,6 +211,10 @@
 .utility-icon-button.pending {
   background: rgba(14, 99, 156, 0.18);
   color: #9cdcfe;
+}
+
+.utility-icon-button-labeled.pending {
+  border-color: rgba(156, 220, 254, 0.4);
 }
 
 .utility-icon-button-muted {

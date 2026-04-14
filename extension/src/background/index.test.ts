@@ -73,7 +73,9 @@ describe("background rule-driven capture flow", () => {
     expect(response.error.code).toBe("RULE_NOT_MATCHED_ERROR");
   });
 
-  it("injects content script and captures configured fields", async () => {
+  /** @ArchitectureID: ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART */
+  /** @ArchitectureID: ELM-COMP-EXT-BACKGROUND */
+  it("injects content script and packages captured fields with the run start request", async () => {
     const storageState: Record<string, unknown> = {
       "ai-web-assistant-rules": [
         {
@@ -163,6 +165,84 @@ describe("background rule-driven capture flow", () => {
     expect(sendMessage).toHaveBeenNthCalledWith(1, 1, { type: "PING" });
     expect(sendMessage).toHaveBeenNthCalledWith(2, 1, { type: "PING" });
     expect(sendMessage).toHaveBeenCalledWith(1, expect.objectContaining({ type: "COLLECT_FIELDS" }));
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(fetchCall?.[0]).toBe("http://localhost:8000/api/runs");
+    expect(JSON.parse(fetchCall?.[1]?.body as string)).toMatchObject({
+      prompt: "hello",
+      selectedAgent: DEFAULT_MAIN_AGENT,
+      capture: {
+        pageTitle: "Demo",
+        pageUrl: "https://example.com/page",
+        software_version: "v1",
+        selected_sr: "SR-1"
+      },
+      context: {
+        username: "alice",
+        usernameSource: "dom_text",
+        pageTitle: "Demo",
+        pageUrl: "https://example.com/page"
+      }
+    });
+  });
+
+  /** @ArchitectureID: ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART */
+  it("returns explicit permission error when capture-bearing run start is not authorized", async () => {
+    const storageState: Record<string, unknown> = {
+      "ai-web-assistant-rules": [
+        {
+          id: "rule-1",
+          name: "Example rule",
+          hostnamePattern: "example.com",
+          pathPattern: "*",
+          enabled: true,
+          fields: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ]
+    };
+
+    const listenerRegistry: { handler?: (message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean } = {};
+
+    vi.stubGlobal("chrome", {
+      tabs: {
+        query: vi.fn().mockResolvedValue([{ id: 1, url: "https://example.com/page" }]),
+        get: vi.fn().mockResolvedValue({ id: 1, url: "https://example.com/page" }),
+        sendMessage: vi.fn()
+      },
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: storageState[key] })),
+          set: vi.fn(async (payload: Record<string, unknown>) => Object.assign(storageState, payload))
+        }
+      },
+      permissions: {
+        contains: vi.fn().mockResolvedValue(false),
+        request: vi.fn().mockResolvedValue(false)
+      },
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        onMessage: { addListener: vi.fn((handler) => { listenerRegistry.handler = handler; }) },
+        onInstalled: { addListener: vi.fn() }
+      },
+      sidePanel: {
+        setOptions: vi.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
+        setPanelBehavior: vi.fn().mockResolvedValue(undefined)
+      },
+      scripting: {
+        executeScript: vi.fn().mockResolvedValue(undefined)
+      }
+    } as unknown as typeof chrome);
+
+    await import("./index");
+
+    const response = await new Promise<unknown>((resolve) => {
+      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", selectedAgent: DEFAULT_MAIN_AGENT, capturePageData: true } }, {}, resolve);
+    }) as { ok: boolean; error: { code: string } };
+
+    expect(response.ok).toBe(false);
+    expect(response.error.code).toBe("PERMISSION_ERROR");
   });
 
   it("starts run without capture when send is decoupled from page collection", async () => {

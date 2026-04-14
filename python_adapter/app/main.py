@@ -144,6 +144,8 @@ async def health() -> dict[str, object]:
     }
 
 
+# @ArchitectureID: ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART
+# @ArchitectureID: ELM-COMP-PY-ADAPTER
 @app.post("/api/runs")
 async def start_run(request: RunStartRequest, _auth: None = Depends(enforce_api_key)) -> JSONResponse:
     try:

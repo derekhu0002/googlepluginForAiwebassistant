@@ -12,7 +12,13 @@ from python_adapter.app.main import app
 client = TestClient(app)
 
 
+"""@ArchitectureID: ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART"""
+"""@ArchitectureID: ELM-COMP-PY-ADAPTER"""
+
+
 def test_start_run_and_answer_flow(monkeypatch) -> None:
+    captured_request = {}
+
     async def fake_stream_events(_run_id: str):
         yield NormalizedRunEvent(
             id="run-1-1",
@@ -42,7 +48,8 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
 
     submit_answer = AsyncMock(return_value=None)
 
-    async def fake_start_run(_request):
+    async def fake_start_run(request):
+        captured_request["request"] = request
         main.adapter._runs["run-1"] = {"session_id": "ses-1", "selected_agent": "TARA_analyst"}
         return "run-1"
 
@@ -76,6 +83,12 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
     run_id = response.json()["data"]["runId"]
     assert response.json()["data"]["sessionId"] == "ses-1"
     assert response.json()["data"]["selectedAgent"] == "TARA_analyst"
+    request = captured_request["request"]
+    assert request.prompt == "hello"
+    assert request.capture["pageTitle"] == "Example"
+    assert request.capture["selected_sr"] == "SR-1"
+    assert request.context.username == "alice"
+    assert request.context.pageUrl == "https://example.com"
 
     with client.stream("GET", f"/api/runs/{run_id}/events") as stream_response:
         body = "".join(chunk.decode() if isinstance(chunk, bytes) else chunk for chunk in stream_response.iter_text())

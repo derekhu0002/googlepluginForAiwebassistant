@@ -744,7 +744,9 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("第一段第二段");
   });
 
-  it("keeps independent page capture entry working", async () => {
+  /** @ArchitectureID: ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY */
+  /** @ArchitectureID: ELM-COMP-EXT-SIDEPANEL */
+  it("keeps a visible page capture entry working", async () => {
     const { runtimeSendMessage } = setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
     });
@@ -755,6 +757,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     const captureButton = container.querySelector("button[aria-label='采集页面']");
+    expect(captureButton?.textContent).toContain("采集页面");
     await act(async () => {
       captureButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
@@ -763,7 +766,8 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "RECAPTURE" });
   });
 
-  it("shows capture in progress from the independent capture entry", async () => {
+  /** @ArchitectureID: ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY */
+  it("shows capture in progress from the visible capture entry", async () => {
     let resolveRecapture: (() => void) | null = null;
     const { runtimeSendMessage } = setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
@@ -796,7 +800,9 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("采集中...");
+    const pendingCaptureButton = container.querySelector("button[aria-label='采集中...']") as HTMLButtonElement | null;
+    expect(pendingCaptureButton?.textContent).toContain("采集中...");
+    expect(pendingCaptureButton?.disabled).toBe(true);
 
     await act(async () => {
       resolveRecapture?.();

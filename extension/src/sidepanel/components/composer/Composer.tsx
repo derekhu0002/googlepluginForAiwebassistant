@@ -7,6 +7,8 @@ import { CaptureIcon, ContextIcon, RulesIcon, SendIcon, SessionIcon } from "../s
 import { RunIcon } from "../shared/icons";
 
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
+/** @ArchitectureID: ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY */
+/** @ArchitectureID: ELM-COMP-EXT-SIDEPANEL */
 export function Composer({
   activeDrawer,
   agentMenuHost,
@@ -139,6 +141,7 @@ export function Composer({
         agentMenuHost
       )
     : null;
+  const captureButtonLabel = state.status === "collecting" ? "采集中..." : "采集页面";
 
   return (
     <>
@@ -159,40 +162,50 @@ export function Composer({
         </label>
 
         <div className="composer-utility-strip">
-          <div className="chat-console-dock compact-icon-dock" aria-label="drawer icon bar">
-            <div className="main-agent-picker" aria-label="主 AGENT 选择器">
-              <button
-                ref={agentTriggerRef}
-                type="button"
-                className={`main-agent-trigger ${agentMenuOpen ? "active" : ""}`}
-                aria-haspopup="menu"
-                aria-expanded={agentMenuOpen}
-                aria-controls={agentMenuOpen ? agentMenuId : undefined}
-                aria-label={`主 AGENT：${state.mainAgentPreference}`}
-                onClick={() => setAgentMenuOpen((current) => !current)}
-              >
-                {`主 AGENT：${state.mainAgentPreference}`}
-              </button>
+          <div className="composer-command-strip">
+            <div className="chat-console-dock compact-icon-dock" aria-label="drawer icon bar">
+              <div className="main-agent-picker" aria-label="主 AGENT 选择器">
+                <button
+                  ref={agentTriggerRef}
+                  type="button"
+                  className={`main-agent-trigger ${agentMenuOpen ? "active" : ""}`}
+                  aria-haspopup="menu"
+                  aria-expanded={agentMenuOpen}
+                  aria-controls={agentMenuOpen ? agentMenuId : undefined}
+                  aria-label={`主 AGENT：${state.mainAgentPreference}`}
+                  onClick={() => setAgentMenuOpen((current) => !current)}
+                >
+                  {`主 AGENT：${state.mainAgentPreference}`}
+                </button>
+              </div>
+              {drawerItems.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`utility-icon-button ${activeDrawer === item.key ? "active" : ""} ${item.status === "pending" ? "pending" : ""}`}
+                  aria-label={item.label}
+                  aria-pressed={activeDrawer === item.key}
+                  title={item.description}
+                  data-tooltip={item.label}
+                  onClick={() => onToggleDrawer(item.key)}
+                >
+                  {iconByKey[item.key]}
+                  {item.badge ? <span className="utility-icon-badge" aria-hidden="true">{item.badge}</span> : null}
+                  <span className="sr-only">{item.label}</span>
+                </button>
+              ))}
             </div>
-            {drawerItems.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={`utility-icon-button ${activeDrawer === item.key ? "active" : ""} ${item.status === "pending" ? "pending" : ""}`}
-                aria-label={item.label}
-                aria-pressed={activeDrawer === item.key}
-                title={item.description}
-                data-tooltip={item.label}
-                onClick={() => onToggleDrawer(item.key)}
-              >
-                {iconByKey[item.key]}
-                {item.badge ? <span className="utility-icon-badge" aria-hidden="true">{item.badge}</span> : null}
-                <span className="sr-only">{item.label}</span>
-              </button>
-            ))}
-            <button type="button" className={`utility-icon-button ${state.status === "collecting" ? "pending" : ""}`} aria-label={state.status === "collecting" ? "采集中..." : "采集页面"} title="重新采集页面上下文。发送消息默认不会触发页面采集。" data-tooltip={state.status === "collecting" ? "采集中" : "采集页面"} disabled={isBusy} onClick={() => onCaptureOnly()}>
+            <button
+              type="button"
+              className={`utility-icon-button utility-icon-button-labeled capture-entry-button ${state.status === "collecting" ? "pending" : ""}`}
+              aria-label={captureButtonLabel}
+              title="重新采集页面上下文。发送消息默认不会触发页面采集。"
+              data-tooltip={captureButtonLabel}
+              disabled={isBusy}
+              onClick={() => onCaptureOnly()}
+            >
               <CaptureIcon />
-              <span className="sr-only">{state.status === "collecting" ? "采集中..." : "采集页面"}</span>
+              <span className="utility-button-label">{captureButtonLabel}</span>
             </button>
           </div>
           <div className="conversation-composer-actions compact-composer-actions">

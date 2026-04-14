@@ -30,6 +30,8 @@ class RunContext(BaseModel):
     pageUrl: str | None = None
 
 
+# @ArchitectureID: ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART
+# @ArchitectureID: ELM-COMP-PY-ADAPTER
 class RunStartRequest(BaseModel):
     prompt: str = Field(min_length=1)
     selectedAgent: str = Field(min_length=1)

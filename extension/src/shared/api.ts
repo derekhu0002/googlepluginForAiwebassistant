@@ -109,6 +109,8 @@ async function parseJsonOrFailure(response: Response) {
 }
 
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
+/** @ArchitectureID: ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART */
+/** @ArchitectureID: ELM-COMP-EXT-SHARED */
 export async function startRun(prompt: string, capture: CapturedFields | null, usernameContext: UsernameContext, selectedAgent: MainAgent, sessionId?: string | null): Promise<StartRunApiResponse> {
   const normalizedCapture = capture && Object.keys(capture).length > 0 ? capture : null;
   const payload: RunStartRequest = {

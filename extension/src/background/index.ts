@@ -323,6 +323,8 @@ async function buildRunRecord(options: {
 }
 
 /** @ArchitectureID: ELM-APP-EXT-RUN-ORCHESTRATION */
+/** @ArchitectureID: ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART */
+/** @ArchitectureID: ELM-COMP-EXT-BACKGROUND */
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 /** @ArchitectureID: ELM-APP-008B */
 async function startRunFromActiveTab(options: { prompt: string; selectedAgent: MainAgent; sessionId?: string; retryFromRunId?: string; retryFromMessageId?: string; capturePageData?: boolean }) {

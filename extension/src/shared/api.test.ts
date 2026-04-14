@@ -39,7 +39,9 @@ describe("streaming api client", () => {
     vi.unstubAllEnvs();
   });
 
-  it("starts run against python adapter endpoint", async () => {
+  /** @ArchitectureID: ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART */
+  /** @ArchitectureID: ELM-COMP-EXT-SHARED */
+  it("starts run against python adapter endpoint with prompt, capture, and context packaged together", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
     vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
     vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
@@ -66,6 +68,7 @@ describe("streaming api client", () => {
       expect.objectContaining({ method: "POST" })
     );
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      prompt: "hello",
       sessionId: "ses-0",
       selectedAgent: "TARA_analyst",
       capture: expect.objectContaining({
@@ -94,6 +97,7 @@ describe("streaming api client", () => {
     expect(result.ok).toBe(true);
   });
 
+  /** @ArchitectureID: ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART */
   it("starts run without capture payload when send is decoupled", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
     vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
