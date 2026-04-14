@@ -1,30 +1,119 @@
 {
   "version": 2,
   "activeGoal": "",
-  "designSummary": "",
-  "designDecisions": [],
-  "tasks": [],
-  "issues": [],
+  "designSummary": "Architectural diagnosis for sidepanel message duplication: duplication persists during streaming and after completion, and survives refresh/reopen, so the defect crosses live SSE ingestion, background state synchronization, persistence, and transcript projection boundaries. Existing brownfield fit is retained in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**. The design decision is to harden upstream canonical event acceptance and observability rather than relying on late transcript heuristics. Stream consumption must accept only canonical ordered events, log accepted/rejected/gap/out-of-order cases, and synchronize only reconciled state. Transcript projection must consume accepted canonical events, preserve stable logical message identity and deterministic order, and emit projection anomaly diagnostics. Background synchronization must reconcile run-state snapshots using origin/frontier/version rules so stale or replayed sidepanel snapshots do not reintroduce duplicate events after refresh or reopen.",
+  "designDecisions": [
+    "ADR: Preserve existing brownfield module ownership. Extend ELM-COMP-EXT-SIDEPANEL (extension/src/sidepanel/useSidepanelController.ts, model.ts, reasoningTimeline.ts), ELM-COMP-EXT-BACKGROUND (extension/src/background/index.ts), and ELM-COMP-EXT-SHARED (extension/src/shared/api.ts, history.ts, shared types/protocol) instead of introducing a new physical package. These modules already own stream ingestion, transcript projection, state sync, SSE contract parsing, and durable history persistence, so they are the cleanest software-unit boundaries for the correction.",
+    "ADR: Dedupe authority moves upstream. Duplicate prevention must occur at canonical event acceptance in the sidepanel stream consumer and at background reconciliation, not only through transcript text coalescing. Text-similarity compaction remains presentation-only and must never be the primary correctness rule for event identity or order.",
+    "ADR: Observability is a required architectural behavior for this fix. Diagnostic logging must correlate runId, raw event id, canonical event key, semantic identity, sequence, accepted/rejected decision, frontier movement, persistence write result, background sync snapshot version/origin, and transcript anomaly classification so the team can distinguish SSE duplication from projection or re-sync duplication."
+  ],
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Harden sidepanel run-stream acceptance and diagnostics in existing sidepanel modules",
+      "status": "done",
+      "retryCount": 1,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "Added architecture-tagged automated tests for canonical sidepanel acceptance decisions in extension/src/sidepanel/model.test.ts covering accepted, duplicate, stale replay, gap, and out-of-order cases.",
+      "details": "Added architecture-tagged automated tests for canonical sidepanel acceptance decisions in extension/src/sidepanel/model.test.ts covering accepted, duplicate, stale replay, gap, and out-of-order cases.",
+      "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
+      "softwareUnitTitle": "Extension Side Panel Experience",
+      "architectureElementId": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+      "createdAt": "2026-04-14T06:41:53.849Z",
+      "updatedAt": "2026-04-14T08:13:51.810Z",
+      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed"
+    },
+    {
+      "id": "TASK-002",
+      "title": "Refine transcript projection correctness and anomaly logging in reasoning timeline module",
+      "status": "done",
+      "retryCount": 1,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "Added explicit architecture-tagged transcript projection tests for deterministic ordering and terminal reopen anomaly evidence.",
+      "details": "Added explicit architecture-tagged transcript projection tests for deterministic ordering and terminal reopen anomaly evidence.",
+      "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
+      "softwareUnitTitle": "Extension Side Panel Experience",
+      "architectureElementId": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+      "createdAt": "2026-04-14T06:41:53.849Z",
+      "updatedAt": "2026-04-14T08:13:51.960Z",
+      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed"
+    },
+    {
+      "id": "TASK-003",
+      "title": "Implement background run-state reconciliation and sync observability in existing background module",
+      "status": "done",
+      "retryCount": 1,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "Added architecture-tagged reconciliation test anchors for accepted sync persistence and stale snapshot rejection.",
+      "details": "Added architecture-tagged reconciliation test anchors for accepted sync persistence and stale snapshot rejection.",
+      "softwareUnitId": "ELM-COMP-EXT-BACKGROUND",
+      "softwareUnitTitle": "Extension Background Orchestrator",
+      "architectureElementId": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
+      "createdAt": "2026-04-14T06:41:53.849Z",
+      "updatedAt": "2026-04-14T08:13:52.187Z",
+      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed"
+    },
+    {
+      "id": "TASK-004",
+      "title": "Add shared transport and persistence observability for stream identity and idempotent history replay",
+      "status": "done",
+      "retryCount": 1,
+      "kind": "implementation",
+      "owner": "Implementation",
+      "summary": "Added architecture-tagged transport/persistence tests for SSE telemetry and canonical duplicate suppression in shared history.",
+      "details": "Added architecture-tagged transport/persistence tests for SSE telemetry and canonical duplicate suppression in shared history.",
+      "softwareUnitId": "ELM-COMP-EXT-SHARED",
+      "softwareUnitTitle": "Extension Shared Contract Layer",
+      "architectureElementId": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+      "createdAt": "2026-04-14T06:41:53.849Z",
+      "updatedAt": "2026-04-14T08:13:52.288Z",
+      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed"
+    }
+  ],
+  "issues": [
+    {
+      "id": "ISSUE-001",
+      "category": "ArchitectureGap",
+      "summary": "IntentNotVerified for duplicate-message full-model fix",
+      "details": "Blocking audit gap for commit 743a04e5499593851dd6f76170e02c5cb55b2a80. Intended IDs from TASK-001..TASK-004 are ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API. run_reality_scanner verified only requirement-level test tagging and did not verify these architecture IDs in automated tests. This is an IntentNotVerified gap; QA must add tagged automated tests before release can continue.",
+      "createdAt": "2026-04-14T07:52:21.805Z"
+    },
+    {
+      "id": "ISSUE-002",
+      "category": "BugReport",
+      "summary": "QA gap: missing architecture-traceable tests for sidepanel duplicate-message fix",
+      "details": "Commit 743a04e5499593851dd6f76170e02c5cb55b2a80 passed local regression commands, but QA cannot mark the fix validated because the reviewed test files lack @ArchitectureID/@RequirementID traceability tags for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API. Direct automated tests for canonical sidepanel event acceptance and diagnostics in extension/src/sidepanel/model.ts were not found. Add targeted tagged tests covering duplicate, stale replay, out-of-order, gap, transcript anomaly, background reconciliation, and idempotent persistence behaviors, then rerun local verification.",
+      "createdAt": "2026-04-14T07:56:32.635Z"
+    }
+  ],
   "validations": {
     "qa": {
-      "status": "not_run",
-      "summary": "No validation has been recorded yet.",
-      "updatedAt": "1970-01-01T00:00:00.000Z"
+      "status": "passed",
+      "summary": "QA passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. Local-only validation executed and passed: targeted extension tests covering ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API; npm run typecheck --workspace extension; npm run build --workspace extension. Added direct architecture-tagged tests in extension/src/sidepanel/model.test.ts for accepted, duplicate, stale replay, gap, and out-of-order acceptance decisions. Shared API/history, background reconciliation, and transcript projection tests now contain matching architecture traceability tags. 跳过了真实环境验证.",
+      "details": "QA passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. Local-only validation executed and passed: targeted extension tests covering ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API; npm run typecheck --workspace extension; npm run build --workspace extension. Added direct architecture-tagged tests in extension/src/sidepanel/model.test.ts for accepted, duplicate, stale replay, gap, and out-of-order acceptance decisions. Shared API/history, background reconciliation, and transcript projection tests now contain matching architecture traceability tags. 跳过了真实环境验证.",
+      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
+      "updatedAt": "2026-04-14T08:18:05.762Z"
     },
     "audit": {
-      "status": "not_run",
-      "summary": "No validation has been recorded yet.",
-      "updatedAt": "1970-01-01T00:00:00.000Z"
+      "status": "passed",
+      "summary": "Audit passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. The rework preserves approved brownfield boundaries in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**; retains upstream dedupe authority in sidepanel canonical event acceptance and background reconciliation; keeps transcript projection as a consumer of accepted canonical events; and maintains observability across transport, sidepanel acceptance, persistence, background reconciliation, and transcript projection. Blocking IntentNotVerified gap is resolved: run_reality_scanner verified architecture-scoped automated test coverage for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API.",
+      "details": "Audit passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. The rework preserves approved brownfield boundaries in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**; retains upstream dedupe authority in sidepanel canonical event acceptance and background reconciliation; keeps transcript projection as a consumer of accepted canonical events; and maintains observability across transport, sidepanel acceptance, persistence, background reconciliation, and transcript projection. Blocking IntentNotVerified gap is resolved: run_reality_scanner verified architecture-scoped automated test coverage for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API.",
+      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
+      "updatedAt": "2026-04-14T08:16:04.438Z"
     }
   },
   "release": {
-    "status": "not_started",
-    "summary": "Release has not been prepared yet.",
-    "updatedAt": "2026-04-14T01:46:01.029Z"
+    "status": "completed",
+    "summary": "Release finalized for full-model issue fix addressing severe sidepanel AI message duplication across streaming, completion, and refresh/reopen paths. Release scope commit: 016599612be0527d5affcdfb083d14ee8bc70eed. Runtime tasks completed: TASK-001, TASK-002, TASK-003, TASK-004. QA status: passed. Audit status: passed. Release log records mandatory traceability matrix artifact for commit 016599612be0527d5affcdfb083d14ee8bc70eed and notes that generated graph-backed verification still shows Requirement and Source Files as N/A with rows marked ❌ No, so documentation retains traceability gap notes despite successful QA/audit.",
+    "releaseLogPath": "SprintRleaseLog.md",
+    "updatedAt": "2026-04-14T08:20:50.218Z"
   },
   "counters": {
-    "task": 0,
-    "issue": 0
+    "task": 4,
+    "issue": 2
   },
-  "updatedAt": "2026-04-14T01:55:48.303Z"
+  "updatedAt": "2026-04-14T08:20:50.219Z"
 }

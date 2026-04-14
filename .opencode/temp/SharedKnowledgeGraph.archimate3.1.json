@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "Schema-compliant shared knowledge graph maintained by OpenCode tools."
+      "value": "Architectural diagnosis for sidepanel message duplication: duplication persists during streaming and after completion, and survives refresh/reopen, so the defect crosses live SSE ingestion, background state synchronization, persistence, and transcript projection boundaries. Existing brownfield fit is retained in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**. The design decision is to harden upstream canonical event acceptance and observability rather than relying on late transcript heuristics. Stream consumption must accept only canonical ordered events, log accepted/rejected/gap/out-of-order cases, and synchronize only reconciled state. Transcript projection must consume accepted canonical events, preserve stable logical message identity and deterministic order, and emit projection anomaly diagnostics. Background synchronization must reconcile run-state snapshots using origin/frontier/version rules so stale or replayed sidepanel snapshots do not reintroduce duplicate events after refresh or reopen."
     }
   ],
   "metadata": {
@@ -19,28 +19,37 @@
     "ai4pb": {
       "managedBy": "opencode",
       "counters": {},
-      "designSummary": "",
-      "designDecisions": [],
+      "designSummary": "Architectural diagnosis for sidepanel message duplication: duplication persists during streaming and after completion, and survives refresh/reopen, so the defect crosses live SSE ingestion, background state synchronization, persistence, and transcript projection boundaries. Existing brownfield fit is retained in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**. The design decision is to harden upstream canonical event acceptance and observability rather than relying on late transcript heuristics. Stream consumption must accept only canonical ordered events, log accepted/rejected/gap/out-of-order cases, and synchronize only reconciled state. Transcript projection must consume accepted canonical events, preserve stable logical message identity and deterministic order, and emit projection anomaly diagnostics. Background synchronization must reconcile run-state snapshots using origin/frontier/version rules so stale or replayed sidepanel snapshots do not reintroduce duplicate events after refresh or reopen.",
+      "designDecisions": [
+        "ADR: Preserve existing brownfield module ownership. Extend ELM-COMP-EXT-SIDEPANEL (extension/src/sidepanel/useSidepanelController.ts, model.ts, reasoningTimeline.ts), ELM-COMP-EXT-BACKGROUND (extension/src/background/index.ts), and ELM-COMP-EXT-SHARED (extension/src/shared/api.ts, history.ts, shared types/protocol) instead of introducing a new physical package. These modules already own stream ingestion, transcript projection, state sync, SSE contract parsing, and durable history persistence, so they are the cleanest software-unit boundaries for the correction.",
+        "ADR: Dedupe authority moves upstream. Duplicate prevention must occur at canonical event acceptance in the sidepanel stream consumer and at background reconciliation, not only through transcript text coalescing. Text-similarity compaction remains presentation-only and must never be the primary correctness rule for event identity or order.",
+        "ADR: Observability is a required architectural behavior for this fix. Diagnostic logging must correlate runId, raw event id, canonical event key, semantic identity, sequence, accepted/rejected decision, frontier movement, persistence write result, background sync snapshot version/origin, and transcript anomaly classification so the team can distinguish SSE duplication from projection or re-sync duplication."
+      ],
       "runtime": {
         "activeGoal": "",
         "validations": {
           "qa": {
-            "status": "not_run",
-            "summary": "No validation has been recorded yet.",
-            "updatedAt": "1970-01-01T00:00:00.000Z"
+            "status": "passed",
+            "summary": "QA passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. Local-only validation executed and passed: targeted extension tests covering ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API; npm run typecheck --workspace extension; npm run build --workspace extension. Added direct architecture-tagged tests in extension/src/sidepanel/model.test.ts for accepted, duplicate, stale replay, gap, and out-of-order acceptance decisions. Shared API/history, background reconciliation, and transcript projection tests now contain matching architecture traceability tags. 跳过了真实环境验证.",
+            "details": "QA passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. Local-only validation executed and passed: targeted extension tests covering ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API; npm run typecheck --workspace extension; npm run build --workspace extension. Added direct architecture-tagged tests in extension/src/sidepanel/model.test.ts for accepted, duplicate, stale replay, gap, and out-of-order acceptance decisions. Shared API/history, background reconciliation, and transcript projection tests now contain matching architecture traceability tags. 跳过了真实环境验证.",
+            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
+            "updatedAt": "2026-04-14T08:18:05.762Z"
           },
           "audit": {
-            "status": "not_run",
-            "summary": "No validation has been recorded yet.",
-            "updatedAt": "1970-01-01T00:00:00.000Z"
+            "status": "passed",
+            "summary": "Audit passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. The rework preserves approved brownfield boundaries in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**; retains upstream dedupe authority in sidepanel canonical event acceptance and background reconciliation; keeps transcript projection as a consumer of accepted canonical events; and maintains observability across transport, sidepanel acceptance, persistence, background reconciliation, and transcript projection. Blocking IntentNotVerified gap is resolved: run_reality_scanner verified architecture-scoped automated test coverage for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API.",
+            "details": "Audit passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. The rework preserves approved brownfield boundaries in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**; retains upstream dedupe authority in sidepanel canonical event acceptance and background reconciliation; keeps transcript projection as a consumer of accepted canonical events; and maintains observability across transport, sidepanel acceptance, persistence, background reconciliation, and transcript projection. Blocking IntentNotVerified gap is resolved: run_reality_scanner verified architecture-scoped automated test coverage for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API.",
+            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
+            "updatedAt": "2026-04-14T08:16:04.438Z"
           }
         },
         "release": {
-          "status": "not_started",
-          "summary": "Release has not been prepared yet.",
-          "updatedAt": "2026-04-14T01:46:01.029Z"
+          "status": "completed",
+          "summary": "Release finalized for full-model issue fix addressing severe sidepanel AI message duplication across streaming, completion, and refresh/reopen paths. Release scope commit: 016599612be0527d5affcdfb083d14ee8bc70eed. Runtime tasks completed: TASK-001, TASK-002, TASK-003, TASK-004. QA status: passed. Audit status: passed. Release log records mandatory traceability matrix artifact for commit 016599612be0527d5affcdfb083d14ee8bc70eed and notes that generated graph-backed verification still shows Requirement and Source Files as N/A with rows marked ❌ No, so documentation retains traceability gap notes despite successful QA/audit.",
+          "releaseLogPath": "SprintRleaseLog.md",
+          "updatedAt": "2026-04-14T08:20:50.218Z"
         },
-        "updatedAt": "2026-04-14T01:55:48.254Z"
+        "updatedAt": "2026-04-14T08:18:05.763Z"
       }
     }
   },
@@ -469,9 +478,16 @@
         ],
         "documentation": [
           {
-            "value": "[Input]: Run id, adapter SSE endpoint, normalized run events, and current side-panel state.\n[Processing]: Open the EventSource stream, validate incoming event payloads, merge events into local run history and live state, derive lifecycle status, refresh persisted run summaries, and keep the UI stream status synchronized.\n[Output]: An updated live conversation state containing ordered run events, derived run status, final output snapshots, and stream connection state.\n[Acceptance Criteria]: Valid events are appended without duplication; terminal evidence updates run status correctly; reconnect states are surfaced; event history persists for later replay."
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Consume Normalized Run Stream governs sidepanel receipt of normalized run events, canonical acceptance of those events, persistence coordination, and observability for duplicate, missing, and out-of-order stream behavior.\n[Input]: Run id, adapter SSE endpoint, normalized run events, current side-panel state, prior accepted event identities, accepted ordering frontier, and current persistence/synchronization status.\n[Processing]: Open the EventSource stream, validate each incoming payload, derive a canonical event key using semantic identity and stable message metadata before falling back to runId plus sequence or raw id, accept only the first event per canonical key, reject stale or replayed events that do not advance the accepted frontier, log accepted, duplicate, gap, and out-of-order decisions, persist only accepted events, update run lifecycle state from accepted evidence, and synchronize only reconciled accepted state to background.\n[Output]: An updated live conversation state containing accepted ordered run events, accepted-frontier metadata, derived run status, final output snapshots, stream connection state, and structured stream diagnostics.\n[Acceptance Criteria]: Semantically duplicate events are not appended twice even when raw ids differ; accepted events advance in deterministic order or are classified as out-of-order with diagnostics; missing-sequence and replay conditions are logged with run id and canonical key; terminal evidence updates run status only from accepted events; refresh or reconnect does not cause already accepted events to be re-appended."
           }
-        ]
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
       },
       {
         "identifier": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
@@ -483,9 +499,16 @@
         ],
         "documentation": [
           {
-            "value": "[Input]: Historical run details, live normalized events, answer records, final output snapshots, and prior transcript projection state.\n[Processing]: Convert raw events into fragments, classify assistant text versus reasoning and questions, group them into transcript messages, and merge historical plus live segments into a stable conversation read model.\n[Output]: A transcript projection suitable for side-panel chat rendering, summaries, and cockpit status displays.\n[Acceptance Criteria]: Assistant streamed text remains distinguishable from reasoning; history and live segments merge stably; question and answer turns render in the correct conversational order."
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Project Transcript Read Model governs deterministic reconstruction of sidepanel transcript messages from accepted canonical events, persisted history, and live run state without reintroducing duplicate, missing, or out-of-order assistant output.\n[Input]: Historical run details, accepted live normalized events, answer records, final output snapshots, prior transcript projection state, feedback state, and accepted event-frontier metadata.\n[Processing]: Build transcript messages only from accepted canonical events, preserve stable logical message identity for assistant output, order transcript parts by accepted event frontier and deterministic tie-break rules, merge historical and live segments without replaying already projected identities, restrict text-similarity coalescing to bounded presentation compaction inside the same logical message group, and emit structured diagnostics for projection anomalies such as duplicate logical groups, missing predecessor evidence, sequence regression, or message reopening after terminal state.\n[Output]: A transcript projection suitable for side-panel chat rendering, summaries, and cockpit status displays, together with projection diagnostics keyed to accepted event identities.\n[Acceptance Criteria]: Assistant streamed text remains distinguishable from reasoning and tool output; historical and live segments merge without duplicating accepted message groups; question and answer turns render in deterministic conversational order; projection never becomes the primary dedupe authority over raw accepted events; anomaly logs make duplicate, missing, and ordering faults traceable to their upstream source."
           }
-        ]
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
       },
       {
         "identifier": "ELM-FUNC-EXT-SUBMIT-QUESTION-ANSWER",
@@ -511,9 +534,16 @@
         ],
         "documentation": [
           {
-            "value": "[Input]: Prompt payloads, capture payloads, username context, selected agent, optional session id, feedback requests, and optional API key configuration.\n[Processing]: Build validated HTTP request bodies and headers for run start, answer submission, feedback submission, and SSE stream setup, then parse normalized success or failure responses with schema validation.\n[Output]: Typed extension-side API results and stream connections aligned to the adapter contract.\n[Acceptance Criteria]: Requests include authentication when configured; invalid or failed responses are normalized; run, answer, and feedback endpoints remain contract-compatible with the adapter."
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Call Adapter API governs extension-side HTTP and SSE integration contracts and exposes the raw transport metadata needed to diagnose duplicate, missing, or reordered run events.\n[Input]: Prompt payloads, capture payloads, username context, selected agent, optional session id, feedback requests, optional API key configuration, and SSE connection context.\n[Processing]: Build validated HTTP request bodies and headers for run start, answer submission, feedback submission, and SSE stream setup; parse normalized success or failure responses with schema validation; preserve raw event transport identifiers and semantic metadata provided by the adapter; surface connection-open, message, error, and reconnect transitions; and emit transport-level diagnostics needed to distinguish upstream duplication from extension-side replay.\n[Output]: Typed extension-side API results, stream connections aligned to the adapter contract, and transport diagnostics for SSE lifecycle and payload identity.\n[Acceptance Criteria]: Requests include authentication when configured; invalid or failed responses are normalized; stream payload parsing preserves available semantic identity fields; connection and reconnect transitions are observable in diagnostics; transport diagnostics allow the team to determine whether duplication originates before or after sidepanel acceptance."
           }
-        ]
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
       },
       {
         "identifier": "ELM-FUNC-EXT-EVALUATE-RULES",
@@ -539,9 +569,16 @@
         ],
         "documentation": [
           {
-            "value": "[Input]: Run records, normalized run events, answer records, and session identifiers from active or completed conversations.\n[Processing]: Persist run artifacts in browser storage, reload run detail views on demand, group runs into sessions, and keep historical details available after UI refresh or reopen.\n[Output]: A durable browser-side run history with per-run detail, answer history, and session navigation views.\n[Acceptance Criteria]: Multiple runs remain queryable after side-panel reloads; events and answers stay associated with the correct run; session grouping is stable when session ids are present."
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Persist Run History governs durable storage of canonical run artifacts so refresh, reopen, and replay use accepted event identities rather than reintroducing duplicate or unordered history.\n[Input]: Run records, accepted normalized run events, answer records, session identifiers, canonical event identities, and persistence diagnostics context.\n[Processing]: Persist run artifacts with stable canonical event identity metadata, upsert events idempotently for each run, preserve accepted event order and answer order, expose run detail reload APIs that return deterministic ordered artifacts, and log persistence writes, duplicate-write suppression, and ordering anomalies.\n[Output]: A durable browser-side run history with per-run detail, canonical event identity metadata, answer history, and session navigation views.\n[Acceptance Criteria]: Refresh or reopen replays the same accepted event set without adding duplicates; persisted events remain associated with the correct run and ordered deterministically; duplicate writes are suppressed or surfaced with diagnostics; session grouping remains stable when session ids are present."
           }
-        ]
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
       },
       {
         "identifier": "ELM-FUNC-PY-START-RUN",
@@ -614,6 +651,27 @@
         ]
       },
       {
+        "identifier": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Reconcile Cross-Component Run State"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Reconcile Cross-Component Run State governs background-sidepanel snapshot reconciliation so accepted live events, persisted history, and rebroadcast state do not reintroduce duplicate, missing, or out-of-order transcript data.\n[Input]: Background-stored assistant state, sidepanel synchronization payloads, active run identifiers, accepted event-frontier metadata, snapshot-origin metadata, and current browser-storage state.\n[Processing]: Compare incoming run-state snapshots against the stored active-run frontier, derive a reconciliation decision per snapshot, reject stale or replayed snapshots, merge only monotonic event-frontier advances for the active run, preserve accepted events and answers already stored, and emit structured synchronization diagnostics for accepted, rejected, stale, divergent, or replayed updates.\n[Output]: A reconciled canonical extension run state suitable for persistence and rebroadcast to sidepanel consumers without reintroducing duplicate, missing, or out-of-order events.\n[Acceptance Criteria]: Background synchronization never overwrites a newer active-run snapshot with an older one; replayed sidepanel payloads do not duplicate accepted events after refresh or reopen; divergence between stored and incoming frontiers is logged with run id and decision outcome; rebroadcast state reflects only reconciled canonical data."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
         "identifier": "PROJECT-CURRENT",
         "type": "WorkPackage",
         "name": [
@@ -623,7 +681,7 @@
         ],
         "documentation": [
           {
-            "value": "Current OpenCode project goal."
+            "value": "Architectural diagnosis for sidepanel message duplication: duplication persists during streaming and after completion, and survives refresh/reopen, so the defect crosses live SSE ingestion, background state synchronization, persistence, and transcript projection boundaries. Existing brownfield fit is retained in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**. The design decision is to harden upstream canonical event acceptance and observability rather than relying on late transcript heuristics. Stream consumption must accept only canonical ordered events, log accepted/rejected/gap/out-of-order cases, and synchronize only reconciled state. Transcript projection must consume accepted canonical events, preserve stable logical message identity and deterministic order, and emit projection anomaly diagnostics. Background synchronization must reconcile run-state snapshots using origin/frontier/version rules so stale or replayed sidepanel snapshots do not reintroduce duplicate events after refresh or reopen."
           }
         ],
         "extensions": {
@@ -632,6 +690,198 @@
             "kind": "Project",
             "rawRequirement": "",
             "status": "InProgress"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-001",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Harden sidepanel run-stream acceptance and diagnostics in existing sidepanel modules"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Added architecture-tagged automated tests for canonical sidepanel acceptance decisions in extension/src/sidepanel/model.test.ts covering accepted, duplicate, stale replay, gap, and out-of-order cases."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "Added architecture-tagged automated tests for canonical sidepanel acceptance decisions in extension/src/sidepanel/model.test.ts covering accepted, duplicate, stale replay, gap, and out-of-order cases.",
+            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
+            "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
+            "softwareUnitTitle": "Extension Side Panel Experience",
+            "architectureElementId": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+            "updatedAt": "2026-04-14T08:13:51.810Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-002",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Refine transcript projection correctness and anomaly logging in reasoning timeline module"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Added explicit architecture-tagged transcript projection tests for deterministic ordering and terminal reopen anomaly evidence."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "Added explicit architecture-tagged transcript projection tests for deterministic ordering and terminal reopen anomaly evidence.",
+            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
+            "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
+            "softwareUnitTitle": "Extension Side Panel Experience",
+            "architectureElementId": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+            "updatedAt": "2026-04-14T08:13:51.960Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-003",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Implement background run-state reconciliation and sync observability in existing background module"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Added architecture-tagged reconciliation test anchors for accepted sync persistence and stale snapshot rejection."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "Added architecture-tagged reconciliation test anchors for accepted sync persistence and stale snapshot rejection.",
+            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
+            "softwareUnitId": "ELM-COMP-EXT-BACKGROUND",
+            "softwareUnitTitle": "Extension Background Orchestrator",
+            "architectureElementId": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
+            "updatedAt": "2026-04-14T08:13:52.187Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-004",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Add shared transport and persistence observability for stream identity and idempotent history replay"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Added architecture-tagged transport/persistence tests for SSE telemetry and canonical duplicate suppression in shared history."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "Added architecture-tagged transport/persistence tests for SSE telemetry and canonical duplicate suppression in shared history.",
+            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
+            "softwareUnitId": "ELM-COMP-EXT-SHARED",
+            "softwareUnitTitle": "Extension Shared Contract Layer",
+            "architectureElementId": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+            "updatedAt": "2026-04-14T08:13:52.288Z"
+          }
+        }
+      },
+      {
+        "identifier": "ISSUE-001",
+        "type": "BusinessObject",
+        "name": [
+          {
+            "value": "IntentNotVerified for duplicate-message full-model fix"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Blocking audit gap for commit 743a04e5499593851dd6f76170e02c5cb55b2a80. Intended IDs from TASK-001..TASK-004 are ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API. run_reality_scanner verified only requirement-level test tagging and did not verify these architecture IDs in automated tests. This is an IntentNotVerified gap; QA must add tagged automated tests before release can continue."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Issue",
+            "issueType": "ArchGap",
+            "status": "Open",
+            "reporter": "OpenCode",
+            "category": "ArchitectureGap"
+          }
+        }
+      },
+      {
+        "identifier": "ISSUE-002",
+        "type": "BusinessObject",
+        "name": [
+          {
+            "value": "QA gap: missing architecture-traceable tests for sidepanel duplicate-message fix"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Commit 743a04e5499593851dd6f76170e02c5cb55b2a80 passed local regression commands, but QA cannot mark the fix validated because the reviewed test files lack @ArchitectureID/@RequirementID traceability tags for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API. Direct automated tests for canonical sidepanel event acceptance and diagnostics in extension/src/sidepanel/model.ts were not found. Add targeted tagged tests covering duplicate, stale replay, out-of-order, gap, transcript anomaly, background reconciliation, and idempotent persistence behaviors, then rerun local verification."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Issue",
+            "issueType": "BugReport",
+            "status": "Open",
+            "reporter": "OpenCode",
+            "category": "BugReport"
+          }
+        }
+      },
+      {
+        "identifier": "RELEASE-LOG",
+        "type": "Artifact",
+        "name": [
+          {
+            "value": "SprintReleaseLog"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Release finalized for full-model issue fix addressing severe sidepanel AI message duplication across streaming, completion, and refresh/reopen paths. Release scope commit: 016599612be0527d5affcdfb083d14ee8bc70eed. Runtime tasks completed: TASK-001, TASK-002, TASK-003, TASK-004. QA status: passed. Audit status: passed. Release log records mandatory traceability matrix artifact for commit 016599612be0527d5affcdfb083d14ee8bc70eed and notes that generated graph-backed verification still shows Requirement and Source Files as N/A with rows marked ❌ No, so documentation retains traceability gap notes despite successful QA/audit."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ReleaseLog",
+            "version": "1.0.0",
+            "content": "Release finalized for full-model issue fix addressing severe sidepanel AI message duplication across streaming, completion, and refresh/reopen paths. Release scope commit: 016599612be0527d5affcdfb083d14ee8bc70eed. Runtime tasks completed: TASK-001, TASK-002, TASK-003, TASK-004. QA status: passed. Audit status: passed. Release log records mandatory traceability matrix artifact for commit 016599612be0527d5affcdfb083d14ee8bc70eed and notes that generated graph-backed verification still shows Requirement and Source Files as N/A with rows marked ❌ No, so documentation retains traceability gap notes despite successful QA/audit.",
+            "timestamp": "2026-04-14T08:20:50.218Z",
+            "path": "SprintRleaseLog.md"
           }
         }
       }
@@ -1350,6 +1600,262 @@
             "value": "The extension shared layer stores and retrieves captured page fields, session history, answers, and run records used across the assistant experience."
           }
         ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-BACKGROUND-RECONCILE-RUN-STATE",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Background reconciles run state"
+          }
+        ],
+        "source": "ELM-COMP-EXT-BACKGROUND",
+        "target": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an assignment: the source active structure is responsible for performing the target behavior. In this architecture, Extension Background Orchestrator is responsible for reconciling cross-component run-state snapshots before state is persisted and rebroadcast."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-TRIGGER-EXT-CONSUME-STREAM-RECONCILE-STATE",
+        "type": "Triggering",
+        "name": [
+          {
+            "value": "Accepted stream state triggers reconciliation"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "target": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, accepted sidepanel stream-consumption updates initiate background run-state reconciliation so stale or duplicate snapshots are not rebroadcast."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-TRIGGER-RECONCILE-STATE-PROJECT-TRANSCRIPT",
+        "type": "Triggering",
+        "name": [
+          {
+            "value": "Reconciled state drives transcript projection"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
+        "target": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, reconciled canonical run state provides the stable basis for transcript projection and replay after refresh or reopen."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-TRIGGER-CALL-API-CONSUME-STREAM",
+        "type": "Triggering",
+        "name": [
+          {
+            "value": "Adapter stream setup triggers stream consumption"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, the shared adapter API contract establishes the SSE connection context that is then consumed by the sidepanel stream-consumption behavior."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-TRIGGER-CONSUME-STREAM-PERSIST-HISTORY",
+        "type": "Triggering",
+        "name": [
+          {
+            "value": "Accepted stream events trigger history persistence"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "target": "ELM-FUNC-EXT-PERSIST-HISTORY",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, only accepted canonical stream events trigger durable run-history persistence so replay after refresh or reopen remains stable."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-001",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-001"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-001",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-001-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-001 traces to ELM-FUNC-EXT-CONSUME-RUN-STREAM"
+          }
+        ],
+        "source": "TASK-001",
+        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-002",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-002"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-002",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-002-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-002 traces to ELM-FUNC-EXT-PROJECT-TRANSCRIPT"
+          }
+        ],
+        "source": "TASK-002",
+        "target": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-003",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-003"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-003",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-003-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-003 traces to ELM-FUNC-EXT-RECONCILE-RUN-STATE"
+          }
+        ],
+        "source": "TASK-003",
+        "target": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-004",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-004"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-004",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-004-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-004 traces to ELM-FUNC-EXT-CALL-ADAPTER-API"
+          }
+        ],
+        "source": "TASK-004",
+        "target": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
       }
     ]
   },
