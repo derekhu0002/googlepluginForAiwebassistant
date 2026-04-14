@@ -73,8 +73,9 @@ describe("background rule-driven capture flow", () => {
     expect(response.error.code).toBe("RULE_NOT_MATCHED_ERROR");
   });
 
-  /** @ArchitectureID: ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART */
-  /** @ArchitectureID: ELM-COMP-EXT-BACKGROUND */
+  // @ArchitectureID: ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART
+  // @ArchitectureID: ELM-COMP-EXT-BACKGROUND
+  // @ArchitectureID: ELM-001
   it("injects content script and packages captured fields with the run start request", async () => {
     const storageState: Record<string, unknown> = {
       "ai-web-assistant-rules": [
@@ -185,7 +186,7 @@ describe("background rule-driven capture flow", () => {
     });
   });
 
-  /** @ArchitectureID: ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART */
+  // @ArchitectureID: ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART
   it("returns explicit permission error when capture-bearing run start is not authorized", async () => {
     const storageState: Record<string, unknown> = {
       "ai-web-assistant-rules": [

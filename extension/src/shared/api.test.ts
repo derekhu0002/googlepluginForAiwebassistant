@@ -39,8 +39,9 @@ describe("streaming api client", () => {
     vi.unstubAllEnvs();
   });
 
-  /** @ArchitectureID: ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART */
-  /** @ArchitectureID: ELM-COMP-EXT-SHARED */
+  // @ArchitectureID: ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART
+  // @ArchitectureID: ELM-COMP-EXT-SHARED
+  // @ArchitectureID: ELM-001
   it("starts run against python adapter endpoint with prompt, capture, and context packaged together", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
     vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
@@ -97,7 +98,7 @@ describe("streaming api client", () => {
     expect(result.ok).toBe(true);
   });
 
-  /** @ArchitectureID: ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART */
+  // @ArchitectureID: ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART
   it("starts run without capture payload when send is decoupled", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
     vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");

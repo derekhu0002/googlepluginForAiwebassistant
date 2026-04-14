@@ -12,8 +12,9 @@ from python_adapter.app.main import app
 client = TestClient(app)
 
 
-"""@ArchitectureID: ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART"""
-"""@ArchitectureID: ELM-COMP-PY-ADAPTER"""
+# @ArchitectureID: ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART
+# @ArchitectureID: ELM-COMP-PY-ADAPTER
+# @ArchitectureID: ELM-001
 
 
 def test_start_run_and_answer_flow(monkeypatch) -> None:

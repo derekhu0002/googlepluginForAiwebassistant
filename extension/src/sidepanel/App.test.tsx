@@ -247,8 +247,8 @@ async function flushAllTimers() {
   });
 }
 
-/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
-/** @ArchitectureID: ELM-001 */
+// @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER
+// @ArchitectureID: ELM-001
 describe("side panel host permission request flow", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
@@ -744,8 +744,9 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("第一段第二段");
   });
 
-  /** @ArchitectureID: ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY */
-  /** @ArchitectureID: ELM-COMP-EXT-SIDEPANEL */
+  // @ArchitectureID: ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY
+  // @ArchitectureID: ELM-COMP-EXT-SIDEPANEL
+  // @ArchitectureID: ELM-001
   it("keeps a visible page capture entry working", async () => {
     const { runtimeSendMessage } = setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
@@ -766,7 +767,8 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "RECAPTURE" });
   });
 
-  /** @ArchitectureID: ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY */
+  // @ArchitectureID: ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY
+  // @ArchitectureID: ELM-001
   it("shows capture in progress from the visible capture entry", async () => {
     let resolveRecapture: (() => void) | null = null;
     const { runtimeSendMessage } = setupChromeStub({
