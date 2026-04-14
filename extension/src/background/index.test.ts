@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_MAIN_AGENT } from "../shared/protocol";
 import { initialAssistantState } from "../shared/state";
 
+/** @ArchitectureID: ELM-FUNC-EXT-RECONCILE-RUN-STATE */
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 describe("background rule-driven capture flow", () => {
   beforeEach(() => {
@@ -650,6 +651,7 @@ describe("background rule-driven capture flow", () => {
     expect(sendMessage).toHaveBeenCalledWith(1, { type: "TOGGLE_EMBEDDED_PANEL" });
   });
 
+  /** @ArchitectureID: ELM-FUNC-EXT-RECONCILE-RUN-STATE */
   it("persists synced live run state from the sidepanel", async () => {
     const storageState: Record<string, unknown> = {
       "ai-web-assistant-state": initialAssistantState
@@ -769,6 +771,7 @@ describe("background rule-driven capture flow", () => {
     expect((storageState["ai-web-assistant-state"] as { stream: { status: string } }).stream.status).toBe("done");
   });
 
+  /** @ArchitectureID: ELM-FUNC-EXT-RECONCILE-RUN-STATE */
   it("rejects stale replayed sidepanel snapshots for the same run", async () => {
     const storageState: Record<string, unknown> = {
       "ai-web-assistant-state": {

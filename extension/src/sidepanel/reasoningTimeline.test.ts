@@ -25,6 +25,7 @@ function createEvent(sequence: number, overrides: Partial<NormalizedRunEvent> = 
   };
 }
 
+/** @ArchitectureID: ELM-FUNC-EXT-PROJECT-TRANSCRIPT */
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 describe("reasoning timeline share-aligned transcript contract", () => {
   it("projects source-ordered message parts into a flat part stream with tail summary", () => {
@@ -785,6 +786,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(model.liveParts.map((part) => part.text)).toEqual(["当前问题", "当前回答"]);
   });
 
+  /** @ArchitectureID: ELM-FUNC-EXT-PROJECT-TRANSCRIPT */
   it("keeps deterministic order when accepted events arrive out of order", () => {
     const model = buildStableTranscriptProjection({
       historicalSegments: [],
@@ -843,6 +845,7 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(model.liveParts.map((part) => part.text)).toEqual(["当前问题", "第一段第二段第三段"]);
   });
 
+  /** @ArchitectureID: ELM-FUNC-EXT-PROJECT-TRANSCRIPT */
   it("surfaces projection anomalies for terminal reopen conditions", () => {
     const model = buildStableTranscriptProjection({
       historicalSegments: [],

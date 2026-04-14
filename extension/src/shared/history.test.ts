@@ -3,6 +3,7 @@ import { createIndexedDbHistoryStore } from "./history";
 import { DEFAULT_MAIN_AGENT } from "./protocol";
 import type { RunRecord } from "./protocol";
 
+/** @ArchitectureID: ELM-FUNC-EXT-CALL-ADAPTER-API */
 describe("indexedDB history store", () => {
   const store = createIndexedDbHistoryStore();
 
@@ -60,6 +61,7 @@ describe("indexedDB history store", () => {
     expect(detail?.answers[0]?.answer).toBe("yes");
   });
 
+  /** @ArchitectureID: ELM-FUNC-EXT-CALL-ADAPTER-API */
   it("suppresses duplicate event persistence by canonical identity while keeping deterministic order", async () => {
     const run: RunRecord = {
       runId: "run-dup",

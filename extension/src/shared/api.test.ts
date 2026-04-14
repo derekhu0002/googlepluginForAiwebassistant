@@ -26,6 +26,7 @@ class FakeEventSource {
   }
 }
 
+/** @ArchitectureID: ELM-FUNC-EXT-CALL-ADAPTER-API */
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 describe("streaming api client", () => {
   beforeEach(() => {
@@ -586,6 +587,7 @@ describe("streaming api client", () => {
     ]);
   });
 
+  /** @ArchitectureID: ELM-FUNC-EXT-CALL-ADAPTER-API */
   it("emits transport telemetry with canonical identity and reconnect count", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
     vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
