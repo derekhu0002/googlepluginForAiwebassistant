@@ -6,6 +6,7 @@ import { ReasoningTimeline } from "./reasoningTimelineView";
 
 // @ArchitectureID: ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT
 // @ArchitectureID: ELM-COMP-EXT-SIDEPANEL
+// @RequirementID: ELM-REQ-OPENCODE-UX
 describe("ReasoningTimeline chrome sandbox transcript boundary", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;

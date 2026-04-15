@@ -27,6 +27,7 @@ function createEvent(sequence: number, overrides: Partial<NormalizedRunEvent> = 
 
 // @ArchitectureID: ELM-FUNC-EXT-PROJECT-TRANSCRIPT
 // @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER
+// @RequirementID: ELM-REQ-OPENCODE-UX
 describe("reasoning timeline share-aligned transcript contract", () => {
   it("projects source-ordered message parts into a flat part stream with tail summary", () => {
     const parts = buildTranscriptPartStream({

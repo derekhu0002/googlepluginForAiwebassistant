@@ -51,6 +51,7 @@ function createEvent(sequence: number, overrides: Partial<import("../shared/prot
 
 // @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER
 // @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX
+// @RequirementID: ELM-REQ-OPENCODE-UX
 describe("ReasoningTimeline transcript rendering", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
