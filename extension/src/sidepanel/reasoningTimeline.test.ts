@@ -550,6 +550,63 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(["第一段结论，正在补充完整说明。"]);
   });
 
+  it("dedupes reasoning parts when the same anchor drifts between assistant-message and fragment-group containers", () => {
+    const parts = buildTranscriptPartStream({
+      runId: "run-1",
+      prompt: "继续分析",
+      includeToolCallParts: true,
+      events: [
+        createEvent(1, {
+          type: "thinking",
+          message: "先校验权限边界。",
+          semantic: {
+            channel: "reasoning",
+            emissionKind: "delta",
+            identity: "prt-9",
+            itemKind: "reasoning",
+            partId: "prt-9"
+          }
+        }),
+        createEvent(2, {
+          type: "tool_call",
+          message: "读取权限配置",
+          semantic: {
+            channel: "tool",
+            emissionKind: "delta",
+            identity: "tool:msg-1:tool-1",
+            itemKind: "tool",
+            messageId: "msg-1",
+            partId: "tool-1"
+          }
+        }),
+        createEvent(3, {
+          type: "thinking",
+          message: "先校验权限边界。",
+          semantic: {
+            channel: "reasoning",
+            emissionKind: "snapshot",
+            identity: "prt-9",
+            itemKind: "reasoning",
+            messageId: "prt-9",
+            partId: "prt-9"
+          },
+          data: { message_id: "prt-9" }
+        }),
+        createEvent(4, {
+          type: "result",
+          message: "最终结论",
+          data: { message_id: "prt-9" }
+        })
+      ],
+      status: "done",
+      finalOutput: "最终结论"
+    });
+
+    expect(parts.filter((part) => part.kind === "reasoning").map((part) => part.text)).toEqual(["先校验权限边界。"]);
+    expect(parts.filter((part) => part.kind === "tool").map((part) => part.text)).toEqual(["读取权限配置"]);
+    expect(parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(["最终结论"]);
+  });
+
   it("does not swallow genuinely different adjacent assistant turns", () => {
     const messages = buildTranscriptMessages({
       runId: "run-1",

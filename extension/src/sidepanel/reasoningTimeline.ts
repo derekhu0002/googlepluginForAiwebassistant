@@ -1488,6 +1488,40 @@ function createTranscriptPart(item: ChatStreamItemModel): TranscriptPartModel {
   };
 }
 
+function isAssistantMessageGroupAnchorId(groupAnchorId: string) {
+  return groupAnchorId.startsWith("assistant-message:");
+}
+
+function isFragmentGroupAnchorId(groupAnchorId: string) {
+  return groupAnchorId.startsWith("fragment-group:");
+}
+
+function hasAssistantGroupAnchorDrift(left: string, right: string) {
+  if (left === right) {
+    return false;
+  }
+
+  return (isAssistantMessageGroupAnchorId(left) && isFragmentGroupAnchorId(right))
+    || (isAssistantMessageGroupAnchorId(right) && isFragmentGroupAnchorId(left));
+}
+
+function shouldMergeAssistantTranscriptPartsByAnchor(current: TranscriptPartModel, incoming: TranscriptPartModel) {
+  return current.role === "assistant"
+    && incoming.role === "assistant"
+    && current.runId === incoming.runId
+    && current.kind === incoming.kind
+    && current.anchorId === incoming.anchorId
+    && (current.groupAnchorId === incoming.groupAnchorId || hasAssistantGroupAnchorDrift(current.groupAnchorId, incoming.groupAnchorId));
+}
+
+function getPreferredTranscriptGroupAnchorId(currentGroupAnchorId: string, incomingGroupAnchorId: string) {
+  if (isAssistantMessageGroupAnchorId(incomingGroupAnchorId) && !isAssistantMessageGroupAnchorId(currentGroupAnchorId)) {
+    return incomingGroupAnchorId;
+  }
+
+  return currentGroupAnchorId;
+}
+
 function getTranscriptPartIdentity(part: TranscriptPartModel) {
   return [part.runId, part.role, part.kind, part.groupAnchorId, part.anchorId].join(":");
 }
@@ -1511,6 +1545,15 @@ function mergeTranscriptPartCollections(currentParts: TranscriptPartModel[], inc
     }
 
     if (existingIndex < 0) {
+      for (let index = nextParts.length - 1; index >= 0; index -= 1) {
+        if (shouldMergeAssistantTranscriptPartsByAnchor(nextParts[index], part)) {
+          existingIndex = index;
+          break;
+        }
+      }
+    }
+
+    if (existingIndex < 0) {
       if (nextParts === currentParts) {
         nextParts = [...currentParts, part];
       } else {
@@ -1523,6 +1566,7 @@ function mergeTranscriptPartCollections(currentParts: TranscriptPartModel[], inc
     const mergedPart: TranscriptPartModel = {
       ...existingPart,
       ...part,
+      groupAnchorId: getPreferredTranscriptGroupAnchorId(existingPart.groupAnchorId, part.groupAnchorId),
       originEventTypes: [...new Set([...existingPart.originEventTypes, ...part.originEventTypes])],
       badges: part.badges.length ? part.badges : existingPart.badges,
       actionAnchorId: part.actionAnchorId ?? existingPart.actionAnchorId
@@ -1547,6 +1591,7 @@ function mergeTranscriptMessageModels(current: TranscriptMessageModel, incoming:
     ...incoming,
     createdAt: current.createdAt,
     anchorId: current.anchorId || incoming.anchorId,
+    groupAnchorId: getPreferredTranscriptGroupAnchorId(current.groupAnchorId, incoming.groupAnchorId),
     parts: mergeTranscriptPartCollections(current.parts, incoming.parts),
     supportsCopy: current.supportsCopy || incoming.supportsCopy,
     supportsRetry: current.supportsRetry || incoming.supportsRetry,
@@ -1713,7 +1758,14 @@ function normalizeTranscriptMessages(messages: TranscriptMessageModel[]) {
   let changed = false;
 
   for (const message of messages) {
-    const existingIndex = deduped.findIndex((candidate) => candidate.id === message.id);
+    const existingIndex = deduped.findIndex((candidate) => candidate.id === message.id || (
+      candidate.runId === message.runId
+      && candidate.role === "assistant"
+      && message.role === "assistant"
+      && !isAssistantTranscriptBoundaryMessage(candidate)
+      && !isAssistantTranscriptBoundaryMessage(message)
+      && candidate.parts.some((candidatePart) => message.parts.some((messagePart) => shouldMergeAssistantTranscriptPartsByAnchor(candidatePart, messagePart)))
+    ));
     if (existingIndex < 0) {
       deduped.push(message);
       continue;
