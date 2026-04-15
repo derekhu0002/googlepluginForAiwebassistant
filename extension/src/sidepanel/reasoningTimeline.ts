@@ -194,6 +194,7 @@ export interface TranscriptTailPatchModel {
   deltaText: string;
   updatedAt: string | null;
   revision: string;
+  terminal: boolean;
 }
 
 export interface TranscriptSummaryModel {
@@ -210,6 +211,11 @@ export interface TranscriptReadModel {
   activeMessage: TranscriptMessageModel | null;
   activeAssistantMessageId: string | null;
   tailPatch: TranscriptTailPatchModel | null;
+  processParts: TranscriptPartModel[];
+  finalAnswerPart: TranscriptPartModel | null;
+  questionPart: TranscriptPartModel | null;
+  errorPart: TranscriptPartModel | null;
+  terminalState: boolean;
   parts: TranscriptPartModel[];
   summaryPart: TranscriptPartModel | null;
   summaryState: TranscriptSummaryModel | null;
@@ -2554,6 +2560,78 @@ function buildTranscriptSegmentReadModel(options: BuildTranscriptSegmentReadMode
   };
 }
 
+function getLastAssistantMessage(messages: TranscriptMessageModel[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "assistant") {
+      return messages[index];
+    }
+  }
+
+  return null;
+}
+
+function getProcessTranscriptParts(message: TranscriptMessageModel | null) {
+  if (!message) {
+    return [];
+  }
+
+  return message.parts.filter((part) => part.kind === "reasoning" || part.kind === "tool");
+}
+
+function getFinalAnswerTranscriptPart(message: TranscriptMessageModel | null) {
+  if (!message) {
+    return null;
+  }
+
+  for (let index = message.parts.length - 1; index >= 0; index -= 1) {
+    if (message.parts[index]?.kind === "text") {
+      return message.parts[index];
+    }
+  }
+
+  return null;
+}
+
+function getTranscriptPartByKind(message: TranscriptMessageModel | null, kind: TranscriptPartKind) {
+  return message?.parts.find((part) => part.kind === kind) ?? null;
+}
+
+function reuseTranscriptMessageCollection(nextMessages: TranscriptMessageModel[], previousMessages?: TranscriptMessageModel[] | null) {
+  if (!previousMessages || previousMessages.length !== nextMessages.length) {
+    return nextMessages;
+  }
+
+  for (let index = 0; index < nextMessages.length; index += 1) {
+    if (previousMessages[index] !== nextMessages[index]) {
+      return nextMessages;
+    }
+  }
+
+  return previousMessages;
+}
+
+function reuseTranscriptPartCollection(nextParts: TranscriptPartModel[], previousParts?: TranscriptPartModel[] | null) {
+  if (!previousParts || previousParts.length !== nextParts.length) {
+    return nextParts;
+  }
+
+  for (let index = 0; index < nextParts.length; index += 1) {
+    if (previousParts[index] !== nextParts[index]) {
+      return nextParts;
+    }
+  }
+
+  return previousParts;
+}
+
+function reuseTranscriptPart(nextPart: TranscriptPartModel | null, previousPart?: TranscriptPartModel | null) {
+  if (!nextPart || !previousPart) {
+    return nextPart;
+  }
+
+  return nextPart === previousPart ? previousPart : nextPart;
+}
+
 function mergeTranscriptMessageCollections(options: {
   historicalMessages: TranscriptMessageModel[];
   historicalParts: TranscriptPartModel[];
@@ -2565,19 +2643,25 @@ function mergeTranscriptMessageCollections(options: {
   liveSignature: string | null;
   liveProjectionState?: LiveTranscriptProjectionState | null;
   liveProjectionDebug?: LiveTranscriptProjectionDebug | null;
+  sealActiveMessage?: boolean;
+  previousModel?: TranscriptReadModel | null;
 }) {
+  const previousModel = options.previousModel ?? null;
   const historicalMessages = normalizeTranscriptMessages(options.historicalMessages);
   const liveMessages = normalizeTranscriptMessages(options.liveMessages);
-  const messages = normalizeTranscriptMessages(liveMessages.length
+  const rawMessages = normalizeTranscriptMessages(liveMessages.length
     ? [...historicalMessages, ...liveMessages]
     : historicalMessages);
-  const activeMessageCandidate = liveMessages.length ? liveMessages[liveMessages.length - 1] ?? null : null;
+  const messages = reuseTranscriptMessageCollection(rawMessages, previousModel?.messages);
+  const activeMessageCandidate = options.sealActiveMessage ? null : getLastAssistantMessage(liveMessages);
   const activeMessage = activeMessageCandidate?.role === "assistant"
     ? activeMessageCandidate
     : null;
-  const sealedMessages = activeMessage
-    ? messages.filter((message) => message.id !== activeMessage.id)
+  const sealedBoundaryMessage = activeMessage ?? (options.sealActiveMessage ? getLastAssistantMessage(liveMessages) : null);
+  const rawSealedMessages = sealedBoundaryMessage
+    ? messages.filter((message) => message.id !== sealedBoundaryMessage.id)
     : messages;
+  const sealedMessages = reuseTranscriptMessageCollection(rawSealedMessages, previousModel?.sealedMessages);
   const historicalParts = historicalMessages === options.historicalMessages
     ? options.historicalParts
     : flattenTranscriptMessages(historicalMessages);
@@ -2585,21 +2669,27 @@ function mergeTranscriptMessageCollections(options: {
     ? options.liveParts
     : flattenTranscriptMessages(liveMessages);
   const parts = flattenTranscriptMessages(messages);
-  const activeText = activeMessage
-    ? getTranscriptMessageTextParts(activeMessage).map((part) => part.text).join("")
+  const conversationMessage = activeMessage ?? getLastAssistantMessage(liveMessages);
+  const processParts = reuseTranscriptPartCollection(getProcessTranscriptParts(conversationMessage), previousModel?.processParts);
+  const finalAnswerPart = reuseTranscriptPart(getFinalAnswerTranscriptPart(conversationMessage), previousModel?.finalAnswerPart);
+  const questionPart = reuseTranscriptPart(getTranscriptPartByKind(conversationMessage, "question"), previousModel?.questionPart);
+  const errorPart = reuseTranscriptPart(getTranscriptPartByKind(conversationMessage, "error"), previousModel?.errorPart);
+  const activeText = activeMessage && finalAnswerPart
+    ? finalAnswerPart.text
     : "";
   const previousActiveText = options.liveProjectionState?.segmentBaselineText ?? "";
   const tailDeltaText = activeText && activeMessage
     ? deriveVisibleAssistantSegmentText(activeText, previousActiveText)
     : "";
-  const tailPatch = activeMessage
+  const tailPatch = activeMessage && finalAnswerPart
     ? {
         activeMessageId: activeMessage.id,
         anchorId: activeMessage.anchorId,
         fullText: activeText,
         deltaText: tailDeltaText,
-        updatedAt: activeMessage.updatedAt,
-        revision: `${activeMessage.id}:${activeText.length}:${activeMessage.updatedAt}`
+        updatedAt: finalAnswerPart.updatedAt,
+        revision: `${activeMessage.id}:${activeText.length}:${finalAnswerPart.updatedAt}`,
+        terminal: false
       } satisfies TranscriptTailPatchModel
     : null;
   return {
@@ -2608,6 +2698,11 @@ function mergeTranscriptMessageCollections(options: {
     activeMessage,
     activeAssistantMessageId: activeMessage?.id ?? null,
     tailPatch,
+    processParts,
+    finalAnswerPart,
+    questionPart,
+    errorPart,
+    terminalState: Boolean(options.sealActiveMessage),
     parts,
     summaryPart: options.summaryPart,
     summaryState: options.summaryState ?? null,
@@ -2655,13 +2750,16 @@ export function buildTranscriptReadModel(options: BuildTranscriptSegmentReadMode
     summaryPart: segment.summaryPart,
     summaryState: segment.summaryState,
     historicalSignature: segment.signature,
-    liveSignature: null
+    liveSignature: null,
+    sealActiveMessage: true
   });
 }
 
 // @ArchitectureID: ELM-COMP-EXT-SIDEPANEL
 // @ArchitectureID: ELM-FUNC-EXT-PROJECT-TRANSCRIPT
 // @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER
+// @ArchitectureID: ELM-REQ-OPENCODE-UX
+// @SoftwareUnitID: SU-SP-TRANSCRIPT-PROJECTION
 export function buildStableTranscriptProjection(options: StableTranscriptProjectionOptions): TranscriptReadModel {
   logProjection({
     phase: "start",
@@ -2720,7 +2818,9 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
       historicalSignature: historySignature,
       liveSignature: null,
       liveProjectionState: null,
-      liveProjectionDebug: null
+      liveProjectionDebug: null,
+      sealActiveMessage: true,
+      previousModel: options.previousModel
     });
   }
 
@@ -2728,6 +2828,18 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
     ...options.liveSegment,
     includeToolCallParts: options.liveSegment.includeToolCallParts ?? false
   }, options.previousModel);
+  const livePresentationState = resolveTimelinePresentationState({
+    events: options.liveSegment.events,
+    runStatus: options.liveSegment.runStatus ?? options.liveSegment.status,
+    streamStatus: options.liveSegment.streamStatus,
+    finalOutput: options.liveSegment.finalOutput,
+    errorMessage: options.liveSegment.errorMessage
+  });
+  const sealActiveMessage = livePresentationState.hasTerminalEvidence
+    && (livePresentationState.runStatus === "done"
+      || livePresentationState.runStatus === "error"
+      || livePresentationState.streamStatus === "done"
+      || livePresentationState.streamStatus === "error");
 
   const projection = mergeTranscriptMessageCollections({
     historicalMessages,
@@ -2739,7 +2851,9 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
     historicalSignature: historySignature,
     liveSignature: liveSegment.signature,
     liveProjectionState: liveSegment.liveState,
-    liveProjectionDebug: liveSegment.debug
+    liveProjectionDebug: liveSegment.debug,
+    sealActiveMessage,
+    previousModel: options.previousModel
   });
   const anomalies = collectProjectionAnomalies(
     projection.messages,
