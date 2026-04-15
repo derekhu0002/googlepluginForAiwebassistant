@@ -1,119 +1,109 @@
 {
   "version": 2,
-  "activeGoal": "",
-  "designSummary": "Architectural diagnosis for sidepanel message duplication: duplication persists during streaming and after completion, and survives refresh/reopen, so the defect crosses live SSE ingestion, background state synchronization, persistence, and transcript projection boundaries. Existing brownfield fit is retained in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**. The design decision is to harden upstream canonical event acceptance and observability rather than relying on late transcript heuristics. Stream consumption must accept only canonical ordered events, log accepted/rejected/gap/out-of-order cases, and synchronize only reconciled state. Transcript projection must consume accepted canonical events, preserve stable logical message identity and deterministic order, and emit projection anomaly diagnostics. Background synchronization must reconcile run-state snapshots using origin/frontier/version rules so stale or replayed sidepanel snapshots do not reintroduce duplicate events after refresh or reopen.",
+  "activeGoal": "重构 Sidepanel 会话视图投影与渲染机制以消除流式截断、幽灵用户消息和卡顿问题",
+  "designSummary": "Full-model refactor approved for Sidepanel transcript projection and renderer. Within ELM-COMP-EXT-SIDEPANEL, redesign the conversation projection as a state-machine-driven Assistant Message Node model that decouples accepted SSE events from UI transcript grouping, keeps reasoning/tool/text inside one stable assistant node until terminal state, prevents synthetic User node creation from stream-status changes or empty payloads, and introduces an incremental renderer contract that updates only the active assistant tail while preserving historical node identity and avoiding whole-list rerender or full markdown reparse on each token.",
   "designDecisions": [
-    "ADR: Preserve existing brownfield module ownership. Extend ELM-COMP-EXT-SIDEPANEL (extension/src/sidepanel/useSidepanelController.ts, model.ts, reasoningTimeline.ts), ELM-COMP-EXT-BACKGROUND (extension/src/background/index.ts), and ELM-COMP-EXT-SHARED (extension/src/shared/api.ts, history.ts, shared types/protocol) instead of introducing a new physical package. These modules already own stream ingestion, transcript projection, state sync, SSE contract parsing, and durable history persistence, so they are the cleanest software-unit boundaries for the correction.",
-    "ADR: Dedupe authority moves upstream. Duplicate prevention must occur at canonical event acceptance in the sidepanel stream consumer and at background reconciliation, not only through transcript text coalescing. Text-similarity compaction remains presentation-only and must never be the primary correctness rule for event identity or order.",
-    "ADR: Observability is a required architectural behavior for this fix. Diagnostic logging must correlate runId, raw event id, canonical event key, semantic identity, sequence, accepted/rejected decision, frontier movement, persistence write result, background sync snapshot version/origin, and transcript anomaly classification so the team can distinguish SSE duplication from projection or re-sync duplication."
+    "ADR: Brownfield fit decision. Extend existing software unit ELM-COMP-EXT-SIDEPANEL instead of introducing a new module because reasoningTimeline.ts, reasoningTimelineView.tsx, useSidepanelController.ts, and their tests already form the ownership seam for transcript projection, controller orchestration, and transcript rendering. Rejected python_adapter/app and backend/src because they emit or transport events but do not own UI bubble identity or React render behavior.",
+    "ADR: Replace heuristic post-hoc transcript normalization with explicit Assistant Message Node lifecycle rules. Transcript grouping must be derived from stable logical assistant identity and terminal-state boundaries, not from adjacency, anchor drift, or text-similarity coalescing alone, because those heuristics cause assistant truncation and ghost user bubbles during tool/text state changes.",
+    "ADR: Renderer contract adopts structural patch vs tail patch semantics. Sealed messages must retain reference stability, while high-frequency assistant deltas update only the active tail through buffered incremental rendering. Renderer must not reparse markdown for the entire transcript or rerender the entire React list on each token.",
+    "ADR: Full-model architecture update adds formal behavior/service contracts for ELM-APP-EXT-RUN-CONVERSATION-MAPPER, ELM-APP-EXT-CONVERSATION-RENDERER, and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT so Sidepanel controller, projection, and rendering responsibilities are separately traceable in the graph. This was required because code markers existed for renderer/mapper seams but the graph lacked explicit architect-managed contract elements for the renderer path."
   ],
   "tasks": [
     {
-      "id": "TASK-001",
-      "title": "Harden sidepanel run-stream acceptance and diagnostics in existing sidepanel modules",
-      "status": "done",
-      "retryCount": 1,
-      "kind": "implementation",
-      "owner": "Implementation",
-      "summary": "Added architecture-tagged automated tests for canonical sidepanel acceptance decisions in extension/src/sidepanel/model.test.ts covering accepted, duplicate, stale replay, gap, and out-of-order cases.",
-      "details": "Added architecture-tagged automated tests for canonical sidepanel acceptance decisions in extension/src/sidepanel/model.test.ts covering accepted, duplicate, stale replay, gap, and out-of-order cases.",
-      "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
-      "softwareUnitTitle": "Extension Side Panel Experience",
-      "architectureElementId": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-      "createdAt": "2026-04-14T06:41:53.849Z",
-      "updatedAt": "2026-04-14T08:13:51.810Z",
-      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed"
+      "id": "TASK-013",
+      "title": "重构 Sidepanel 会话视图投影与渲染机制以消除流式截断、幽灵用户消息和卡顿问题",
+      "status": "todo",
+      "retryCount": 0,
+      "kind": "planning",
+      "owner": "SystemArchitect",
+      "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
+      "details": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks.",
+      "createdAt": "2026-04-15T08:04:04.981Z",
+      "updatedAt": "2026-04-15T08:04:04.981Z"
     },
     {
-      "id": "TASK-002",
-      "title": "Refine transcript projection correctness and anomaly logging in reasoning timeline module",
+      "id": "TASK-014",
+      "title": "Refactor sidepanel transcript projection into stable Assistant Message Node state machine",
       "status": "done",
-      "retryCount": 1,
+      "retryCount": 0,
       "kind": "implementation",
       "owner": "Implementation",
-      "summary": "Added explicit architecture-tagged transcript projection tests for deterministic ordering and terminal reopen anomaly evidence.",
-      "details": "Added explicit architecture-tagged transcript projection tests for deterministic ordering and terminal reopen anomaly evidence.",
+      "summary": "Verified sidepanel transcript projection implementation remains localized to sidepanel files, preserved stable assistant message-node behavior, and fixed scanner-verifiable ArchitectureID traceability comments for release readiness.",
+      "details": "Verified sidepanel transcript projection implementation remains localized to sidepanel files, preserved stable assistant message-node behavior, and fixed scanner-verifiable ArchitectureID traceability comments for release readiness.",
       "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
       "softwareUnitTitle": "Extension Side Panel Experience",
       "architectureElementId": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
-      "createdAt": "2026-04-14T06:41:53.849Z",
-      "updatedAt": "2026-04-14T08:13:51.960Z",
-      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed"
+      "createdAt": "2026-04-15T08:26:05.949Z",
+      "updatedAt": "2026-04-15T13:00:42.162Z",
+      "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b"
     },
     {
-      "id": "TASK-003",
-      "title": "Implement background run-state reconciliation and sync observability in existing background module",
+      "id": "TASK-015",
+      "title": "Implement incremental transcript rendering contract for active assistant tail updates",
       "status": "done",
-      "retryCount": 1,
+      "retryCount": 0,
       "kind": "implementation",
       "owner": "Implementation",
-      "summary": "Added architecture-tagged reconciliation test anchors for accepted sync persistence and stale snapshot rejection.",
-      "details": "Added architecture-tagged reconciliation test anchors for accepted sync persistence and stale snapshot rejection.",
-      "softwareUnitId": "ELM-COMP-EXT-BACKGROUND",
-      "softwareUnitTitle": "Extension Background Orchestrator",
-      "architectureElementId": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
-      "createdAt": "2026-04-14T06:41:53.849Z",
-      "updatedAt": "2026-04-14T08:13:52.187Z",
-      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed"
+      "summary": "Verified incremental active-assistant tail rendering contract remains in sidepanel renderer/controller, preserved stable DOM/message identity behavior, and fixed scanner-verifiable ArchitectureID traceability comments.",
+      "details": "Verified incremental active-assistant tail rendering contract remains in sidepanel renderer/controller, preserved stable DOM/message identity behavior, and fixed scanner-verifiable ArchitectureID traceability comments.",
+      "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
+      "softwareUnitTitle": "Extension Side Panel Experience",
+      "architectureElementId": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+      "createdAt": "2026-04-15T08:26:05.949Z",
+      "updatedAt": "2026-04-15T13:00:42.234Z",
+      "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b"
     },
     {
-      "id": "TASK-004",
-      "title": "Add shared transport and persistence observability for stream identity and idempotent history replay",
+      "id": "TASK-016",
+      "title": "Add adversarial transcript integrity and Chrome Sandbox DOM-boundary verification coverage",
       "status": "done",
-      "retryCount": 1,
+      "retryCount": 0,
       "kind": "implementation",
       "owner": "Implementation",
-      "summary": "Added architecture-tagged transport/persistence tests for SSE telemetry and canonical duplicate suppression in shared history.",
-      "details": "Added architecture-tagged transport/persistence tests for SSE telemetry and canonical duplicate suppression in shared history.",
-      "softwareUnitId": "ELM-COMP-EXT-SHARED",
-      "softwareUnitTitle": "Extension Shared Contract Layer",
-      "architectureElementId": "ELM-FUNC-EXT-CALL-ADAPTER-API",
-      "createdAt": "2026-04-14T06:41:53.849Z",
-      "updatedAt": "2026-04-14T08:13:52.288Z",
-      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed"
+      "summary": "Verified adversarial sidepanel transcript integrity coverage still asserts AI Text -> Tool Call -> AI Text -> empty user payload collapses to one user bubble and one assistant bubble, and fixed scanner-verifiable ArchitectureID test markers.",
+      "details": "Verified adversarial sidepanel transcript integrity coverage still asserts AI Text -> Tool Call -> AI Text -> empty user payload collapses to one user bubble and one assistant bubble, and fixed scanner-verifiable ArchitectureID test markers.",
+      "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
+      "softwareUnitTitle": "Extension Side Panel Experience",
+      "architectureElementId": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+      "createdAt": "2026-04-15T08:26:05.949Z",
+      "updatedAt": "2026-04-15T13:00:42.304Z",
+      "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b"
     }
   ],
   "issues": [
     {
-      "id": "ISSUE-001",
+      "id": "ISSUE-004",
       "category": "ArchitectureGap",
-      "summary": "IntentNotVerified for duplicate-message full-model fix",
-      "details": "Blocking audit gap for commit 743a04e5499593851dd6f76170e02c5cb55b2a80. Intended IDs from TASK-001..TASK-004 are ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API. run_reality_scanner verified only requirement-level test tagging and did not verify these architecture IDs in automated tests. This is an IntentNotVerified gap; QA must add tagged automated tests before release can continue.",
-      "createdAt": "2026-04-14T07:52:21.805Z"
-    },
-    {
-      "id": "ISSUE-002",
-      "category": "BugReport",
-      "summary": "QA gap: missing architecture-traceable tests for sidepanel duplicate-message fix",
-      "details": "Commit 743a04e5499593851dd6f76170e02c5cb55b2a80 passed local regression commands, but QA cannot mark the fix validated because the reviewed test files lack @ArchitectureID/@RequirementID traceability tags for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API. Direct automated tests for canonical sidepanel event acceptance and diagnostics in extension/src/sidepanel/model.ts were not found. Add targeted tagged tests covering duplicate, stale replay, out-of-order, gap, transcript anomaly, background reconciliation, and idempotent persistence behaviors, then rerun local verification.",
-      "createdAt": "2026-04-14T07:56:32.635Z"
+      "summary": "IntentNotVerified for full-model transcript refactor audit [Resolved]",
+      "details": "Resolved by successful rework commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b after scanner-verifiable ArchitectureID coverage was corrected and full-model QA/Audit passed for TASK-014, TASK-015, and TASK-016.",
+      "createdAt": "2026-04-15T11:59:35.337Z"
     }
   ],
   "validations": {
     "qa": {
       "status": "passed",
-      "summary": "QA passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. Local-only validation executed and passed: targeted extension tests covering ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API; npm run typecheck --workspace extension; npm run build --workspace extension. Added direct architecture-tagged tests in extension/src/sidepanel/model.test.ts for accepted, duplicate, stale replay, gap, and out-of-order acceptance decisions. Shared API/history, background reconciliation, and transcript projection tests now contain matching architecture traceability tags. 跳过了真实环境验证.",
-      "details": "QA passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. Local-only validation executed and passed: targeted extension tests covering ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API; npm run typecheck --workspace extension; npm run build --workspace extension. Added direct architecture-tagged tests in extension/src/sidepanel/model.test.ts for accepted, duplicate, stale replay, gap, and out-of-order acceptance decisions. Shared API/history, background reconciliation, and transcript projection tests now contain matching architecture traceability tags. 跳过了真实环境验证.",
-      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
-      "updatedAt": "2026-04-14T08:18:05.762Z"
+      "summary": "QA passed for commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b covering TASK-014, TASK-015, TASK-016. Verified ApplicationFunction contracts ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT against targeted automated tests in extension/src/sidepanel/reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx. Local-only validation executed because live_environment_ready=false; 跳过了真实环境验证. In detached worktree at the reviewed commit, targeted Vitest run passed (46 tests), extension typecheck passed, extension build passed, and run_reality_scanner verified canonical intent IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT. Direct run_chrome_sandbox on the TSX test entry failed with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as sandbox toolchain limitation rather than implementation defect because the sandbox-oriented coverage passed under Vitest.",
+      "details": "QA passed for commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b covering TASK-014, TASK-015, TASK-016. Verified ApplicationFunction contracts ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT against targeted automated tests in extension/src/sidepanel/reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx. Local-only validation executed because live_environment_ready=false; 跳过了真实环境验证. In detached worktree at the reviewed commit, targeted Vitest run passed (46 tests), extension typecheck passed, extension build passed, and run_reality_scanner verified canonical intent IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT. Direct run_chrome_sandbox on the TSX test entry failed with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as sandbox toolchain limitation rather than implementation defect because the sandbox-oriented coverage passed under Vitest.",
+      "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
+      "updatedAt": "2026-04-15T13:12:21.267Z"
     },
     "audit": {
       "status": "passed",
-      "summary": "Audit passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. The rework preserves approved brownfield boundaries in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**; retains upstream dedupe authority in sidepanel canonical event acceptance and background reconciliation; keeps transcript projection as a consumer of accepted canonical events; and maintains observability across transport, sidepanel acceptance, persistence, background reconciliation, and transcript projection. Blocking IntentNotVerified gap is resolved: run_reality_scanner verified architecture-scoped automated test coverage for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API.",
-      "details": "Audit passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. The rework preserves approved brownfield boundaries in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**; retains upstream dedupe authority in sidepanel canonical event acceptance and background reconciliation; keeps transcript projection as a consumer of accepted canonical events; and maintains observability across transport, sidepanel acceptance, persistence, background reconciliation, and transcript projection. Blocking IntentNotVerified gap is resolved: run_reality_scanner verified architecture-scoped automated test coverage for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API.",
-      "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
-      "updatedAt": "2026-04-14T08:16:04.438Z"
+      "summary": "Architecture compliance audit passed for full-model sidepanel transcript batch TASK-014/TASK-015/TASK-016 on commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Reality remains bounded to ELM-COMP-EXT-SIDEPANEL, stable assistant-node projection and incremental tail rendering behavior match approved design intent, canonical scanner-verifiable test tags now verify intended IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and targeted Vitest coverage passed including adversarial mixed-order and DOM-boundary assertions. Direct run_chrome_sandbox on the TSX test still fails with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as a tooling limitation rather than an implementation compliance defect because the sandbox-oriented DOM-boundary assertions execute successfully under Vitest.",
+      "details": "Architecture compliance audit passed for full-model sidepanel transcript batch TASK-014/TASK-015/TASK-016 on commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Reality remains bounded to ELM-COMP-EXT-SIDEPANEL, stable assistant-node projection and incremental tail rendering behavior match approved design intent, canonical scanner-verifiable test tags now verify intended IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and targeted Vitest coverage passed including adversarial mixed-order and DOM-boundary assertions. Direct run_chrome_sandbox on the TSX test still fails with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as a tooling limitation rather than an implementation compliance defect because the sandbox-oriented DOM-boundary assertions execute successfully under Vitest.",
+      "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
+      "updatedAt": "2026-04-15T13:08:18.272Z"
     }
   },
   "release": {
     "status": "completed",
-    "summary": "Release finalized for full-model issue fix addressing severe sidepanel AI message duplication across streaming, completion, and refresh/reopen paths. Release scope commit: 016599612be0527d5affcdfb083d14ee8bc70eed. Runtime tasks completed: TASK-001, TASK-002, TASK-003, TASK-004. QA status: passed. Audit status: passed. Release log records mandatory traceability matrix artifact for commit 016599612be0527d5affcdfb083d14ee8bc70eed and notes that generated graph-backed verification still shows Requirement and Source Files as N/A with rows marked ❌ No, so documentation retains traceability gap notes despite successful QA/audit.",
+    "summary": "Release completed for full-model sidepanel transcript stability batch. Commit: 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Tasks: TASK-014, TASK-015, TASK-016. Resolved issue: ISSUE-004. QA passed. Audit passed. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md with full intent traceability matrix showing all rows verified by tests.",
     "releaseLogPath": "SprintRleaseLog.md",
-    "updatedAt": "2026-04-14T08:20:50.218Z"
+    "updatedAt": "2026-04-15T13:18:27.011Z"
   },
   "counters": {
-    "task": 4,
-    "issue": 2
+    "task": 16,
+    "issue": 4
   },
-  "updatedAt": "2026-04-14T08:20:50.219Z"
+  "updatedAt": "2026-04-15T13:18:27.012Z"
 }

@@ -1,65 +1,63 @@
-# Release Summary: full-model issue fix for sidepanel AI message duplication
+# Release Summary: full-model sidepanel transcript stability batch
 
 ## Release Status
 
 - Status: completed
-- Date: 2026-04-14
-- Runtime tasks: `TASK-001`, `TASK-002`, `TASK-003`, `TASK-004`
-- Implementation commit: `016599612be0527d5affcdfb083d14ee8bc70eed`
+- Date: 2026-04-15
+- Runtime tasks: `TASK-014`, `TASK-015`, `TASK-016`
+- Resolved issues: `ISSUE-004`
+- Implementation commit: `90dc29db55ce82d09cee2a7cb96e488bf7e2433b`
 - QA status: `passed`
 - Audit status: `passed`
 
 ## Release Summary
 
-- Finalized the architecture-led fix for severe sidepanel AI message duplication across streaming, completion, and refresh/reopen recovery paths.
-- Hardened canonical event acceptance, transcript projection, background run-state reconciliation, and shared observability so duplicate or stale replayed events are rejected consistently.
-- Completed the follow-up validation rework with architecture-scoped tagged automated tests covering the affected sidepanel, background, transcript, and shared transport/persistence flows.
+- Refactored sidepanel transcript projection into a stable Assistant Message Node model so assistant content keeps durable message identity during streaming and replay.
+- Implemented incremental rendering for the active assistant tail to append live assistant text without regressing earlier message structure.
+- Added adversarial transcript integrity and chrome-sandbox-ready DOM-boundary coverage to verify mixed-order streaming stays within the intended user/assistant bubble boundaries.
 
 ## Completed Scope
 
-- `TASK-001`: Hardened sidepanel run-stream acceptance and diagnostics, with architecture-tagged automated coverage for accepted, duplicate, stale replay, gap, and out-of-order cases.
-- `TASK-002`: Refined transcript projection correctness and anomaly logging, with deterministic ordering and terminal reopen anomaly test coverage.
-- `TASK-003`: Implemented background run-state reconciliation and sync observability, with architecture-tagged tests for accepted sync persistence and stale snapshot rejection.
-- `TASK-004`: Added shared transport and persistence observability for stream identity and idempotent history replay, with architecture-tagged tests for SSE telemetry and canonical duplicate suppression.
+- `TASK-014`: Refactor sidepanel transcript projection into stable Assistant Message Node state machine.
+- `TASK-015`: Implement incremental transcript rendering contract for active assistant tail updates.
+- `TASK-016`: Add adversarial transcript integrity and Chrome Sandbox DOM-boundary verification coverage.
 
 ## Validation Results
 
-- QA: passed — validated commit `016599612be0527d5affcdfb083d14ee8bc70eed` with targeted extension tests covering `ELM-FUNC-EXT-CONSUME-RUN-STREAM`, `ELM-FUNC-EXT-PROJECT-TRANSCRIPT`, `ELM-FUNC-EXT-RECONCILE-RUN-STATE`, and `ELM-FUNC-EXT-CALL-ADAPTER-API`, plus `npm run typecheck --workspace extension` and `npm run build --workspace extension`.
-- Audit: passed — confirmed the fix stayed within approved brownfield boundaries, preserved upstream dedupe authority and transcript consumer boundaries, maintained observability across transport/acceptance/persistence/reconciliation/projection, and resolved the prior `IntentNotVerified` audit gap.
+- QA: passed — targeted Vitest coverage passed (46 tests), extension typecheck passed, extension build passed, and runtime traceability IDs were verified for `ELM-FUNC-EXT-PROJECT-TRANSCRIPT` and `ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT`.
+- Audit: passed — confirmed the batch remains bounded to `ELM-COMP-EXT-SIDEPANEL`, matches approved design intent for stable assistant-node projection and incremental tail rendering, and preserves required verification coverage.
 
 ## Commit Traceability
 
-- Release scope commit: `016599612be0527d5affcdfb083d14ee8bc70eed`
-- Traceability matrix scope: commit `016599612be0527d5affcdfb083d14ee8bc70eed`
+- Release scope commit: `90dc29db55ce82d09cee2a7cb96e488bf7e2433b`
+- Traceability matrix scope: commit `90dc29db55ce82d09cee2a7cb96e488bf7e2433b`
 
 ## Intent Traceability Matrix
 
 # Traceability Matrix
 
-Scope: commit 016599612be0527d5affcdfb083d14ee8bc70eed
+Scope: commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b
 
 | Requirement (Intent) | Architecture Component (Design) | Implemented Task | Source Files (Reality) | Verified by Tests? |
 | --- | --- | --- | --- | --- |
-| N/A | ELM-FUNC-EXT-CONSUME-RUN-STREAM Consume Normalized Run Stream | TASK-001 Harden sidepanel run-stream acceptance and diagnostics in existing sidepanel modules (016599612be0527d5affcdfb083d14ee8bc70eed) | N/A | ❌ No |
-| N/A | ELM-FUNC-EXT-PROJECT-TRANSCRIPT Project Transcript Read Model | TASK-002 Refine transcript projection correctness and anomaly logging in reasoning timeline module (016599612be0527d5affcdfb083d14ee8bc70eed) | N/A | ❌ No |
-| N/A | ELM-FUNC-EXT-RECONCILE-RUN-STATE Reconcile Cross-Component Run State | TASK-003 Implement background run-state reconciliation and sync observability in existing background module (016599612be0527d5affcdfb083d14ee8bc70eed) | N/A | ❌ No |
-| N/A | ELM-FUNC-EXT-CALL-ADAPTER-API Call Adapter API | TASK-004 Add shared transport and persistence observability for stream identity and idempotent history replay (016599612be0527d5affcdfb083d14ee8bc70eed) | N/A | ❌ No |
+| N/A | ELM-FUNC-EXT-PROJECT-TRANSCRIPT Project Transcript Read Model | TASK-014 Refactor sidepanel transcript projection into stable Assistant Message Node state machine (90dc29db55ce82d09cee2a7cb96e488bf7e2433b) | extension/src/sidepanel/reasoningTimeline.test.ts<br>extension/src/sidepanel/reasoningTimeline.ts | ✅ Yes |
+| N/A | ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT Render Incremental Transcript Tail | TASK-015 Implement incremental transcript rendering contract for active assistant tail updates (90dc29db55ce82d09cee2a7cb96e488bf7e2433b) | extension/src/sidepanel/reasoningTimeline.chromeSandbox.test.tsx<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useSidepanelController.ts | ✅ Yes |
+| N/A | ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT Render Incremental Transcript Tail | TASK-016 Add adversarial transcript integrity and Chrome Sandbox DOM-boundary verification coverage (90dc29db55ce82d09cee2a7cb96e488bf7e2433b) | extension/src/sidepanel/reasoningTimeline.chromeSandbox.test.tsx<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useSidepanelController.ts | ✅ Yes |
 
-100% of the intended sprint scope was not verified by tests. One or more traceability matrix rows remain `❌ No`, so this release contains verification gaps in generated graph-backed intent-to-code evidence even though QA and audit passed.
+100% of the intended sprint scope was verified by tests. Every traceability matrix row is marked `✅ Yes`.
 
 ## Release Artifacts
 
 - Release log: `SprintRleaseLog.md`
-- Implementation commit: `016599612be0527d5affcdfb083d14ee8bc70eed`
-- QA evidence: architecture-scoped tagged automated tests for sidepanel acceptance, transcript projection, background reconciliation, and shared transport/persistence; extension typecheck; extension build
-- Audit evidence: architecture/boundary compliance review and confirmation that the prior verification gap was resolved at audit time
+- Implementation commit: `90dc29db55ce82d09cee2a7cb96e488bf7e2433b`
+- QA evidence: targeted transcript projection, incremental rendering, adversarial integrity, DOM-boundary tests; extension typecheck; extension build
+- Audit evidence: sidepanel boundary compliance and design-intent verification for transcript projection and incremental tail rendering
 
 ## Traceability / Release Notes
 
-- The implementation intent is clear from the completed runtime tasks and passed validation records, but the generated traceability matrix still reports `Requirement (Intent)` and `Source Files (Reality)` as `N/A` and marks all rows `❌ No`.
-- Release documentation therefore records a graph-generated verification gap, even though release readiness was accepted based on passed QA and passed audit for commit `016599612be0527d5affcdfb083d14ee8bc70eed`.
-- If the underlying graph mappings are later enriched, the matrix should be regenerated so the documented verification status aligns with the architecture-tagged automated evidence already added in code.
+- This batch closes `ISSUE-004` for the full-model sidepanel transcript stability workstream.
+- Direct `run_chrome_sandbox` execution on the TSX entry remains a tooling limitation (`ERR_UNKNOWN_FILE_EXTENSION .tsx`), but the sandbox-oriented DOM-boundary assertions passed under Vitest and were accepted by QA and audit.
 
 ## Release Conclusion
 
-The full-model sidepanel duplication fix is finalized and recorded as completed for commit `016599612be0527d5affcdfb083d14ee8bc70eed`. The release passed QA and audit, and the release log preserves the generated traceability result and its current graph-backed verification limitations.
+The full-model sidepanel transcript stability batch is released for commit `90dc29db55ce82d09cee2a7cb96e488bf7e2433b`. Intended scope for `TASK-014`, `TASK-015`, and `TASK-016` is implemented, verified, and recorded.

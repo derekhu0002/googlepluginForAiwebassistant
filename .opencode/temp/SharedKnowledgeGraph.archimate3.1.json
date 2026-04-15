@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "Architectural diagnosis for sidepanel message duplication: duplication persists during streaming and after completion, and survives refresh/reopen, so the defect crosses live SSE ingestion, background state synchronization, persistence, and transcript projection boundaries. Existing brownfield fit is retained in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**. The design decision is to harden upstream canonical event acceptance and observability rather than relying on late transcript heuristics. Stream consumption must accept only canonical ordered events, log accepted/rejected/gap/out-of-order cases, and synchronize only reconciled state. Transcript projection must consume accepted canonical events, preserve stable logical message identity and deterministic order, and emit projection anomaly diagnostics. Background synchronization must reconcile run-state snapshots using origin/frontier/version rules so stale or replayed sidepanel snapshots do not reintroduce duplicate events after refresh or reopen."
+      "value": "Full-model refactor approved for Sidepanel transcript projection and renderer. Within ELM-COMP-EXT-SIDEPANEL, redesign the conversation projection as a state-machine-driven Assistant Message Node model that decouples accepted SSE events from UI transcript grouping, keeps reasoning/tool/text inside one stable assistant node until terminal state, prevents synthetic User node creation from stream-status changes or empty payloads, and introduces an incremental renderer contract that updates only the active assistant tail while preserving historical node identity and avoiding whole-list rerender or full markdown reparse on each token."
     }
   ],
   "metadata": {
@@ -18,38 +18,41 @@
   "extensions": {
     "ai4pb": {
       "managedBy": "opencode",
-      "counters": {},
-      "designSummary": "Architectural diagnosis for sidepanel message duplication: duplication persists during streaming and after completion, and survives refresh/reopen, so the defect crosses live SSE ingestion, background state synchronization, persistence, and transcript projection boundaries. Existing brownfield fit is retained in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**. The design decision is to harden upstream canonical event acceptance and observability rather than relying on late transcript heuristics. Stream consumption must accept only canonical ordered events, log accepted/rejected/gap/out-of-order cases, and synchronize only reconciled state. Transcript projection must consume accepted canonical events, preserve stable logical message identity and deterministic order, and emit projection anomaly diagnostics. Background synchronization must reconcile run-state snapshots using origin/frontier/version rules so stale or replayed sidepanel snapshots do not reintroduce duplicate events after refresh or reopen.",
+      "counters": {
+        "ELM": 1
+      },
+      "designSummary": "Full-model refactor approved for Sidepanel transcript projection and renderer. Within ELM-COMP-EXT-SIDEPANEL, redesign the conversation projection as a state-machine-driven Assistant Message Node model that decouples accepted SSE events from UI transcript grouping, keeps reasoning/tool/text inside one stable assistant node until terminal state, prevents synthetic User node creation from stream-status changes or empty payloads, and introduces an incremental renderer contract that updates only the active assistant tail while preserving historical node identity and avoiding whole-list rerender or full markdown reparse on each token.",
       "designDecisions": [
-        "ADR: Preserve existing brownfield module ownership. Extend ELM-COMP-EXT-SIDEPANEL (extension/src/sidepanel/useSidepanelController.ts, model.ts, reasoningTimeline.ts), ELM-COMP-EXT-BACKGROUND (extension/src/background/index.ts), and ELM-COMP-EXT-SHARED (extension/src/shared/api.ts, history.ts, shared types/protocol) instead of introducing a new physical package. These modules already own stream ingestion, transcript projection, state sync, SSE contract parsing, and durable history persistence, so they are the cleanest software-unit boundaries for the correction.",
-        "ADR: Dedupe authority moves upstream. Duplicate prevention must occur at canonical event acceptance in the sidepanel stream consumer and at background reconciliation, not only through transcript text coalescing. Text-similarity compaction remains presentation-only and must never be the primary correctness rule for event identity or order.",
-        "ADR: Observability is a required architectural behavior for this fix. Diagnostic logging must correlate runId, raw event id, canonical event key, semantic identity, sequence, accepted/rejected decision, frontier movement, persistence write result, background sync snapshot version/origin, and transcript anomaly classification so the team can distinguish SSE duplication from projection or re-sync duplication."
+        "ADR: Brownfield fit decision. Extend existing software unit ELM-COMP-EXT-SIDEPANEL instead of introducing a new module because reasoningTimeline.ts, reasoningTimelineView.tsx, useSidepanelController.ts, and their tests already form the ownership seam for transcript projection, controller orchestration, and transcript rendering. Rejected python_adapter/app and backend/src because they emit or transport events but do not own UI bubble identity or React render behavior.",
+        "ADR: Replace heuristic post-hoc transcript normalization with explicit Assistant Message Node lifecycle rules. Transcript grouping must be derived from stable logical assistant identity and terminal-state boundaries, not from adjacency, anchor drift, or text-similarity coalescing alone, because those heuristics cause assistant truncation and ghost user bubbles during tool/text state changes.",
+        "ADR: Renderer contract adopts structural patch vs tail patch semantics. Sealed messages must retain reference stability, while high-frequency assistant deltas update only the active tail through buffered incremental rendering. Renderer must not reparse markdown for the entire transcript or rerender the entire React list on each token.",
+        "ADR: Full-model architecture update adds formal behavior/service contracts for ELM-APP-EXT-RUN-CONVERSATION-MAPPER, ELM-APP-EXT-CONVERSATION-RENDERER, and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT so Sidepanel controller, projection, and rendering responsibilities are separately traceable in the graph. This was required because code markers existed for renderer/mapper seams but the graph lacked explicit architect-managed contract elements for the renderer path."
       ],
       "runtime": {
-        "activeGoal": "",
+        "activeGoal": "重构 Sidepanel 会话视图投影与渲染机制以消除流式截断、幽灵用户消息和卡顿问题",
         "validations": {
           "qa": {
             "status": "passed",
-            "summary": "QA passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. Local-only validation executed and passed: targeted extension tests covering ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API; npm run typecheck --workspace extension; npm run build --workspace extension. Added direct architecture-tagged tests in extension/src/sidepanel/model.test.ts for accepted, duplicate, stale replay, gap, and out-of-order acceptance decisions. Shared API/history, background reconciliation, and transcript projection tests now contain matching architecture traceability tags. 跳过了真实环境验证.",
-            "details": "QA passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. Local-only validation executed and passed: targeted extension tests covering ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API; npm run typecheck --workspace extension; npm run build --workspace extension. Added direct architecture-tagged tests in extension/src/sidepanel/model.test.ts for accepted, duplicate, stale replay, gap, and out-of-order acceptance decisions. Shared API/history, background reconciliation, and transcript projection tests now contain matching architecture traceability tags. 跳过了真实环境验证.",
-            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
-            "updatedAt": "2026-04-14T08:18:05.762Z"
+            "summary": "QA passed for commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b covering TASK-014, TASK-015, TASK-016. Verified ApplicationFunction contracts ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT against targeted automated tests in extension/src/sidepanel/reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx. Local-only validation executed because live_environment_ready=false; 跳过了真实环境验证. In detached worktree at the reviewed commit, targeted Vitest run passed (46 tests), extension typecheck passed, extension build passed, and run_reality_scanner verified canonical intent IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT. Direct run_chrome_sandbox on the TSX test entry failed with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as sandbox toolchain limitation rather than implementation defect because the sandbox-oriented coverage passed under Vitest.",
+            "details": "QA passed for commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b covering TASK-014, TASK-015, TASK-016. Verified ApplicationFunction contracts ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT against targeted automated tests in extension/src/sidepanel/reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx. Local-only validation executed because live_environment_ready=false; 跳过了真实环境验证. In detached worktree at the reviewed commit, targeted Vitest run passed (46 tests), extension typecheck passed, extension build passed, and run_reality_scanner verified canonical intent IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT. Direct run_chrome_sandbox on the TSX test entry failed with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as sandbox toolchain limitation rather than implementation defect because the sandbox-oriented coverage passed under Vitest.",
+            "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
+            "updatedAt": "2026-04-15T13:12:21.267Z"
           },
           "audit": {
             "status": "passed",
-            "summary": "Audit passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. The rework preserves approved brownfield boundaries in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**; retains upstream dedupe authority in sidepanel canonical event acceptance and background reconciliation; keeps transcript projection as a consumer of accepted canonical events; and maintains observability across transport, sidepanel acceptance, persistence, background reconciliation, and transcript projection. Blocking IntentNotVerified gap is resolved: run_reality_scanner verified architecture-scoped automated test coverage for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API.",
-            "details": "Audit passed for commit 016599612be0527d5affcdfb083d14ee8bc70eed. The rework preserves approved brownfield boundaries in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**; retains upstream dedupe authority in sidepanel canonical event acceptance and background reconciliation; keeps transcript projection as a consumer of accepted canonical events; and maintains observability across transport, sidepanel acceptance, persistence, background reconciliation, and transcript projection. Blocking IntentNotVerified gap is resolved: run_reality_scanner verified architecture-scoped automated test coverage for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API.",
-            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
-            "updatedAt": "2026-04-14T08:16:04.438Z"
+            "summary": "Architecture compliance audit passed for full-model sidepanel transcript batch TASK-014/TASK-015/TASK-016 on commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Reality remains bounded to ELM-COMP-EXT-SIDEPANEL, stable assistant-node projection and incremental tail rendering behavior match approved design intent, canonical scanner-verifiable test tags now verify intended IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and targeted Vitest coverage passed including adversarial mixed-order and DOM-boundary assertions. Direct run_chrome_sandbox on the TSX test still fails with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as a tooling limitation rather than an implementation compliance defect because the sandbox-oriented DOM-boundary assertions execute successfully under Vitest.",
+            "details": "Architecture compliance audit passed for full-model sidepanel transcript batch TASK-014/TASK-015/TASK-016 on commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Reality remains bounded to ELM-COMP-EXT-SIDEPANEL, stable assistant-node projection and incremental tail rendering behavior match approved design intent, canonical scanner-verifiable test tags now verify intended IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and targeted Vitest coverage passed including adversarial mixed-order and DOM-boundary assertions. Direct run_chrome_sandbox on the TSX test still fails with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as a tooling limitation rather than an implementation compliance defect because the sandbox-oriented DOM-boundary assertions execute successfully under Vitest.",
+            "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
+            "updatedAt": "2026-04-15T13:08:18.272Z"
           }
         },
         "release": {
           "status": "completed",
-          "summary": "Release finalized for full-model issue fix addressing severe sidepanel AI message duplication across streaming, completion, and refresh/reopen paths. Release scope commit: 016599612be0527d5affcdfb083d14ee8bc70eed. Runtime tasks completed: TASK-001, TASK-002, TASK-003, TASK-004. QA status: passed. Audit status: passed. Release log records mandatory traceability matrix artifact for commit 016599612be0527d5affcdfb083d14ee8bc70eed and notes that generated graph-backed verification still shows Requirement and Source Files as N/A with rows marked ❌ No, so documentation retains traceability gap notes despite successful QA/audit.",
+          "summary": "Release completed for full-model sidepanel transcript stability batch. Commit: 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Tasks: TASK-014, TASK-015, TASK-016. Resolved issue: ISSUE-004. QA passed. Audit passed. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md with full intent traceability matrix showing all rows verified by tests.",
           "releaseLogPath": "SprintRleaseLog.md",
-          "updatedAt": "2026-04-14T08:20:50.218Z"
+          "updatedAt": "2026-04-15T13:18:27.011Z"
         },
-        "updatedAt": "2026-04-14T08:18:05.763Z"
+        "updatedAt": "2026-04-15T13:14:13.969Z"
       }
     }
   },
@@ -499,7 +502,7 @@
         ],
         "documentation": [
           {
-            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Project Transcript Read Model governs deterministic reconstruction of sidepanel transcript messages from accepted canonical events, persisted history, and live run state without reintroducing duplicate, missing, or out-of-order assistant output.\n[Input]: Historical run details, accepted live normalized events, answer records, final output snapshots, prior transcript projection state, feedback state, and accepted event-frontier metadata.\n[Processing]: Build transcript messages only from accepted canonical events, preserve stable logical message identity for assistant output, order transcript parts by accepted event frontier and deterministic tie-break rules, merge historical and live segments without replaying already projected identities, restrict text-similarity coalescing to bounded presentation compaction inside the same logical message group, and emit structured diagnostics for projection anomalies such as duplicate logical groups, missing predecessor evidence, sequence regression, or message reopening after terminal state.\n[Output]: A transcript projection suitable for side-panel chat rendering, summaries, and cockpit status displays, together with projection diagnostics keyed to accepted event identities.\n[Acceptance Criteria]: Assistant streamed text remains distinguishable from reasoning and tool output; historical and live segments merge without duplicating accepted message groups; question and answer turns render in deterministic conversational order; projection never becomes the primary dedupe authority over raw accepted events; anomaly logs make duplicate, missing, and ordering faults traceable to their upstream source."
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Project Transcript Read Model owns the deterministic projection of accepted live and historical run events into stable conversation message nodes and renderer-ready transcript state for the Sidepanel.\n[Input]: Accepted canonical normalized SSE run events, historical run segments, live run segment, prompt and answer records, final output snapshots, terminal status fields, feedback state, prior live projection state, and prior stable transcript identities.\n[Processing]: Maintain an explicit conversation projection state machine that separates raw event flow from UI transcript grouping; create User Message Nodes only from verified user prompt or answer sources; bind assistant reasoning, tool_call, and text emissions to one stable Assistant Message Node using semantic.messageId or data.message_id with provisional run-scoped fallback; prevent assistant tool/text status transitions, empty payloads, or out-of-order SSE injections from opening synthetic User nodes; finalize assistant nodes only on terminal state or verified next-user-turn boundaries; emit structural and tail-oriented projection metadata while preserving historical node identity and anomaly diagnostics.\n[Output]: Stable transcript read model containing deterministic message nodes, active assistant node identity, sealed historical segments, tail-update metadata, summary state, and anomaly diagnostics suitable for renderer consumption.\n[Acceptance Criteria]: GIVEN a long streaming assistant answer with reasoning, tool_call, and final text phases, WHEN SSE status switches between tool and text, THEN the projection preserves one Assistant Message ID and renders no empty User bubble; out-of-order or empty SSE payloads do not create new User nodes; assistant nodes remain open until terminal state; historical transcript identity remains stable while live tail updates incrementally."
           }
         ],
         "extensions": {
@@ -672,68 +675,271 @@
         }
       },
       {
-        "identifier": "PROJECT-CURRENT",
-        "type": "WorkPackage",
+        "identifier": "ELM-001",
+        "type": "Requirement",
         "name": [
           {
-            "value": "Current Project Goal"
+            "value": "Formal Requirement"
           }
         ],
         "documentation": [
           {
-            "value": "Architectural diagnosis for sidepanel message duplication: duplication persists during streaming and after completion, and survives refresh/reopen, so the defect crosses live SSE ingestion, background state synchronization, persistence, and transcript projection boundaries. Existing brownfield fit is retained in extension/src/sidepanel/**, extension/src/background/**, and extension/src/shared/**. The design decision is to harden upstream canonical event acceptance and observability rather than relying on late transcript heuristics. Stream consumption must accept only canonical ordered events, log accepted/rejected/gap/out-of-order cases, and synchronize only reconciled state. Transcript projection must consume accepted canonical events, preserve stable logical message identity and deterministic order, and emit projection anomaly diagnostics. Background synchronization must reconcile run-state snapshots using origin/frontier/version rules so stale or replayed sidepanel snapshots do not reintroduce duplicate events after refresh or reopen."
+            "value": "# Formal Requirement Draft\n\n## Goal\nRestore and formalize the Chrome extension sidepanel capability for authorized webpage capture so users can intentionally fetch webpage content by configured rules, include that captured content with their prompt/question in backend AI requests, and prevent this behavior from becoming implicit or disappearing again.\n\n## Scope\nThis requirement covers:\n\n1. **Sidepanel UI restoration**\n   - Restore the sidepanel control/button that allows the user to fetch content from the active authorized webpage according to configured capture rules.\n   - The control must be available in the intended sidepanel interaction path and must no longer be a hidden or accidental capability.\n\n2. **Capture-to-run payload explicitness**\n   - Make the product behavior explicit that webpage-captured data can be combined with the user’s prompt/question and then sent to the backend AI run-start flow.\n   - Preserve the brownfield behavior evidenced by:\n     - capture entry via `RECAPTURE` / `collectFromActiveTab`\n     - orchestration path via `startRunFromActiveTab(...)`\n     - backend request packaging including `prompt`, `selectedAgent`, `capture`, and `context`\n     - backend adapter acceptance of `capture` and `context` in `RunStartRequest`\n\n3. **Architecture knowledge graph explicitness**\n   - Add or update architecture knowledge so this capability is documented as an intentional, traceable system behavior rather than an implicit coupling across UI, background orchestration, shared API, and backend adapter layers.\n\n4. **Regression-proof testing**\n   - Add regression tests that protect:\n     - the sidepanel capture-entry UI/control presence and expected interaction\n     - the flow from captured webpage data into the backend AI request payload\n\n## Backward Compatibility & Resolved Conflicts\n- **Historical context found in graph**: No relevant prior architecture requirements, constraints, or business processes were found in the knowledge graph search.\n- **Conflict analysis**: No graph-documented conflict was detected.\n- **Brownfield compatibility expectation**: This requirement is intended to **restore and formalize** already-evidenced brownfield behavior rather than introduce a new product concept. Existing capture-capable code paths and payload fields must remain supported and become explicitly protected by architecture documentation and tests.\n\n## User Stories / Usage Scenarios\n1. **As an extension user**, I want a visible sidepanel control to fetch content from the current authorized webpage, so I can intentionally include webpage data in my AI-assisted workflow.\n2. **As an extension user**, I want captured webpage content to be sent together with my prompt/question when starting an AI run, so the backend AI can use both my instruction and the captured page evidence.\n3. **As a maintainer/architect**, I want this capability explicitly represented in the architecture knowledge graph, so future changes do not accidentally remove or obscure it.\n4. **As a maintainer**, I want regression tests covering both UI entry and backend payload composition, so this behavior does not silently disappear again.\n\n## Acceptance Criteria (Mandatory)\n\n### AC1 — Sidepanel capture control is restored\n**Given** the user opens the extension sidepanel in a context where webpage capture is allowed by configured authorization/rules  \n**When** the sidepanel is rendered  \n**Then** a visible control for webpage capture is present in the sidepanel UI.\n\n### AC2 — Sidepanel capture control triggers capture path\n**Given** the capture control is visible in the sidepanel  \n**When** the user activates the control  \n**Then** the extension invokes the existing or equivalent authorized active-tab capture flow for collecting webpage data by configured rules.\n\n### AC3 — Authorization/rule boundary is preserved\n**Given** the active page is not authorized or does not satisfy configured capture rules  \n**When** the user attempts to use the capture capability  \n**Then** the extension must not behave as if valid page content was captured, and the UI/flow must respect the configured authorization boundary.\n\n### AC4 — Captured webpage data is included with user prompt in run-start flow\n**Given** webpage content has been captured for the active tab  \n**And** the user submits a prompt/question to start an AI run  \n**When** the run-start request is created  \n**Then** the request payload includes the user prompt/question and the captured webpage data together in the supported run-start structure.\n\n### AC5 — Payload structure remains explicit and traceable\n**Given** a run is started from the active-tab-assisted flow  \n**When** the request is sent to the backend run-start API  \n**Then** traceable evidence exists in code and/or tests that the payload packaging includes the supported fields for `prompt`, `selectedAgent`, `capture`, and `context`, with `capture` representing webpage-captured data when present.\n\n### AC6 — Backend compatibility is preserved\n**Given** the backend adapter receives a run-start request containing captured webpage data  \n**When** the request is validated/handled  \n**Then** the request shape remains compatible with the backend model accepting `capture` and `context` in `RunStartRequest`.\n\n### AC7 — Architecture knowledge graph is updated\n**Given** this requirement is approved and implemented downstream  \n**When** architecture documentation/knowledge graph updates are made  \n**Then** the graph must explicitly describe:\n- the sidepanel UI entry point for webpage capture\n- the orchestration path that can capture page data before run start\n- the request payload relationship between user prompt/question and captured webpage data\n- the backend acceptance of capture-bearing run-start requests\n\n### AC8 — Regression test for sidepanel UI entry exists\n**Given** the repository test suite is executed after the change  \n**When** UI regression tests run  \n**Then** there is a test that fails if the sidepanel capture control/entry capability disappears again.\n\n### AC9 — Regression test for capture-to-backend payload exists\n**Given** the repository test suite is executed after the change  \n**When** flow/integration/unit tests covering run-start payload creation execute  \n**Then** there is a test that fails if captured webpage data is no longer packaged together with the user prompt/question for the backend request.\n\n### AC10 — Evidence remains inspectable for future maintainers\n**Given** a future maintainer inspects the repository and architecture artifacts  \n**When** they trace this capability  \n**Then** they can identify the UI entry, orchestration path, payload packaging, backend contract, and regression tests without relying on tribal knowledge.\n\n## Constraints & Non-functional Requirements\n- Do not define this as an implicit behavior only discoverable from code; it must be explicit in architecture knowledge.\n- The requirement is for a **brownfield restoration/formalization**, so downstream design should preserve verified existing payload semantics unless an explicit architectural change is approved later.\n- Regression coverage must be durable enough to detect both:\n  - UI removal/regression\n  - payload composition regression\n- The capability must remain bounded by configured authorization/capture rules for webpage access.\n- The requirement must support end-to-end traceability across UI, orchestration, API packaging, backend contract, and tests.\n\n## Open Questions / Assumptions\n- Assumption: “authorized webpage by configured rules” refers to the repository’s existing authorization/capture-rule mechanism and does not require new policy design in this requirement.\n- Assumption: The exact button label may vary by product language/UI copy, but the user-visible capture entry itself is mandatory.\n- Assumption: The architecture graph update may be implemented through one or more linked architecture elements, as long as the capability becomes explicit and traceable."
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "type": "ApplicationService",
+        "name": [
+          {
+            "value": "Authorized Webpage Capture Run-Start Service"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationService represents externally visible automated behavior offered by application components to support business behavior. In this architecture, Authorized Webpage Capture Run-Start Service makes explicit the end-to-end capability in which the sidepanel exposes a visible capture entry, the extension captures authorized active-page data according to configured rules, and the run-start flow preserves that captured data together with the user prompt/question in the backend request contract."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-DATA-EXT-CAPTURE-RUNSTART-PAYLOAD",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "Capture-Enriched Run-Start Payload"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "A DataObject represents passive application data that is created, read, updated, or transported by application behavior. In this architecture, Capture-Enriched Run-Start Payload is the explicit request data structure used for backend run start when a user prompt/question is combined with selectedAgent, optional capture derived from the authorized active webpage, and context metadata such as capturedAt, username, usernameSource, pageTitle, and pageUrl."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "passive-structure"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Expose Sidepanel Capture Entry"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Expose Sidepanel Capture Entry governs the visible operator-facing sidepanel control that preserves webpage capture as an intentional UI action and dispatches recapture into the extension flow.\n[Input]: User interaction with the sidepanel composer area, current assistant busy state, and the visible capture-control rendering state.\n[Processing]: Render and preserve an explicit sidepanel capture control, prevent invocation while the assistant is busy, and dispatch the recapture command through the controller so capture remains an intentional operator action rather than an implicit side effect.\n[Output]: A visible capture entry in the sidepanel UI and a dispatched recapture request when the user activates it.\n[Acceptance Criteria]: The rendered sidepanel includes a visible capture control in the intended interaction path; activating the control dispatches the recapture flow; regression tests fail if the control disappears or no longer dispatches recapture; the UI does not bypass existing authorization boundaries."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Orchestrate Authorized Capture And Run Start"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Orchestrate Authorized Capture And Run Start governs the background-side orchestration that enforces authorization and rules, collects webpage data when requested, and preserves capture-aware run-start handoff semantics.\n[Input]: User prompt/question, selected main agent, optional session id, capture-page intent, active-tab metadata, stored rules, and runtime authorization state.\n[Processing]: Enforce active-tab authorization and configured rule boundaries, optionally collect page fields from the authorized active tab, derive username context, preserve matched-rule state, and pass the resulting prompt plus captured webpage data into the shared run-start packaging flow without changing the supported payload semantics.\n[Output]: An authorized capture result and a run-start handoff containing prompt, selected agent, optional captured webpage data, and context inputs for request packaging.\n[Acceptance Criteria]: Unauthorized or unmatched pages do not produce a false successful capture; authorized pages can still capture and start a run; regression tests fail if captured webpage data stops flowing from background orchestration into run-start handoff; existing payload semantics remain compatible with prompt, selectedAgent, capture, and context."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Package Capture-Enriched Run-Start Request"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Package Capture-Enriched Run-Start Request governs the shared API behavior that builds the backend /api/runs request so captured webpage data remains explicitly packaged together with the user prompt/question when present.\n[Input]: User prompt/question, selected main agent, optional captured webpage data, username context, and optional session id.\n[Processing]: Normalize optional capture content, build the run-start HTTP request body, preserve the supported fields prompt and selectedAgent, include capture when present, and always include context metadata compatible with the backend contract.\n[Output]: A POST /api/runs request payload containing prompt, selectedAgent, optional capture, optional sessionId, and context.\n[Acceptance Criteria]: Regression tests fail if captured webpage data is no longer packaged together with the user prompt/question when present; send-only flows still omit capture correctly; payload structure remains inspectable and compatible with the existing run-start contract; tests verify prompt, selectedAgent, capture, and context semantics."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Accept Capture-Bearing RunStartRequest"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Accept Capture-Bearing RunStartRequest governs backend request-model acceptance so capture-bearing run-start payloads remain compatible with the adapter's existing request validation and startup flow.\n[Input]: Backend POST /api/runs request containing prompt, selectedAgent, optional capture payload, optional sessionId, and context metadata.\n[Processing]: Validate the incoming RunStartRequest model, preserve backend compatibility for capture and context fields, and hand the accepted request to adapter run-start processing without dropping capture-bearing payload support.\n[Output]: A validated backend run-start request accepted for adapter processing or a normalized validation failure.\n[Acceptance Criteria]: RunStartRequest continues to accept capture and context; regression tests fail if backend acceptance removes either field or breaks capture-bearing /api/runs requests; accepted requests remain compatible with the existing adapter start-run flow."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "type": "ApplicationService",
+        "name": [
+          {
+            "value": "Stable Transcript Projection Service"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationService represents externally visible automated behavior offered by application components. In this architecture, Stable Transcript Projection Service exposes the sidepanel contract that converts accepted live and historical run data into a stable transcript read model with deterministic message identity, terminal-state semantics, anomaly reporting, and render-friendly patch metadata for the UI layer."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "type": "ApplicationService",
+        "name": [
+          {
+            "value": "Incremental Conversation Renderer Service"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationService represents externally visible automated behavior offered by application components. In this architecture, Incremental Conversation Renderer Service exposes the sidepanel UI contract that consumes a stable transcript read model, preserves sealed message identity, and applies local tail updates for active assistant output without whole-list rerender or whole-transcript markdown reparsing."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Render Incremental Transcript Tail"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Stable transcript read model, active assistant node identity, structural patch notifications, tail delta payloads, feedback UI state, auto-follow state, and transcript action metadata.\n[Processing]: Render transcript messages from the read-model contract instead of raw SSE events; keep sealed messages referentially stable; accumulate high-frequency assistant text deltas in refs or equivalent buffers; flush tail updates through debounce, requestAnimationFrame, or memoized local patch application; update only the active assistant message tail and defer markdown reparsing to the affected active block; preserve precise DOM bubble counts and action affordances when assistant phases alternate between reasoning, tool, and text.\n[Output]: Incrementally updated transcript DOM with stable historical message subtrees, locally updated active assistant tail, accurate final markdown, and scroll behavior that follows live updates without whole-list rerender churn.\n[Acceptance Criteria]: GIVEN SSE emits single-character tokens at very high frequency such as every 10ms, WHEN React renders the stream, THEN ref buffering plus debounce or memoization keeps the UI smooth and preserves exact markdown output without omissions; each token does not trigger whole transcript rerender or full markdown reparse; DOM never shows more than the intended user and assistant bubbles for a single turn under tool/text alternation."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "重构 Sidepanel 会话视图投影与渲染机制以消除流式截断、幽灵用户消息和卡顿问题"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Full-model refactor approved for Sidepanel transcript projection and renderer. Within ELM-COMP-EXT-SIDEPANEL, redesign the conversation projection as a state-machine-driven Assistant Message Node model that decouples accepted SSE events from UI transcript grouping, keeps reasoning/tool/text inside one stable assistant node until terminal state, prevents synthetic User node creation from stream-status changes or empty payloads, and introduces an incremental renderer contract that updates only the active assistant tail while preserving historical node identity and avoiding whole-list rerender or full markdown reparse on each token."
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "",
+            "rawRequirement": "重构 Sidepanel 会话视图投影与渲染机制以消除流式截断、幽灵用户消息和卡顿问题",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-001",
+        "identifier": "TASK-013",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "Harden sidepanel run-stream acceptance and diagnostics in existing sidepanel modules"
+            "value": "重构 Sidepanel 会话视图投影与渲染机制以消除流式截断、幽灵用户消息和卡顿问题"
           }
         ],
         "documentation": [
           {
-            "value": "Added architecture-tagged automated tests for canonical sidepanel acceptance decisions in extension/src/sidepanel/model.test.ts covering accepted, duplicate, stale replay, gap, and out-of-order cases."
+            "value": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks."
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Task",
-            "taskKind": "implementation",
-            "status": "Done",
-            "retryCount": 1,
-            "assignee": "Implementation",
-            "summary": "Added architecture-tagged automated tests for canonical sidepanel acceptance decisions in extension/src/sidepanel/model.test.ts covering accepted, duplicate, stale replay, gap, and out-of-order cases.",
-            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
-            "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
-            "softwareUnitTitle": "Extension Side Panel Experience",
-            "architectureElementId": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-            "updatedAt": "2026-04-14T08:13:51.810Z"
+            "taskKind": "planning",
+            "status": "ToDo",
+            "retryCount": 0,
+            "assignee": "SystemArchitect",
+            "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
+            "commitId": "",
+            "softwareUnitId": "",
+            "softwareUnitTitle": "",
+            "architectureElementId": "",
+            "updatedAt": "2026-04-15T08:04:04.981Z"
           }
         }
       },
       {
-        "identifier": "TASK-002",
+        "identifier": "TASK-014",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "Refine transcript projection correctness and anomaly logging in reasoning timeline module"
+            "value": "Refactor sidepanel transcript projection into stable Assistant Message Node state machine"
           }
         ],
         "documentation": [
           {
-            "value": "Added explicit architecture-tagged transcript projection tests for deterministic ordering and terminal reopen anomaly evidence."
+            "value": "Verified sidepanel transcript projection implementation remains localized to sidepanel files, preserved stable assistant message-node behavior, and fixed scanner-verifiable ArchitectureID traceability comments for release readiness."
           }
         ],
         "extensions": {
@@ -742,28 +948,28 @@
             "kind": "Task",
             "taskKind": "implementation",
             "status": "Done",
-            "retryCount": 1,
+            "retryCount": 0,
             "assignee": "Implementation",
-            "summary": "Added explicit architecture-tagged transcript projection tests for deterministic ordering and terminal reopen anomaly evidence.",
-            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
+            "summary": "Verified sidepanel transcript projection implementation remains localized to sidepanel files, preserved stable assistant message-node behavior, and fixed scanner-verifiable ArchitectureID traceability comments for release readiness.",
+            "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
             "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
             "softwareUnitTitle": "Extension Side Panel Experience",
             "architectureElementId": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
-            "updatedAt": "2026-04-14T08:13:51.960Z"
+            "updatedAt": "2026-04-15T13:00:42.162Z"
           }
         }
       },
       {
-        "identifier": "TASK-003",
+        "identifier": "TASK-015",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "Implement background run-state reconciliation and sync observability in existing background module"
+            "value": "Implement incremental transcript rendering contract for active assistant tail updates"
           }
         ],
         "documentation": [
           {
-            "value": "Added architecture-tagged reconciliation test anchors for accepted sync persistence and stale snapshot rejection."
+            "value": "Verified incremental active-assistant tail rendering contract remains in sidepanel renderer/controller, preserved stable DOM/message identity behavior, and fixed scanner-verifiable ArchitectureID traceability comments."
           }
         ],
         "extensions": {
@@ -772,28 +978,28 @@
             "kind": "Task",
             "taskKind": "implementation",
             "status": "Done",
-            "retryCount": 1,
+            "retryCount": 0,
             "assignee": "Implementation",
-            "summary": "Added architecture-tagged reconciliation test anchors for accepted sync persistence and stale snapshot rejection.",
-            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
-            "softwareUnitId": "ELM-COMP-EXT-BACKGROUND",
-            "softwareUnitTitle": "Extension Background Orchestrator",
-            "architectureElementId": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
-            "updatedAt": "2026-04-14T08:13:52.187Z"
+            "summary": "Verified incremental active-assistant tail rendering contract remains in sidepanel renderer/controller, preserved stable DOM/message identity behavior, and fixed scanner-verifiable ArchitectureID traceability comments.",
+            "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
+            "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
+            "softwareUnitTitle": "Extension Side Panel Experience",
+            "architectureElementId": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+            "updatedAt": "2026-04-15T13:00:42.234Z"
           }
         }
       },
       {
-        "identifier": "TASK-004",
+        "identifier": "TASK-016",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "Add shared transport and persistence observability for stream identity and idempotent history replay"
+            "value": "Add adversarial transcript integrity and Chrome Sandbox DOM-boundary verification coverage"
           }
         ],
         "documentation": [
           {
-            "value": "Added architecture-tagged transport/persistence tests for SSE telemetry and canonical duplicate suppression in shared history."
+            "value": "Verified adversarial sidepanel transcript integrity coverage still asserts AI Text -> Tool Call -> AI Text -> empty user payload collapses to one user bubble and one assistant bubble, and fixed scanner-verifiable ArchitectureID test markers."
           }
         ],
         "extensions": {
@@ -802,28 +1008,28 @@
             "kind": "Task",
             "taskKind": "implementation",
             "status": "Done",
-            "retryCount": 1,
+            "retryCount": 0,
             "assignee": "Implementation",
-            "summary": "Added architecture-tagged transport/persistence tests for SSE telemetry and canonical duplicate suppression in shared history.",
-            "commitId": "016599612be0527d5affcdfb083d14ee8bc70eed",
-            "softwareUnitId": "ELM-COMP-EXT-SHARED",
-            "softwareUnitTitle": "Extension Shared Contract Layer",
-            "architectureElementId": "ELM-FUNC-EXT-CALL-ADAPTER-API",
-            "updatedAt": "2026-04-14T08:13:52.288Z"
+            "summary": "Verified adversarial sidepanel transcript integrity coverage still asserts AI Text -> Tool Call -> AI Text -> empty user payload collapses to one user bubble and one assistant bubble, and fixed scanner-verifiable ArchitectureID test markers.",
+            "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
+            "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
+            "softwareUnitTitle": "Extension Side Panel Experience",
+            "architectureElementId": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+            "updatedAt": "2026-04-15T13:00:42.304Z"
           }
         }
       },
       {
-        "identifier": "ISSUE-001",
+        "identifier": "ISSUE-004",
         "type": "BusinessObject",
         "name": [
           {
-            "value": "IntentNotVerified for duplicate-message full-model fix"
+            "value": "IntentNotVerified for full-model transcript refactor audit [Resolved]"
           }
         ],
         "documentation": [
           {
-            "value": "Blocking audit gap for commit 743a04e5499593851dd6f76170e02c5cb55b2a80. Intended IDs from TASK-001..TASK-004 are ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API. run_reality_scanner verified only requirement-level test tagging and did not verify these architecture IDs in automated tests. This is an IntentNotVerified gap; QA must add tagged automated tests before release can continue."
+            "value": "Resolved by successful rework commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b after scanner-verifiable ArchitectureID coverage was corrected and full-model QA/Audit passed for TASK-014, TASK-015, and TASK-016."
           }
         ],
         "extensions": {
@@ -831,33 +1037,9 @@
             "managedBy": "opencode-runtime",
             "kind": "Issue",
             "issueType": "ArchGap",
-            "status": "Open",
+            "status": "Resolved",
             "reporter": "OpenCode",
             "category": "ArchitectureGap"
-          }
-        }
-      },
-      {
-        "identifier": "ISSUE-002",
-        "type": "BusinessObject",
-        "name": [
-          {
-            "value": "QA gap: missing architecture-traceable tests for sidepanel duplicate-message fix"
-          }
-        ],
-        "documentation": [
-          {
-            "value": "Commit 743a04e5499593851dd6f76170e02c5cb55b2a80 passed local regression commands, but QA cannot mark the fix validated because the reviewed test files lack @ArchitectureID/@RequirementID traceability tags for ELM-FUNC-EXT-CONSUME-RUN-STREAM, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RECONCILE-RUN-STATE, and ELM-FUNC-EXT-CALL-ADAPTER-API. Direct automated tests for canonical sidepanel event acceptance and diagnostics in extension/src/sidepanel/model.ts were not found. Add targeted tagged tests covering duplicate, stale replay, out-of-order, gap, transcript anomaly, background reconciliation, and idempotent persistence behaviors, then rerun local verification."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "Issue",
-            "issueType": "BugReport",
-            "status": "Open",
-            "reporter": "OpenCode",
-            "category": "BugReport"
           }
         }
       },
@@ -871,7 +1053,7 @@
         ],
         "documentation": [
           {
-            "value": "Release finalized for full-model issue fix addressing severe sidepanel AI message duplication across streaming, completion, and refresh/reopen paths. Release scope commit: 016599612be0527d5affcdfb083d14ee8bc70eed. Runtime tasks completed: TASK-001, TASK-002, TASK-003, TASK-004. QA status: passed. Audit status: passed. Release log records mandatory traceability matrix artifact for commit 016599612be0527d5affcdfb083d14ee8bc70eed and notes that generated graph-backed verification still shows Requirement and Source Files as N/A with rows marked ❌ No, so documentation retains traceability gap notes despite successful QA/audit."
+            "value": "Release completed for full-model sidepanel transcript stability batch. Commit: 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Tasks: TASK-014, TASK-015, TASK-016. Resolved issue: ISSUE-004. QA passed. Audit passed. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md with full intent traceability matrix showing all rows verified by tests."
           }
         ],
         "extensions": {
@@ -879,8 +1061,8 @@
             "managedBy": "opencode-runtime",
             "kind": "ReleaseLog",
             "version": "1.0.0",
-            "content": "Release finalized for full-model issue fix addressing severe sidepanel AI message duplication across streaming, completion, and refresh/reopen paths. Release scope commit: 016599612be0527d5affcdfb083d14ee8bc70eed. Runtime tasks completed: TASK-001, TASK-002, TASK-003, TASK-004. QA status: passed. Audit status: passed. Release log records mandatory traceability matrix artifact for commit 016599612be0527d5affcdfb083d14ee8bc70eed and notes that generated graph-backed verification still shows Requirement and Source Files as N/A with rows marked ❌ No, so documentation retains traceability gap notes despite successful QA/audit.",
-            "timestamp": "2026-04-14T08:20:50.218Z",
+            "content": "Release completed for full-model sidepanel transcript stability batch. Commit: 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Tasks: TASK-014, TASK-015, TASK-016. Resolved issue: ISSUE-004. QA passed. Audit passed. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md with full intent traceability matrix showing all rows verified by tests.",
+            "timestamp": "2026-04-15T13:18:27.011Z",
             "path": "SprintRleaseLog.md"
           }
         }
@@ -1682,15 +1864,479 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-001",
+        "identifier": "REL-REALIZE-ELM001-REQ-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Capture run-start service realizes requirement"
+          }
+        ],
+        "source": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "target": "ELM-001",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Authorized Webpage Capture Run-Start Service makes requirement ELM-001 concrete by defining the intended end-to-end capture behavior across UI entry, orchestration, payload packaging, and backend acceptance."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-SERVE-CAPTURE-RUNSTART-BUSINESS-SVC",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Capture run-start service serves business analysis service"
+          }
+        ],
+        "source": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "target": "ELM-BUSINESS-SERVICE",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a serving: the source behavior provides functionality used by the target. In this architecture, Authorized Webpage Capture Run-Start Service provides the explicit authorized-page capture and run-start behavior consumed by the operator-facing Context-Aware AI Analysis Service."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-SIDEPANEL-CAPTURE-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Sidepanel realizes capture run-start service"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Extension Side Panel Experience realizes the capture run-start service by exposing the visible operator entry for webpage capture and the related prompt workflow."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-BACKGROUND-CAPTURE-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Background realizes capture run-start service"
+          }
+        ],
+        "source": "ELM-COMP-EXT-BACKGROUND",
+        "target": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Extension Background Orchestrator realizes the capture run-start service by enforcing authorization, collecting page data by rules, and coordinating run startup."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-SHARED-CAPTURE-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Shared layer realizes capture run-start service"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Extension Shared Contract Layer realizes the capture run-start service by constructing the backend request payload that preserves prompt, selectedAgent, capture, and context semantics."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-PYADAPTER-CAPTURE-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Python adapter realizes capture run-start service"
+          }
+        ],
+        "source": "ELM-COMP-PY-ADAPTER",
+        "target": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Python OpenCode Adapter realizes the capture run-start service by accepting capture-bearing run-start requests and preserving adapter compatibility."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-PACKAGE-PAYLOAD-DATA",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Packaging function accesses capture run-start payload"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART",
+        "target": "ELM-DATA-EXT-CAPTURE-RUNSTART-PAYLOAD",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an access: the source behavior reads, writes, or uses the target passive structure. In this architecture, Package Capture-Enriched Run-Start Request creates and uses the Capture-Enriched Run-Start Payload data object before sending the backend request."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-PY-ACCEPT-PAYLOAD-DATA",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Backend acceptance function accesses capture run-start payload"
+          }
+        ],
+        "source": "ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART",
+        "target": "ELM-DATA-EXT-CAPTURE-RUNSTART-PAYLOAD",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an access: the source behavior reads, writes, or uses the target passive structure. In this architecture, Accept Capture-Bearing RunStartRequest reads and validates the Capture-Enriched Run-Start Payload as the backend request contract."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-SIDEPANEL-CAPTURE-ENTRY",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Sidepanel performs capture entry behavior"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an assignment: the source active structure is responsible for performing the target behavior. In this architecture, Extension Side Panel Experience is responsible for rendering and dispatching the visible capture-entry behavior."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-BACKGROUND-ORCHESTRATE-CAPTURE-RUNSTART",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Background performs capture run-start orchestration"
+          }
+        ],
+        "source": "ELM-COMP-EXT-BACKGROUND",
+        "target": "ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an assignment: the source active structure is responsible for performing the target behavior. In this architecture, Extension Background Orchestrator is responsible for authorization-aware capture and run-start orchestration."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-SHARED-PACKAGE-CAPTURE-RUNSTART",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Shared layer packages capture run-start request"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an assignment: the source active structure is responsible for performing the target behavior. In this architecture, Extension Shared Contract Layer is responsible for packaging the capture-enriched backend run-start request."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-PY-ACCEPT-CAPTURE-RUNSTART",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Python adapter accepts capture-bearing run-start request"
+          }
+        ],
+        "source": "ELM-COMP-PY-ADAPTER",
+        "target": "ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an assignment: the source active structure is responsible for performing the target behavior. In this architecture, Python OpenCode Adapter is responsible for accepting and validating capture-bearing run-start requests."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-SIDEPANEL-CAPTURE-ENTRY-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Sidepanel capture entry realizes service"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY",
+        "target": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Expose Sidepanel Capture Entry realizes the user-visible entry portion of the Authorized Webpage Capture Run-Start Service."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-BACKGROUND-CAPTURE-RUNSTART-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Background capture orchestration realizes service"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART",
+        "target": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Orchestrate Authorized Capture And Run Start realizes the authorization and orchestration portion of the Authorized Webpage Capture Run-Start Service."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-SHARED-PACKAGE-CAPTURE-RUNSTART-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Packaging function realizes service"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART",
+        "target": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Package Capture-Enriched Run-Start Request realizes the payload-packaging portion of the Authorized Webpage Capture Run-Start Service."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-PY-ACCEPT-CAPTURE-RUNSTART-SVC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Backend acceptance function realizes service"
+          }
+        ],
+        "source": "ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART",
+        "target": "ELM-SVC-EXT-AUTHORIZED-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a realization: the source concept implements, fulfills, or makes the target concept concrete. In this architecture, Accept Capture-Bearing RunStartRequest realizes the backend acceptance portion of the Authorized Webpage Capture Run-Start Service."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-TRIGGER-SIDEPANEL-ENTRY-BG-ORCH",
+        "type": "Triggering",
+        "name": [
+          {
+            "value": "Sidepanel capture entry triggers background orchestration"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY",
+        "target": "ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, Expose Sidepanel Capture Entry initiates the background orchestration that performs authorized capture handling and run-start handoff."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-TRIGGER-BG-ORCH-SHARED-PACKAGE",
+        "type": "Triggering",
+        "name": [
+          {
+            "value": "Background orchestration triggers payload packaging"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART",
+        "target": "ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, Orchestrate Authorized Capture And Run Start precedes request packaging by supplying prompt, selected agent, and optional captured webpage data for backend submission."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-TRIGGER-SHARED-PACKAGE-PY-ACCEPT",
+        "type": "Triggering",
+        "name": [
+          {
+            "value": "Payload packaging triggers backend acceptance"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART",
+        "target": "ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, Package Capture-Enriched Run-Start Request produces the request that is then accepted and validated by Accept Capture-Bearing RunStartRequest."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-BG-ORCH-PAYLOAD-DATA",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Background orchestration accesses capture run-start payload"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART",
+        "target": "ELM-DATA-EXT-CAPTURE-RUNSTART-PAYLOAD",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an access: the source behavior reads, writes, or uses the target passive structure. In this architecture, Orchestrate Authorized Capture And Run Start prepares the capture and context inputs that populate the Capture-Enriched Run-Start Payload."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-SIDEPANEL-ENTRY-PAYLOAD-DATA",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Sidepanel entry accesses capture run-start payload context"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY",
+        "target": "ELM-DATA-EXT-CAPTURE-RUNSTART-PAYLOAD",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an access: the source behavior reads, writes, or uses the target passive structure. In this architecture, Expose Sidepanel Capture Entry provides the operator intent that leads to creation or refresh of capture-bearing run-start payload data when a run is later started."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSOC-REQ-SIDEPANEL-CAPTURE-ENTRY",
+        "type": "Association",
+        "name": [
+          {
+            "value": "Requirement traces to sidepanel capture entry"
+          }
+        ],
+        "source": "ELM-001",
+        "target": "ELM-FUNC-EXT-SIDEPANEL-CAPTURE-ENTRY",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an association: the relationship connects concepts that are meaningfully related without implying stronger structural semantics. In this architecture, requirement ELM-001 explicitly traces to the sidepanel capture entry behavior as the mandated visible UI entry point."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSOC-REQ-BG-CAPTURE-ORCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "Requirement traces to background capture orchestration"
+          }
+        ],
+        "source": "ELM-001",
+        "target": "ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an association: the relationship connects concepts that are meaningfully related without implying stronger structural semantics. In this architecture, requirement ELM-001 explicitly traces to the authorized background orchestration behavior that collects webpage data and preserves capture-aware run-start handoff."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSOC-REQ-SHARED-PACKAGE",
+        "type": "Association",
+        "name": [
+          {
+            "value": "Requirement traces to payload packaging"
+          }
+        ],
+        "source": "ELM-001",
+        "target": "ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an association: the relationship connects concepts that are meaningfully related without implying stronger structural semantics. In this architecture, requirement ELM-001 explicitly traces to the shared packaging behavior that combines prompt, selectedAgent, optional capture, and context for backend submission."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSOC-REQ-PY-ACCEPT",
+        "type": "Association",
+        "name": [
+          {
+            "value": "Requirement traces to backend acceptance"
+          }
+        ],
+        "source": "ELM-001",
+        "target": "ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART",
+        "documentation": [
+          {
+            "value": "Describe the relationship as an association: the relationship connects concepts that are meaningfully related without implying stronger structural semantics. In this architecture, requirement ELM-001 explicitly traces to backend request-model acceptance of capture-bearing run-start requests."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-PROJECT-TRANSCRIPT-MAPPER",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Transcript projection realizes mapper service"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "target": "ELM-APP-EXT-RUN-CONVERSATION-MAPPER",
+        "documentation": [
+          {
+            "value": "A Realization relationship represents that one element implements or carries out another more abstract element. In this architecture, Project Transcript Read Model implements the Stable Transcript Projection Service contract used by the Sidepanel to produce deterministic transcript state from accepted run events."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-SIDEPANEL-RENDER-INCREMENTAL-TRANSCRIPT",
+        "type": "Assignment",
+        "name": [
+          {
+            "value": "Side panel renders incremental transcript tail"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+        "documentation": [
+          {
+            "value": "An Assignment relationship represents that an active structure element is responsible for performing a behavior element. In this architecture, Extension Side Panel Experience owns the Render Incremental Transcript Tail behavior inside the Sidepanel transcript UI."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-RENDER-INCREMENTAL-TRANSCRIPT-RENDERER",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Incremental transcript function realizes renderer service"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+        "target": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "documentation": [
+          {
+            "value": "A Realization relationship represents that one element implements or carries out another more abstract element. In this architecture, Render Incremental Transcript Tail implements the Incremental Conversation Renderer Service contract for local tail updates and stable transcript DOM behavior."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-TRIGGER-PROJECT-TRANSCRIPT-RENDER-INCREMENTAL",
+        "type": "Triggering",
+        "name": [
+          {
+            "value": "Transcript projection triggers renderer updates"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "target": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+        "documentation": [
+          {
+            "value": "A Triggering relationship represents that one behavior element causes or precedes another behavior element. In this architecture, Project Transcript Read Model emits structural and tail-oriented state changes that drive Render Incremental Transcript Tail without exposing raw SSE volatility to the renderer."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-013",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-001"
+            "value": "Project aggregates TASK-013"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-001",
+        "target": "TASK-013",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -1704,37 +2350,15 @@
         }
       },
       {
-        "identifier": "REL-TASK-001-ARCH",
-        "type": "Association",
-        "name": [
-          {
-            "value": "TASK-001 traces to ELM-FUNC-EXT-CONSUME-RUN-STREAM"
-          }
-        ],
-        "source": "TASK-001",
-        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-        "documentation": [
-          {
-            "value": "Runtime task traceability relationship managed by OpenCode runtime."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "opencode-runtime",
-            "kind": "TaskArchitectureTrace"
-          }
-        }
-      },
-      {
-        "identifier": "REL-PROJECT-TASK-002",
+        "identifier": "REL-PROJECT-TASK-014",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-002"
+            "value": "Project aggregates TASK-014"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-002",
+        "target": "TASK-014",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -1748,14 +2372,14 @@
         }
       },
       {
-        "identifier": "REL-TASK-002-ARCH",
+        "identifier": "REL-TASK-014-ARCH",
         "type": "Association",
         "name": [
           {
-            "value": "TASK-002 traces to ELM-FUNC-EXT-PROJECT-TRANSCRIPT"
+            "value": "TASK-014 traces to ELM-FUNC-EXT-PROJECT-TRANSCRIPT"
           }
         ],
-        "source": "TASK-002",
+        "source": "TASK-014",
         "target": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
         "documentation": [
           {
@@ -1770,15 +2394,15 @@
         }
       },
       {
-        "identifier": "REL-PROJECT-TASK-003",
+        "identifier": "REL-PROJECT-TASK-015",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-003"
+            "value": "Project aggregates TASK-015"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-003",
+        "target": "TASK-015",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -1792,15 +2416,15 @@
         }
       },
       {
-        "identifier": "REL-TASK-003-ARCH",
+        "identifier": "REL-TASK-015-ARCH",
         "type": "Association",
         "name": [
           {
-            "value": "TASK-003 traces to ELM-FUNC-EXT-RECONCILE-RUN-STATE"
+            "value": "TASK-015 traces to ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT"
           }
         ],
-        "source": "TASK-003",
-        "target": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
+        "source": "TASK-015",
+        "target": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
         "documentation": [
           {
             "value": "Runtime task traceability relationship managed by OpenCode runtime."
@@ -1814,15 +2438,15 @@
         }
       },
       {
-        "identifier": "REL-PROJECT-TASK-004",
+        "identifier": "REL-PROJECT-TASK-016",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-004"
+            "value": "Project aggregates TASK-016"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-004",
+        "target": "TASK-016",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -1836,15 +2460,15 @@
         }
       },
       {
-        "identifier": "REL-TASK-004-ARCH",
+        "identifier": "REL-TASK-016-ARCH",
         "type": "Association",
         "name": [
           {
-            "value": "TASK-004 traces to ELM-FUNC-EXT-CALL-ADAPTER-API"
+            "value": "TASK-016 traces to ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT"
           }
         ],
-        "source": "TASK-004",
-        "target": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+        "source": "TASK-016",
+        "target": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
         "documentation": [
           {
             "value": "Runtime task traceability relationship managed by OpenCode runtime."
