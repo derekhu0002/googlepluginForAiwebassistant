@@ -1,63 +1,68 @@
-# Release Summary: full-model sidepanel transcript stability batch
+# Release Summary: full-model sidepanel conversation UX batch
 
 ## Release Status
 
 - Status: completed
-- Date: 2026-04-15
-- Runtime tasks: `TASK-014`, `TASK-015`, `TASK-016`
-- Resolved issues: `ISSUE-004`
-- Implementation commit: `90dc29db55ce82d09cee2a7cb96e488bf7e2433b`
-- QA status: `passed`
-- Audit status: `passed`
+- Date: 2026-04-16
+- Requirement: `ELM-REQ-OPENCODE-UX`
+- Runtime tasks: `TASK-018`, `TASK-019`, `TASK-020`, `TASK-021`, `TASK-022`
+- Resolved issues: `ISSUE-005`, `ISSUE-006`
+- Implementation commit: `6bbb99dac742b215facb8c419ea9818325ad8e2d`
+- QA status: `passed` on recheck
+- Audit status: `passed` on recheck
 
 ## Release Summary
 
-- Refactored sidepanel transcript projection into a stable Assistant Message Node model so assistant content keeps durable message identity during streaming and replay.
-- Implemented incremental rendering for the active assistant tail to append live assistant text without regressing earlier message structure.
-- Added adversarial transcript integrity and chrome-sandbox-ready DOM-boundary coverage to verify mixed-order streaming stays within the intended user/assistant bubble boundaries.
+- Completed the sidepanel conversation UX refactor within the existing `extension/src/sidepanel` boundary for `ELM-REQ-OPENCODE-UX`.
+- Delivered stable historical transcript isolation, independent active-tail rendering, scroll-follow behavior, and explicit reasoning/tool/final-answer separation for the conversation viewport.
+- Added scanner-verifiable `@RequirementID: ELM-REQ-OPENCODE-UX` tags to executed regression coverage so the final batch has requirement-linked verification evidence.
 
 ## Completed Scope
 
-- `TASK-014`: Refactor sidepanel transcript projection into stable Assistant Message Node state machine.
-- `TASK-015`: Implement incremental transcript rendering contract for active assistant tail updates.
-- `TASK-016`: Add adversarial transcript integrity and Chrome Sandbox DOM-boundary verification coverage.
+- `TASK-018`: 收紧 Sidepanel transcript projection 视图契约.
+- `TASK-019`: 建立冻结历史消息树与只读渲染列表.
+- `TASK-020`: 实现 Active Tail 的异步 Markdown 增量渲染.
+- `TASK-021`: 实现智能 pin-to-bottom 与最新消息提示控制器.
+- `TASK-022`: 分离 Reasoning/Tool Call/Final Answer 并补足回归验证.
 
 ## Validation Results
 
-- QA: passed — targeted Vitest coverage passed (46 tests), extension typecheck passed, extension build passed, and runtime traceability IDs were verified for `ELM-FUNC-EXT-PROJECT-TRANSCRIPT` and `ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT`.
-- Audit: passed — confirmed the batch remains bounded to `ELM-COMP-EXT-SIDEPANEL`, matches approved design intent for stable assistant-node projection and incremental tail rendering, and preserves required verification coverage.
+- QA: passed on recheck — targeted sidepanel regression tests passed (51 tests), scanner-verifiable automated coverage now includes `ELM-REQ-OPENCODE-UX` via tagged executed tests in `reasoningTimeline.test.ts`, `reasoningTimelineView.test.tsx`, and `reasoningTimeline.chromeSandbox.test.tsx`, and typecheck passed.
+- Audit: passed on recheck — code reality remains aligned with the approved sidepanel UX design for `TASK-018` through `TASK-022`, with scanner-verifiable automated test coverage and architectural traceability preserved in `reasoningTimeline.ts`, `reasoningTimelineView.tsx`, and `useScrollFollowController.ts`.
 
 ## Commit Traceability
 
-- Release scope commit: `90dc29db55ce82d09cee2a7cb96e488bf7e2433b`
-- Traceability matrix scope: commit `90dc29db55ce82d09cee2a7cb96e488bf7e2433b`
+- Release scope commit: `6bbb99dac742b215facb8c419ea9818325ad8e2d`
+- Traceability matrix scope: commit `6bbb99dac742b215facb8c419ea9818325ad8e2d`
 
 ## Intent Traceability Matrix
 
 # Traceability Matrix
 
-Scope: commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b
+Scope: commit 6bbb99dac742b215facb8c419ea9818325ad8e2d
 
 | Requirement (Intent) | Architecture Component (Design) | Implemented Task | Source Files (Reality) | Verified by Tests? |
 | --- | --- | --- | --- | --- |
-| N/A | ELM-FUNC-EXT-PROJECT-TRANSCRIPT Project Transcript Read Model | TASK-014 Refactor sidepanel transcript projection into stable Assistant Message Node state machine (90dc29db55ce82d09cee2a7cb96e488bf7e2433b) | extension/src/sidepanel/reasoningTimeline.test.ts<br>extension/src/sidepanel/reasoningTimeline.ts | ✅ Yes |
-| N/A | ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT Render Incremental Transcript Tail | TASK-015 Implement incremental transcript rendering contract for active assistant tail updates (90dc29db55ce82d09cee2a7cb96e488bf7e2433b) | extension/src/sidepanel/reasoningTimeline.chromeSandbox.test.tsx<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useSidepanelController.ts | ✅ Yes |
-| N/A | ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT Render Incremental Transcript Tail | TASK-016 Add adversarial transcript integrity and Chrome Sandbox DOM-boundary verification coverage (90dc29db55ce82d09cee2a7cb96e488bf7e2433b) | extension/src/sidepanel/reasoningTimeline.chromeSandbox.test.tsx<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useSidepanelController.ts | ✅ Yes |
+| N/A | ELM-REQ-OPENCODE-UX Sidepanel 会话体验重构：达到 OpenCode Web 级别的丝滑流式交互体验 | TASK-018 收紧 Sidepanel transcript projection 视图契约 (6bbb99dac742b215facb8c419ea9818325ad8e2d) | extension/src/sidepanel/reasoningTimeline.ts<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useScrollFollowController.ts | ✅ Yes |
+| N/A | ELM-REQ-OPENCODE-UX Sidepanel 会话体验重构：达到 OpenCode Web 级别的丝滑流式交互体验 | TASK-019 建立冻结历史消息树与只读渲染列表 (6bbb99dac742b215facb8c419ea9818325ad8e2d) | extension/src/sidepanel/reasoningTimeline.ts<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useScrollFollowController.ts | ✅ Yes |
+| N/A | ELM-REQ-OPENCODE-UX Sidepanel 会话体验重构：达到 OpenCode Web 级别的丝滑流式交互体验 | TASK-020 实现 Active Tail 的异步 Markdown 增量渲染 (6bbb99dac742b215facb8c419ea9818325ad8e2d) | extension/src/sidepanel/reasoningTimeline.ts<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useScrollFollowController.ts | ✅ Yes |
+| N/A | ELM-REQ-OPENCODE-UX Sidepanel 会话体验重构：达到 OpenCode Web 级别的丝滑流式交互体验 | TASK-021 实现智能 pin-to-bottom 与最新消息提示控制器 (6bbb99dac742b215facb8c419ea9818325ad8e2d) | extension/src/sidepanel/reasoningTimeline.ts<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useScrollFollowController.ts | ✅ Yes |
+| N/A | ELM-REQ-OPENCODE-UX Sidepanel 会话体验重构：达到 OpenCode Web 级别的丝滑流式交互体验 | TASK-022 分离 Reasoning/Tool Call/Final Answer 并补足回归验证 (6bbb99dac742b215facb8c419ea9818325ad8e2d) | extension/src/sidepanel/reasoningTimeline.ts<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useScrollFollowController.ts | ✅ Yes |
 
 100% of the intended sprint scope was verified by tests. Every traceability matrix row is marked `✅ Yes`.
 
 ## Release Artifacts
 
 - Release log: `SprintRleaseLog.md`
-- Implementation commit: `90dc29db55ce82d09cee2a7cb96e488bf7e2433b`
-- QA evidence: targeted transcript projection, incremental rendering, adversarial integrity, DOM-boundary tests; extension typecheck; extension build
-- Audit evidence: sidepanel boundary compliance and design-intent verification for transcript projection and incremental tail rendering
+- Implementation commit: `6bbb99dac742b215facb8c419ea9818325ad8e2d`
+- QA evidence: targeted sidepanel regression coverage, requirement-tagged executed tests, and extension typecheck
+- Audit evidence: recheck-confirmed sidepanel boundary compliance, design-intent verification, and preserved traceability in production files
 
 ## Traceability / Release Notes
 
-- This batch closes `ISSUE-004` for the full-model sidepanel transcript stability workstream.
-- Direct `run_chrome_sandbox` execution on the TSX entry remains a tooling limitation (`ERR_UNKNOWN_FILE_EXTENSION .tsx`), but the sandbox-oriented DOM-boundary assertions passed under Vitest and were accepted by QA and audit.
+- This batch closes `ISSUE-005` and `ISSUE-006` for the full-model sidepanel conversation UX workstream.
+- The follow-up traceability fix ensures executed regression tests now expose scanner-verifiable `@RequirementID: ELM-REQ-OPENCODE-UX` markers, resolving prior verification linkage gaps without expanding the implementation boundary beyond `extension/src/sidepanel`.
 
 ## Release Conclusion
 
-The full-model sidepanel transcript stability batch is released for commit `90dc29db55ce82d09cee2a7cb96e488bf7e2433b`. Intended scope for `TASK-014`, `TASK-015`, and `TASK-016` is implemented, verified, and recorded.
+The full-model sidepanel conversation UX batch is released for commit `6bbb99dac742b215facb8c419ea9818325ad8e2d`. Intended scope for `TASK-018`, `TASK-019`, `TASK-020`, `TASK-021`, and `TASK-022` is implemented, verified, and recorded.

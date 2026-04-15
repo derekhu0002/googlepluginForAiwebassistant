@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "Full-model refactor approved for Sidepanel transcript projection and renderer. Within ELM-COMP-EXT-SIDEPANEL, redesign the conversation projection as a state-machine-driven Assistant Message Node model that decouples accepted SSE events from UI transcript grouping, keeps reasoning/tool/text inside one stable assistant node until terminal state, prevents synthetic User node creation from stream-status changes or empty payloads, and introduces an incremental renderer contract that updates only the active assistant tail while preserving historical node identity and avoiding whole-list rerender or full markdown reparse on each token."
+      "value": "Narrow rework refinement for Requirement ELM-REQ-OPENCODE-UX after QA/Audit failure on commit 8193af5339ca00cbedc536c12171d5979a82e5ee. Preserve existing sidepanel UX architecture and retry history for TASK-018 through TASK-022. Limit follow-up work to adding scanner-verifiable automated test requirement trace tags in existing executed sidepanel regression tests under extension/src/sidepanel, specifically reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx, then rerun QA/Audit so verifiedIntentIds includes ELM-REQ-OPENCODE-UX."
     }
   ],
   "metadata": {
@@ -21,38 +21,36 @@
       "counters": {
         "ELM": 1
       },
-      "designSummary": "Full-model refactor approved for Sidepanel transcript projection and renderer. Within ELM-COMP-EXT-SIDEPANEL, redesign the conversation projection as a state-machine-driven Assistant Message Node model that decouples accepted SSE events from UI transcript grouping, keeps reasoning/tool/text inside one stable assistant node until terminal state, prevents synthetic User node creation from stream-status changes or empty payloads, and introduces an incremental renderer contract that updates only the active assistant tail while preserving historical node identity and avoiding whole-list rerender or full markdown reparse on each token.",
+      "designSummary": "Narrow rework refinement for Requirement ELM-REQ-OPENCODE-UX after QA/Audit failure on commit 8193af5339ca00cbedc536c12171d5979a82e5ee. Preserve existing sidepanel UX architecture and retry history for TASK-018 through TASK-022. Limit follow-up work to adding scanner-verifiable automated test requirement trace tags in existing executed sidepanel regression tests under extension/src/sidepanel, specifically reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx, then rerun QA/Audit so verifiedIntentIds includes ELM-REQ-OPENCODE-UX.",
       "designDecisions": [
-        "ADR: Brownfield fit decision. Extend existing software unit ELM-COMP-EXT-SIDEPANEL instead of introducing a new module because reasoningTimeline.ts, reasoningTimelineView.tsx, useSidepanelController.ts, and their tests already form the ownership seam for transcript projection, controller orchestration, and transcript rendering. Rejected python_adapter/app and backend/src because they emit or transport events but do not own UI bubble identity or React render behavior.",
-        "ADR: Replace heuristic post-hoc transcript normalization with explicit Assistant Message Node lifecycle rules. Transcript grouping must be derived from stable logical assistant identity and terminal-state boundaries, not from adjacency, anchor drift, or text-similarity coalescing alone, because those heuristics cause assistant truncation and ghost user bubbles during tool/text state changes.",
-        "ADR: Renderer contract adopts structural patch vs tail patch semantics. Sealed messages must retain reference stability, while high-frequency assistant deltas update only the active tail through buffered incremental rendering. Renderer must not reparse markdown for the entire transcript or rerender the entire React list on each token.",
-        "ADR: Full-model architecture update adds formal behavior/service contracts for ELM-APP-EXT-RUN-CONVERSATION-MAPPER, ELM-APP-EXT-CONVERSATION-RENDERER, and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT so Sidepanel controller, projection, and rendering responsibilities are separately traceable in the graph. This was required because code markers existed for renderer/mapper seams but the graph lacked explicit architect-managed contract elements for the renderer path."
+        "SystemArchitect completed brownfield analysis and proposed software-unit decomposition refining planning seed TASK-017 into review-only proposed tasks TASK-017-01 through TASK-017-05. Human approval is required before dispatching Implementation.",
+        "Human reviewer replied 同意. Implementation dispatch is now authorized for architect-defined tasks TASK-017-01 through TASK-017-05 under the approved full-model requirement ELM-REQ-OPENCODE-UX.",
+        "ModelUpdated: Rework batch for TASK-018,TASK-019,TASK-020,TASK-021,TASK-022 is a narrow verification-contract refinement only. No UX redesign or sidepanel scope expansion is authorized. Existing ownership boundary remains extension/src/sidepanel. Refined implementation contract requires explicit scanner-verifiable requirement tagging for ELM-REQ-OPENCODE-UX in executed automated regression tests: extension/src/sidepanel/reasoningTimeline.test.ts for transcript projection coverage, extension/src/sidepanel/reasoningTimelineView.test.tsx for historical/live rendering and presentation coverage, and extension/src/sidepanel/reasoningTimeline.chromeSandbox.test.tsx for mixed-order streaming boundary coverage. Preferred exact marker is // @RequirementID: ELM-REQ-OPENCODE-UX placed at test-file or primary describe-block level; existing architecture tags should be retained. Validation evidence after rework must show executed tagged tests plus run_reality_scanner verifiedIntentIds containing ELM-REQ-OPENCODE-UX, enabling QA and Audit to pass without unrelated code changes."
       ],
       "runtime": {
-        "activeGoal": "重构 Sidepanel 会话视图投影与渲染机制以消除流式截断、幽灵用户消息和卡顿问题",
+        "activeGoal": "基于 Requirement ELM-REQ-OPENCODE-UX，对 Sidepanel 会话界面进行深度 UI/UX 架构重构，以实现 OpenCode Web 级别的丝滑流式体验；重点覆盖组件级读写隔离、Markdown 增量异步渲",
         "validations": {
           "qa": {
             "status": "passed",
-            "summary": "QA passed for commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b covering TASK-014, TASK-015, TASK-016. Verified ApplicationFunction contracts ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT against targeted automated tests in extension/src/sidepanel/reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx. Local-only validation executed because live_environment_ready=false; 跳过了真实环境验证. In detached worktree at the reviewed commit, targeted Vitest run passed (46 tests), extension typecheck passed, extension build passed, and run_reality_scanner verified canonical intent IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT. Direct run_chrome_sandbox on the TSX test entry failed with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as sandbox toolchain limitation rather than implementation defect because the sandbox-oriented coverage passed under Vitest.",
-            "details": "QA passed for commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b covering TASK-014, TASK-015, TASK-016. Verified ApplicationFunction contracts ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT against targeted automated tests in extension/src/sidepanel/reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx. Local-only validation executed because live_environment_ready=false; 跳过了真实环境验证. In detached worktree at the reviewed commit, targeted Vitest run passed (46 tests), extension typecheck passed, extension build passed, and run_reality_scanner verified canonical intent IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT. Direct run_chrome_sandbox on the TSX test entry failed with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as sandbox toolchain limitation rather than implementation defect because the sandbox-oriented coverage passed under Vitest.",
-            "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
-            "updatedAt": "2026-04-15T13:12:21.267Z"
+            "summary": "QA recheck passed for ELM-REQ-OPENCODE-UX at commit 6bbb99dac742b215facb8c419ea9818325ad8e2d. Targeted sidepanel regression tests passed (51 tests) and scanner-verifiable automated coverage now includes ELM-REQ-OPENCODE-UX via tagged executed tests in reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx. Typecheck passed. Local-only validation executed; live environment skipped.",
+            "details": "QA recheck passed for ELM-REQ-OPENCODE-UX at commit 6bbb99dac742b215facb8c419ea9818325ad8e2d. Targeted sidepanel regression tests passed (51 tests) and scanner-verifiable automated coverage now includes ELM-REQ-OPENCODE-UX via tagged executed tests in reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx. Typecheck passed. Local-only validation executed; live environment skipped.",
+            "commitId": "6bbb99dac742b215facb8c419ea9818325ad8e2d",
+            "updatedAt": "2026-04-15T22:36:00.826Z"
           },
           "audit": {
             "status": "passed",
-            "summary": "Architecture compliance audit passed for full-model sidepanel transcript batch TASK-014/TASK-015/TASK-016 on commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Reality remains bounded to ELM-COMP-EXT-SIDEPANEL, stable assistant-node projection and incremental tail rendering behavior match approved design intent, canonical scanner-verifiable test tags now verify intended IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and targeted Vitest coverage passed including adversarial mixed-order and DOM-boundary assertions. Direct run_chrome_sandbox on the TSX test still fails with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as a tooling limitation rather than an implementation compliance defect because the sandbox-oriented DOM-boundary assertions execute successfully under Vitest.",
-            "details": "Architecture compliance audit passed for full-model sidepanel transcript batch TASK-014/TASK-015/TASK-016 on commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Reality remains bounded to ELM-COMP-EXT-SIDEPANEL, stable assistant-node projection and incremental tail rendering behavior match approved design intent, canonical scanner-verifiable test tags now verify intended IDs ELM-FUNC-EXT-PROJECT-TRANSCRIPT and ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and targeted Vitest coverage passed including adversarial mixed-order and DOM-boundary assertions. Direct run_chrome_sandbox on the TSX test still fails with ERR_UNKNOWN_FILE_EXTENSION .tsx, treated as a tooling limitation rather than an implementation compliance defect because the sandbox-oriented DOM-boundary assertions execute successfully under Vitest.",
-            "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
-            "updatedAt": "2026-04-15T13:08:18.272Z"
+            "summary": "Audit recheck passed for ELM-REQ-OPENCODE-UX at commit 6bbb99dac742b215facb8c419ea9818325ad8e2d. Code reality remains aligned with approved sidepanel UX design for TASK-018..TASK-022, and scanner-verifiable automated test coverage now includes ELM-REQ-OPENCODE-UX. Traceability remains present in reasoningTimeline.ts, reasoningTimelineView.tsx, and useScrollFollowController.ts.",
+            "details": "Audit recheck passed for ELM-REQ-OPENCODE-UX at commit 6bbb99dac742b215facb8c419ea9818325ad8e2d. Code reality remains aligned with approved sidepanel UX design for TASK-018..TASK-022, and scanner-verifiable automated test coverage now includes ELM-REQ-OPENCODE-UX. Traceability remains present in reasoningTimeline.ts, reasoningTimelineView.tsx, and useScrollFollowController.ts.",
+            "commitId": "6bbb99dac742b215facb8c419ea9818325ad8e2d",
+            "updatedAt": "2026-04-15T22:36:00.884Z"
           }
         },
         "release": {
           "status": "completed",
-          "summary": "Release completed for full-model sidepanel transcript stability batch. Commit: 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Tasks: TASK-014, TASK-015, TASK-016. Resolved issue: ISSUE-004. QA passed. Audit passed. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md with full intent traceability matrix showing all rows verified by tests.",
-          "releaseLogPath": "SprintRleaseLog.md",
-          "updatedAt": "2026-04-15T13:18:27.011Z"
+          "summary": "Released the completed full-model batch for ELM-REQ-OPENCODE-UX at commit 6bbb99dac742b215facb8c419ea9818325ad8e2d, covering TASK-018 through TASK-022 with sidepanel conversation UX refactor and follow-up requirement-tag traceability fix. Release log: /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md. QA and Audit both passed on recheck; ISSUE-005 and ISSUE-006 resolved.",
+          "updatedAt": "2026-04-15T22:37:53.373Z"
         },
-        "updatedAt": "2026-04-15T13:14:13.969Z"
+        "updatedAt": "2026-04-15T22:37:39.777Z"
       }
     }
   },
@@ -878,38 +876,76 @@
         }
       },
       {
-        "identifier": "PROJECT-CURRENT",
-        "type": "WorkPackage",
+        "identifier": "ELM-REQ-OPENCODE-UX",
+        "type": "Requirement",
         "name": [
           {
-            "value": "重构 Sidepanel 会话视图投影与渲染机制以消除流式截断、幽灵用户消息和卡顿问题"
+            "value": "Sidepanel 会话体验重构：达到 OpenCode Web 级别的丝滑流式交互体验"
           }
         ],
         "documentation": [
           {
-            "value": "Full-model refactor approved for Sidepanel transcript projection and renderer. Within ELM-COMP-EXT-SIDEPANEL, redesign the conversation projection as a state-machine-driven Assistant Message Node model that decouples accepted SSE events from UI transcript grouping, keeps reasoning/tool/text inside one stable assistant node until terminal state, prevents synthetic User node creation from stream-status changes or empty payloads, and introduces an incremental renderer contract that updates only the active assistant tail while preserving historical node identity and avoiding whole-list rerender or full markdown reparse on each token."
+            "value": "# Requirement: ELM-REQ-OPENCODE-UX\n## 名称\nSidepanel 会话体验重构：达到 OpenCode Web 级别的丝滑流式交互体验\n\n## Goal\n对当前浏览器插件 Sidepanel 的会话界面进行一次深度 UI/UX 架构重构，目标不是局部视觉修补，而是建立可持续演进的高性能会话渲染架构，使其在主观体验、交互流畅度、流式输出节奏、滚动行为与信息分层上对标 OpenCode Web 的顶级会话体验。\n\n## 核心架构性要求\n### R1. 组件级读写隔离\n- 历史消息必须封装为独立纯渲染组件。\n- 已完成消息必须通过稳定 props 与 React.memo 或等价冻结策略避免重复渲染。\n- 当前仍在流式输出的消息必须作为独立的 Active Tail 渲染单元存在。\n- Active Tail 的更新不得触发历史消息列表父级的整体重新渲染。\n- 会话状态管理必须体现“稳定历史区”与“动态流式区”的读写隔离。\n\n### R2. Markdown 增量与异步渲染优化\n- 禁止在每次 SSE delta 到达时对整段 Markdown 执行全量同步解析。\n- 流式阶段必须采用 requestAnimationFrame、节流器或等价机制控制渲染频率，上限不得高于 30fps。\n- 在 terminal state 到达时，必须执行最终强制 flush，确保最终展示内容完整一致。\n\n### R3. 智能滚动控制\n- 必须实现 pin-to-bottom 行为。\n- 用户手动向上滚动脱离底部后，系统必须暂停自动滚动，并显示“⬇ 最新消息”悬浮提示。\n- 用户点击该提示后，视图应恢复到底部并重新进入自动跟随态。\n\n### R4. 思考过程与结果分离渲染\n- Reasoning、Tool Call、Final Answer 必须在视觉上明确区分。\n- Reasoning / Tool Call 必须支持折叠/展开。\n- Final Answer 必须默认处于最易阅读的主展示层。\n\n## Acceptance Criteria\n- 历史消息在流式期间不重渲染，仅 Active Tail 更新。\n- 流式渲染必须经由 rAF/节流调度，实际 UI 提交频率不得高于 30fps。\n- terminal state 到达时必须立即最终 flush，最终展示内容完整一致。\n- 用户上滚时不得被强制拉回，且必须显示“⬇ 最新消息”提示。\n- Reasoning / Tool Call / Final Answer 必须清晰分层，且思考过程支持折叠/展开。"
+          }
+        ],
+        "extensions": {
+          "lane": "full-model",
+          "inputType": "requirement",
+          "source": "ProductManager",
+          "graphDraft": {
+            "element_id": "ELM-REQ-OPENCODE-UX",
+            "element_type": "Requirement",
+            "title": "Sidepanel 会话体验重构：达到 OpenCode Web 级别的丝滑流式交互体验",
+            "status": "approved",
+            "scope": [
+              "消息列表/Active Tail 渲染架构重构",
+              "Markdown 增量与异步渲染优化",
+              "pin-to-bottom 与最新消息提示",
+              "Reasoning/Tool Call/Final Answer 分层与折叠"
+            ],
+            "architecture_drivers": [
+              "历史消息纯渲染+React.memo 冻结",
+              "Active Tail 独立更新，禁止父级列表重渲染",
+              "Markdown 流式渲染需 rAF/节流，max 30fps，终态强制 flush",
+              "智能滚动：跟底、脱底暂停、最新消息提示",
+              "Reasoning/Tool Call/Final Answer 明确分层，支持折叠"
+            ]
+          }
+        }
+      },
+      {
+        "identifier": "PROJECT-CURRENT",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "基于 Requirement ELM-REQ-OPENCODE-UX，对 Sidepanel 会话界面进行深度 UI/UX 架构重构，以实现 OpenCode Web 级别的丝滑流式体验；重点覆盖组件级读写隔离、Markdown 增量异步渲"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Narrow rework refinement for Requirement ELM-REQ-OPENCODE-UX after QA/Audit failure on commit 8193af5339ca00cbedc536c12171d5979a82e5ee. Preserve existing sidepanel UX architecture and retry history for TASK-018 through TASK-022. Limit follow-up work to adding scanner-verifiable automated test requirement trace tags in existing executed sidepanel regression tests under extension/src/sidepanel, specifically reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and reasoningTimeline.chromeSandbox.test.tsx, then rerun QA/Audit so verifiedIntentIds includes ELM-REQ-OPENCODE-UX."
           }
         ],
         "extensions": {
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "Project",
-            "rawRequirement": "重构 Sidepanel 会话视图投影与渲染机制以消除流式截断、幽灵用户消息和卡顿问题",
+            "rawRequirement": "基于 Requirement ELM-REQ-OPENCODE-UX，对 Sidepanel 会话界面进行深度 UI/UX 架构重构，以实现 OpenCode Web 级别的丝滑流式体验；重点覆盖组件级读写隔离、Markdown 增量异步渲",
             "status": "InProgress"
           }
         }
       },
       {
-        "identifier": "TASK-013",
+        "identifier": "TASK-017",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "重构 Sidepanel 会话视图投影与渲染机制以消除流式截断、幽灵用户消息和卡顿问题"
+            "value": "基于 Requirement ELM-REQ-OPENCODE-UX，对 Sidepanel 会话界面进行深度 UI/UX 架构重构，以实现 OpenCode Web 级别的丝滑流式体验；重点覆盖组件级读写隔离、Markdown 增量异步渲"
           }
         ],
         "documentation": [
           {
-            "value": "SystemArchitect must refine this planning item into concrete software-unit-scoped implementation tasks."
+            "value": "Planning seed TASK-017 refined by SystemArchitect into implementation-scoped tasks TASK-017-01 through TASK-017-05 after explicit human review approval."
           }
         ],
         "extensions": {
@@ -917,29 +953,29 @@
             "managedBy": "opencode-runtime",
             "kind": "Task",
             "taskKind": "planning",
-            "status": "ToDo",
+            "status": "Done",
             "retryCount": 0,
             "assignee": "SystemArchitect",
-            "summary": "Created by decompose_goal as planning input for software-unit decomposition.",
+            "summary": "Planning seed TASK-017 refined by SystemArchitect into implementation-scoped tasks TASK-017-01 through TASK-017-05 after explicit human review approval.",
             "commitId": "",
             "softwareUnitId": "",
             "softwareUnitTitle": "",
             "architectureElementId": "",
-            "updatedAt": "2026-04-15T08:04:04.981Z"
+            "updatedAt": "2026-04-15T15:44:21.441Z"
           }
         }
       },
       {
-        "identifier": "TASK-014",
+        "identifier": "TASK-018",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "Refactor sidepanel transcript projection into stable Assistant Message Node state machine"
+            "value": "收紧 Sidepanel transcript projection 视图契约"
           }
         ],
         "documentation": [
           {
-            "value": "Verified sidepanel transcript projection implementation remains localized to sidepanel files, preserved stable assistant message-node behavior, and fixed scanner-verifiable ArchitectureID traceability comments for release readiness."
+            "value": "Narrow rework completed. Added scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX markers to executed sidepanel regression tests and reran targeted tests, typecheck, and reality scanner."
           }
         ],
         "extensions": {
@@ -948,28 +984,28 @@
             "kind": "Task",
             "taskKind": "implementation",
             "status": "Done",
-            "retryCount": 0,
+            "retryCount": 1,
             "assignee": "Implementation",
-            "summary": "Verified sidepanel transcript projection implementation remains localized to sidepanel files, preserved stable assistant message-node behavior, and fixed scanner-verifiable ArchitectureID traceability comments for release readiness.",
-            "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
-            "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
-            "softwareUnitTitle": "Extension Side Panel Experience",
-            "architectureElementId": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
-            "updatedAt": "2026-04-15T13:00:42.162Z"
+            "summary": "Narrow rework completed. Added scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX markers to executed sidepanel regression tests and reran targeted tests, typecheck, and reality scanner.",
+            "commitId": "6bbb99dac742b215facb8c419ea9818325ad8e2d",
+            "softwareUnitId": "SU-SP-TRANSCRIPT-PROJECTION",
+            "softwareUnitTitle": "Sidepanel Transcript Projection",
+            "architectureElementId": "ELM-REQ-OPENCODE-UX",
+            "updatedAt": "2026-04-15T17:52:20.692Z"
           }
         }
       },
       {
-        "identifier": "TASK-015",
+        "identifier": "TASK-019",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "Implement incremental transcript rendering contract for active assistant tail updates"
+            "value": "建立冻结历史消息树与只读渲染列表"
           }
         ],
         "documentation": [
           {
-            "value": "Verified incremental active-assistant tail rendering contract remains in sidepanel renderer/controller, preserved stable DOM/message identity behavior, and fixed scanner-verifiable ArchitectureID traceability comments."
+            "value": "Narrow rework completed. Added scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX markers to executed sidepanel regression tests and reran targeted tests, typecheck, and reality scanner."
           }
         ],
         "extensions": {
@@ -978,28 +1014,28 @@
             "kind": "Task",
             "taskKind": "implementation",
             "status": "Done",
-            "retryCount": 0,
+            "retryCount": 1,
             "assignee": "Implementation",
-            "summary": "Verified incremental active-assistant tail rendering contract remains in sidepanel renderer/controller, preserved stable DOM/message identity behavior, and fixed scanner-verifiable ArchitectureID traceability comments.",
-            "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
-            "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
-            "softwareUnitTitle": "Extension Side Panel Experience",
-            "architectureElementId": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
-            "updatedAt": "2026-04-15T13:00:42.234Z"
+            "summary": "Narrow rework completed. Added scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX markers to executed sidepanel regression tests and reran targeted tests, typecheck, and reality scanner.",
+            "commitId": "6bbb99dac742b215facb8c419ea9818325ad8e2d",
+            "softwareUnitId": "SU-SP-HISTORICAL-TRANSCRIPT-LIST",
+            "softwareUnitTitle": "Historical Transcript List",
+            "architectureElementId": "ELM-REQ-OPENCODE-UX",
+            "updatedAt": "2026-04-15T17:52:20.757Z"
           }
         }
       },
       {
-        "identifier": "TASK-016",
+        "identifier": "TASK-020",
         "type": "WorkPackage",
         "name": [
           {
-            "value": "Add adversarial transcript integrity and Chrome Sandbox DOM-boundary verification coverage"
+            "value": "实现 Active Tail 的异步 Markdown 增量渲染"
           }
         ],
         "documentation": [
           {
-            "value": "Verified adversarial sidepanel transcript integrity coverage still asserts AI Text -> Tool Call -> AI Text -> empty user payload collapses to one user bubble and one assistant bubble, and fixed scanner-verifiable ArchitectureID test markers."
+            "value": "Narrow rework completed. Added scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX markers to executed sidepanel regression tests and reran targeted tests, typecheck, and reality scanner."
           }
         ],
         "extensions": {
@@ -1008,28 +1044,88 @@
             "kind": "Task",
             "taskKind": "implementation",
             "status": "Done",
-            "retryCount": 0,
+            "retryCount": 1,
             "assignee": "Implementation",
-            "summary": "Verified adversarial sidepanel transcript integrity coverage still asserts AI Text -> Tool Call -> AI Text -> empty user payload collapses to one user bubble and one assistant bubble, and fixed scanner-verifiable ArchitectureID test markers.",
-            "commitId": "90dc29db55ce82d09cee2a7cb96e488bf7e2433b",
-            "softwareUnitId": "ELM-COMP-EXT-SIDEPANEL",
-            "softwareUnitTitle": "Extension Side Panel Experience",
-            "architectureElementId": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
-            "updatedAt": "2026-04-15T13:00:42.304Z"
+            "summary": "Narrow rework completed. Added scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX markers to executed sidepanel regression tests and reran targeted tests, typecheck, and reality scanner.",
+            "commitId": "6bbb99dac742b215facb8c419ea9818325ad8e2d",
+            "softwareUnitId": "SU-SP-ACTIVE-TAIL-RENDERER",
+            "softwareUnitTitle": "Active Tail Renderer",
+            "architectureElementId": "ELM-REQ-OPENCODE-UX",
+            "updatedAt": "2026-04-15T17:52:20.821Z"
           }
         }
       },
       {
-        "identifier": "ISSUE-004",
+        "identifier": "TASK-021",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "实现智能 pin-to-bottom 与最新消息提示控制器"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Narrow rework completed. Added scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX markers to executed sidepanel regression tests and reran targeted tests, typecheck, and reality scanner."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "Narrow rework completed. Added scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX markers to executed sidepanel regression tests and reran targeted tests, typecheck, and reality scanner.",
+            "commitId": "6bbb99dac742b215facb8c419ea9818325ad8e2d",
+            "softwareUnitId": "SU-SP-SCROLL-FOLLOW-CONTROLLER",
+            "softwareUnitTitle": "Scroll Follow Controller",
+            "architectureElementId": "ELM-REQ-OPENCODE-UX",
+            "updatedAt": "2026-04-15T17:52:20.887Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-022",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "分离 Reasoning/Tool Call/Final Answer 并补足回归验证"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Narrow rework completed. Added scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX markers to executed sidepanel regression tests and reran targeted tests, typecheck, and reality scanner."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "Narrow rework completed. Added scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX markers to executed sidepanel regression tests and reran targeted tests, typecheck, and reality scanner.",
+            "commitId": "6bbb99dac742b215facb8c419ea9818325ad8e2d",
+            "softwareUnitId": "SU-SP-CONVERSATION-VIEWPORT",
+            "softwareUnitTitle": "Conversation Viewport and Process Disclosure",
+            "architectureElementId": "ELM-REQ-OPENCODE-UX",
+            "updatedAt": "2026-04-15T17:52:20.946Z"
+          }
+        }
+      },
+      {
+        "identifier": "ISSUE-005",
         "type": "BusinessObject",
         "name": [
           {
-            "value": "IntentNotVerified for full-model transcript refactor audit [Resolved]"
+            "value": "IntentNotVerified for ELM-REQ-OPENCODE-UX in sidepanel UX refactor audit [Resolved]"
           }
         ],
         "documentation": [
           {
-            "value": "Resolved by successful rework commit 90dc29db55ce82d09cee2a7cb96e488bf7e2433b after scanner-verifiable ArchitectureID coverage was corrected and full-model QA/Audit passed for TASK-014, TASK-015, and TASK-016."
+            "value": "Resolved by successful rework commit 6bbb99dac742b215facb8c419ea9818325ad8e2d after adding scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX tags to executed sidepanel regression tests and passing QA/Audit recheck for TASK-018,TASK-019,TASK-020,TASK-021,TASK-022."
           }
         ],
         "extensions": {
@@ -1044,6 +1140,30 @@
         }
       },
       {
+        "identifier": "ISSUE-006",
+        "type": "BusinessObject",
+        "name": [
+          {
+            "value": "QA coverage gap for ELM-REQ-OPENCODE-UX [Resolved]"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Resolved by successful rework commit 6bbb99dac742b215facb8c419ea9818325ad8e2d after adding scanner-verifiable @RequirementID: ELM-REQ-OPENCODE-UX tags to executed sidepanel regression tests and passing QA recheck for TASK-018,TASK-019,TASK-020,TASK-021,TASK-022."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Issue",
+            "issueType": "BugReport",
+            "status": "Resolved",
+            "reporter": "OpenCode",
+            "category": "BugReport"
+          }
+        }
+      },
+      {
         "identifier": "RELEASE-LOG",
         "type": "Artifact",
         "name": [
@@ -1053,7 +1173,7 @@
         ],
         "documentation": [
           {
-            "value": "Release completed for full-model sidepanel transcript stability batch. Commit: 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Tasks: TASK-014, TASK-015, TASK-016. Resolved issue: ISSUE-004. QA passed. Audit passed. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md with full intent traceability matrix showing all rows verified by tests."
+            "value": "Released the completed full-model batch for ELM-REQ-OPENCODE-UX at commit 6bbb99dac742b215facb8c419ea9818325ad8e2d, covering TASK-018 through TASK-022 with sidepanel conversation UX refactor and follow-up requirement-tag traceability fix. Release log: /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md. QA and Audit both passed on recheck; ISSUE-005 and ISSUE-006 resolved."
           }
         ],
         "extensions": {
@@ -1061,9 +1181,8 @@
             "managedBy": "opencode-runtime",
             "kind": "ReleaseLog",
             "version": "1.0.0",
-            "content": "Release completed for full-model sidepanel transcript stability batch. Commit: 90dc29db55ce82d09cee2a7cb96e488bf7e2433b. Tasks: TASK-014, TASK-015, TASK-016. Resolved issue: ISSUE-004. QA passed. Audit passed. Release log written to /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md with full intent traceability matrix showing all rows verified by tests.",
-            "timestamp": "2026-04-15T13:18:27.011Z",
-            "path": "SprintRleaseLog.md"
+            "content": "Released the completed full-model batch for ELM-REQ-OPENCODE-UX at commit 6bbb99dac742b215facb8c419ea9818325ad8e2d, covering TASK-018 through TASK-022 with sidepanel conversation UX refactor and follow-up requirement-tag traceability fix. Release log: /mnt/d/projects/googlepluginForAiwebassistant/SprintRleaseLog.md. QA and Audit both passed on recheck; ISSUE-005 and ISSUE-006 resolved.",
+            "timestamp": "2026-04-15T22:37:53.373Z"
           }
         }
       }
@@ -2328,15 +2447,15 @@
         ]
       },
       {
-        "identifier": "REL-PROJECT-TASK-013",
+        "identifier": "REL-PROJECT-TASK-017",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-013"
+            "value": "Project aggregates TASK-017"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-013",
+        "target": "TASK-017",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -2350,15 +2469,15 @@
         }
       },
       {
-        "identifier": "REL-PROJECT-TASK-014",
+        "identifier": "REL-PROJECT-TASK-018",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-014"
+            "value": "Project aggregates TASK-018"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-014",
+        "target": "TASK-018",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -2372,15 +2491,15 @@
         }
       },
       {
-        "identifier": "REL-TASK-014-ARCH",
+        "identifier": "REL-TASK-018-ARCH",
         "type": "Association",
         "name": [
           {
-            "value": "TASK-014 traces to ELM-FUNC-EXT-PROJECT-TRANSCRIPT"
+            "value": "TASK-018 traces to ELM-REQ-OPENCODE-UX"
           }
         ],
-        "source": "TASK-014",
-        "target": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "source": "TASK-018",
+        "target": "ELM-REQ-OPENCODE-UX",
         "documentation": [
           {
             "value": "Runtime task traceability relationship managed by OpenCode runtime."
@@ -2394,15 +2513,15 @@
         }
       },
       {
-        "identifier": "REL-PROJECT-TASK-015",
+        "identifier": "REL-PROJECT-TASK-019",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-015"
+            "value": "Project aggregates TASK-019"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-015",
+        "target": "TASK-019",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -2416,15 +2535,15 @@
         }
       },
       {
-        "identifier": "REL-TASK-015-ARCH",
+        "identifier": "REL-TASK-019-ARCH",
         "type": "Association",
         "name": [
           {
-            "value": "TASK-015 traces to ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT"
+            "value": "TASK-019 traces to ELM-REQ-OPENCODE-UX"
           }
         ],
-        "source": "TASK-015",
-        "target": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+        "source": "TASK-019",
+        "target": "ELM-REQ-OPENCODE-UX",
         "documentation": [
           {
             "value": "Runtime task traceability relationship managed by OpenCode runtime."
@@ -2438,15 +2557,15 @@
         }
       },
       {
-        "identifier": "REL-PROJECT-TASK-016",
+        "identifier": "REL-PROJECT-TASK-020",
         "type": "Aggregation",
         "name": [
           {
-            "value": "Project aggregates TASK-016"
+            "value": "Project aggregates TASK-020"
           }
         ],
         "source": "PROJECT-CURRENT",
-        "target": "TASK-016",
+        "target": "TASK-020",
         "documentation": [
           {
             "value": "Runtime task relationship managed by OpenCode runtime."
@@ -2460,15 +2579,103 @@
         }
       },
       {
-        "identifier": "REL-TASK-016-ARCH",
+        "identifier": "REL-TASK-020-ARCH",
         "type": "Association",
         "name": [
           {
-            "value": "TASK-016 traces to ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT"
+            "value": "TASK-020 traces to ELM-REQ-OPENCODE-UX"
           }
         ],
-        "source": "TASK-016",
-        "target": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+        "source": "TASK-020",
+        "target": "ELM-REQ-OPENCODE-UX",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-021",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-021"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-021",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-021-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-021 traces to ELM-REQ-OPENCODE-UX"
+          }
+        ],
+        "source": "TASK-021",
+        "target": "ELM-REQ-OPENCODE-UX",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-022",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-022"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-022",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-022-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-022 traces to ELM-REQ-OPENCODE-UX"
+          }
+        ],
+        "source": "TASK-022",
+        "target": "ELM-REQ-OPENCODE-UX",
         "documentation": [
           {
             "value": "Runtime task traceability relationship managed by OpenCode runtime."
