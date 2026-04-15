@@ -449,6 +449,187 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(assistantTextParts[0]?.textContent).toContain("第一段第二段");
   });
 
+  it("keeps exactly one user bubble and one assistant bubble for adversarial mixed-order transcript", async () => {
+    const transcriptReadModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-current",
+        prompt: "当前问题",
+        events: [
+          {
+            id: "event-current-1",
+            runId: "run-current",
+            type: "thinking",
+            createdAt: "2026-04-02T00:00:02.000Z",
+            sequence: 1,
+            message: "第一段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-current:part-1",
+              itemKind: "text",
+              messageId: "msg-current",
+              partId: "part-1"
+            }
+          },
+          {
+            id: "event-current-2",
+            runId: "run-current",
+            type: "tool_call",
+            createdAt: "2026-04-02T00:00:03.000Z",
+            sequence: 2,
+            message: "读取工具",
+            semantic: {
+              channel: "tool",
+              emissionKind: "delta",
+              identity: "tool:msg-current:tool-1",
+              itemKind: "tool",
+              messageId: "msg-current",
+              partId: "tool-1"
+            }
+          },
+          {
+            id: "event-current-3",
+            runId: "run-current",
+            type: "thinking",
+            createdAt: "2026-04-02T00:00:04.000Z",
+            sequence: 3,
+            message: "第二段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-current:part-2",
+              itemKind: "text",
+              messageId: "msg-current",
+              partId: "part-2"
+            }
+          }
+        ],
+        answers: [{
+          id: "answer-empty",
+          runId: "run-current",
+          questionId: "q-empty",
+          answer: "   ",
+          submittedAt: "2026-04-02T00:00:05.000Z"
+        }],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: true
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={transcriptReadModel}
+          runId="run-current"
+          prompt="当前问题"
+          events={[]}
+          runStatus="streaming"
+        />
+      );
+    });
+
+    expect(container.querySelectorAll("[data-message-role='user']")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
+    expect(container.querySelectorAll(".transcript-part[data-part-role='user']")).toHaveLength(1);
+    expect(container.querySelectorAll(".transcript-part[data-part-role='assistant']")).toHaveLength(3);
+    expect(container.querySelectorAll("[data-part-kind='answer']")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-part-kind='text']")).toHaveLength(1);
+    expect(container.querySelector("[data-part-kind='text']")?.textContent).toContain("第一段第二段");
+  });
+
+  it("keeps active assistant DOM boundary stable across tail-only updates", async () => {
+    const firstModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-current",
+        prompt: "当前问题",
+        events: [{
+          id: "event-current-1",
+          runId: "run-current",
+          type: "thinking",
+          createdAt: "2026-04-02T00:00:02.000Z",
+          sequence: 1,
+          message: "A",
+          data: { field: "text", message_id: "msg-current" }
+        }],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={firstModel}
+          runId="run-current"
+          prompt="当前问题"
+          events={[]}
+          runStatus="streaming"
+        />
+      );
+    });
+
+    const firstAssistantMessage = container.querySelector("[data-message-role='assistant']");
+
+    const secondModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-current",
+        prompt: "当前问题",
+        events: [
+          {
+            id: "event-current-1",
+            runId: "run-current",
+            type: "thinking",
+            createdAt: "2026-04-02T00:00:02.000Z",
+            sequence: 1,
+            message: "A",
+            data: { field: "text", message_id: "msg-current" }
+          },
+          {
+            id: "event-current-2",
+            runId: "run-current",
+            type: "thinking",
+            createdAt: "2026-04-02T00:00:03.000Z",
+            sequence: 2,
+            message: "B",
+            data: { field: "text", message_id: "msg-current" }
+          }
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      },
+      previousModel: firstModel
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={secondModel}
+          runId="run-current"
+          prompt="当前问题"
+          events={[]}
+          runStatus="streaming"
+        />
+      );
+    });
+
+    const secondAssistantMessage = container.querySelector("[data-message-role='assistant']");
+    expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
+    expect(firstAssistantMessage?.getAttribute("data-message-id")).toBe(secondAssistantMessage?.getAttribute("data-message-id"));
+    expect(container.querySelector("[data-message-role='assistant'] [data-part-kind='text']")?.textContent).toContain("AB");
+  });
+
   it("marks transcript messages with actions as focusable hover targets for action visibility", async () => {
     await act(async () => {
       root.render(

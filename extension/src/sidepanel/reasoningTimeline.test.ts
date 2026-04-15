@@ -925,6 +925,130 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(model.anomalies?.some((anomaly) => anomaly.anomalyType === "terminal_reopen")).toBe(true);
   });
 
+  it("keeps one assistant node and suppresses ghost user bubbles for adversarial mixed-order SSE", () => {
+    const model = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, {
+            runId: "run-live",
+            type: "thinking",
+            message: "第一段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-1:part-1",
+              itemKind: "text",
+              messageId: "msg-1",
+              partId: "part-1"
+            }
+          }),
+          createEvent(2, {
+            runId: "run-live",
+            type: "tool_call",
+            message: "调用工具",
+            semantic: {
+              channel: "tool",
+              emissionKind: "delta",
+              identity: "tool:msg-1:tool-1",
+              itemKind: "tool",
+              messageId: "msg-1",
+              partId: "tool-1"
+            }
+          }),
+          createEvent(3, {
+            runId: "run-live",
+            type: "thinking",
+            message: "第二段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-1:part-2",
+              itemKind: "text",
+              messageId: "msg-1",
+              partId: "part-2"
+            }
+          })
+        ],
+        answers: [{
+          id: "answer-empty",
+          runId: "run-live",
+          questionId: "q-empty",
+          answer: "   ",
+          submittedAt: "2026-04-02T00:00:04.000Z"
+        }],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: true
+      }
+    });
+
+    expect(model.activeAssistantMessageId).toBe("message:run-live:assistant-message:run-live:msg-1:assistant");
+    expect(model.messages.filter((message) => message.role === "user")).toHaveLength(1);
+    expect(model.messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+    expect(model.parts.filter((part) => part.kind === "answer")).toHaveLength(0);
+    expect(model.parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(["第一段第二段"]);
+    expect(model.tailPatch).toMatchObject({
+      activeMessageId: "message:run-live:assistant-message:run-live:msg-1:assistant",
+      fullText: "第一段第二段"
+    });
+  });
+
+  it("preserves active assistant identity and sealed history during live tail updates", () => {
+    const firstModel = buildStableTranscriptProjection({
+      historicalSegments: [{
+        runId: "run-history",
+        prompt: "历史问题",
+        events: [createEvent(1, { runId: "run-history", type: "result", message: "历史回答", data: { message_id: "msg-history" } })],
+        status: "done",
+        finalOutput: "历史回答"
+      }],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [createEvent(2, { runId: "run-live", type: "thinking", message: "A", data: { field: "text", message_id: "msg-live" } })],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    const secondModel = buildStableTranscriptProjection({
+      historicalSegments: [{
+        runId: "run-history",
+        prompt: "历史问题",
+        events: [createEvent(1, { runId: "run-history", type: "result", message: "历史回答", data: { message_id: "msg-history" } })],
+        status: "done",
+        finalOutput: "历史回答"
+      }],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [
+          createEvent(2, { runId: "run-live", type: "thinking", message: "A", data: { field: "text", message_id: "msg-live" } }),
+          createEvent(3, { runId: "run-live", type: "thinking", message: "B", data: { field: "text", message_id: "msg-live" } })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      },
+      previousModel: firstModel
+    });
+
+    expect(secondModel.historicalMessages).toBe(firstModel.historicalMessages);
+    expect(secondModel.sealedMessages[0]).toBe(firstModel.sealedMessages[0]);
+    expect(secondModel.activeAssistantMessageId).toBe(firstModel.activeAssistantMessageId);
+    expect(secondModel.tailPatch?.fullText).toBe("AB");
+  });
+
   it("derives conservative timeline and cockpit states from terminal evidence", () => {
     expect(resolveTimelinePresentationState({
       events: [createEvent(1, { type: "thinking", message: "读取页面上下文" })],

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import { submitMessageFeedback } from "../shared/api";
@@ -9,6 +9,7 @@ import {
   getDefaultFeedbackMessage,
   resolveTimelinePresentationState,
   type BuildChatStreamItemsOptions,
+  type TranscriptMessageModel,
   type TranscriptReadModel,
   type TranscriptPartModel
 } from "./reasoningTimeline";
@@ -47,6 +48,10 @@ function MarkdownMessage({ text, className }: { text: string; className: string 
       <ReactMarkdown>{text}</ReactMarkdown>
     </div>
   );
+}
+
+function getMessageKey(message: TranscriptMessageModel) {
+  return `${message.id}:${message.updatedAt}:${message.parts.map((part) => `${part.id}:${part.updatedAt}:${part.text.length}:${part.feedbackState?.status ?? "idle"}:${part.feedbackState?.selected ?? "none"}`).join("|")}`;
 }
 
 function CopyIcon() {
@@ -271,6 +276,65 @@ function TranscriptPartBlock({
   );
 }
 
+const MemoTranscriptPartBlock = memo(TranscriptPartBlock, (previous, next) => previous.part === next.part && previous.questionSubmitDisabled === next.questionSubmitDisabled);
+
+function TranscriptMessageBlock({
+  message,
+  onCopy,
+  onRetry,
+  onFeedback,
+  onQuestionSubmit,
+  questionSubmitDisabled,
+  activeTailText
+}: {
+  message: TranscriptMessageModel;
+  onCopy: (part: TranscriptPartModel) => void | Promise<void>;
+  onRetry?: (part: TranscriptPartModel) => void | Promise<void>;
+  onFeedback?: (part: TranscriptPartModel, feedback: MessageFeedbackValue) => void | Promise<void>;
+  onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
+  questionSubmitDisabled?: boolean;
+  activeTailText?: string | null;
+}) {
+  const renderedParts = useMemo(() => message.parts.map((part) => {
+    if (!activeTailText || part.kind !== "text" || part.role !== "assistant") {
+      return part;
+    }
+
+    return {
+      ...part,
+      text: activeTailText,
+      updatedAt: message.updatedAt
+    } satisfies TranscriptPartModel;
+  }), [activeTailText, message]);
+
+  return (
+    <article
+      className={`transcript-message transcript-message-${message.role}`}
+      data-message-id={message.id}
+      data-message-role={message.role}
+      data-active-message={activeTailText ? "true" : undefined}
+    >
+      {renderedParts.map((part) => (
+        <MemoTranscriptPartBlock
+          key={part.id}
+          part={part}
+          onCopy={onCopy}
+          onRetry={onRetry}
+          onFeedback={onFeedback}
+          onQuestionSubmit={onQuestionSubmit}
+          questionSubmitDisabled={questionSubmitDisabled}
+        />
+      ))}
+    </article>
+  );
+}
+
+const MemoTranscriptMessageBlock = memo(TranscriptMessageBlock, (previous, next) => (
+  previous.message === next.message
+  && previous.activeTailText === next.activeTailText
+  && previous.questionSubmitDisabled === next.questionSubmitDisabled
+));
+
 export interface ChatStreamViewProps {
   runId?: string | null;
   prompt?: string | null;
@@ -292,6 +356,7 @@ export interface ChatStreamViewProps {
   questionSubmitDisabled?: boolean;
 }
 
+/** @ArchitectureID: ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT */
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
 /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
 export function ReasoningTimeline({
@@ -316,7 +381,10 @@ export function ReasoningTimeline({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [autoFollow, setAutoFollow] = useState(live);
   const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, MessageFeedbackUiState>>({});
+  const [activeTailText, setActiveTailText] = useState<string>("");
   const previousSignatureRef = useRef<string>("");
+  const tailFlushFrameRef = useRef<number | null>(null);
+  const tailBufferRef = useRef<string>("");
   const presentationState = useMemo(() => resolveTimelinePresentationState({
     events,
     runStatus,
@@ -365,9 +433,53 @@ export function ReasoningTimeline({
     });
   }, [answers, errorMessage, events, feedbackByMessageId, finalOutput, pendingQuestionId, prompt, runId, runSegments, runStatus, streamStatus, transcriptReadModel, updatedAt]);
 
+  const renderedTranscript = useMemo(() => {
+    if (!transcriptReadModel) {
+      return null;
+    }
+
+    const activeMessageId = transcriptReadModel.activeAssistantMessageId;
+    const sealedMessages = transcriptReadModel.sealedMessages;
+    const activeMessage = transcriptReadModel.activeMessage;
+    const summaryPart = transcriptReadModel.summaryPart;
+    const allMessages = activeMessage ? [...sealedMessages, activeMessage] : sealedMessages;
+
+    return {
+      activeMessageId,
+      allMessages,
+      summaryPart,
+      messageKeys: allMessages.map(getMessageKey).join("::")
+    };
+  }, [transcriptReadModel]);
+
   useEffect(() => {
     setFeedbackByMessageId({});
   }, [runId]);
+
+  useEffect(() => {
+    if (!transcriptReadModel?.tailPatch) {
+      tailBufferRef.current = "";
+      setActiveTailText(transcriptReadModel?.activeMessage?.parts.filter((part) => part.kind === "text").map((part) => part.text).join("") ?? "");
+      return;
+    }
+
+    tailBufferRef.current = transcriptReadModel.tailPatch.fullText;
+    if (tailFlushFrameRef.current !== null) {
+      return;
+    }
+
+    tailFlushFrameRef.current = requestAnimationFrame(() => {
+      tailFlushFrameRef.current = null;
+      setActiveTailText(tailBufferRef.current);
+    });
+
+    return () => {
+      if (tailFlushFrameRef.current !== null) {
+        cancelAnimationFrame(tailFlushFrameRef.current);
+        tailFlushFrameRef.current = null;
+      }
+    };
+  }, [transcriptReadModel?.tailPatch?.revision, transcriptReadModel?.activeAssistantMessageId, transcriptReadModel?.activeMessage]);
 
   useEffect(() => {
     setAutoFollow(live);
@@ -464,8 +576,33 @@ export function ReasoningTimeline({
           setAutoFollow(nearBottom);
         }}
       >
-        {parts.length ? parts.map((part, index) => (
-          <TranscriptPartBlock
+        {renderedTranscript ? (
+          <>
+            {renderedTranscript.allMessages.map((message) => (
+              <MemoTranscriptMessageBlock
+                key={message.id}
+                message={message}
+                activeTailText={message.id === renderedTranscript.activeMessageId ? activeTailText : null}
+                onCopy={handleCopy}
+                onFeedback={handleFeedback}
+                onRetry={handleRetry}
+                onQuestionSubmit={onQuestionSubmit}
+                questionSubmitDisabled={questionSubmitDisabled}
+              />
+            ))}
+            {renderedTranscript.summaryPart ? (
+              <MemoTranscriptPartBlock
+                part={renderedTranscript.summaryPart}
+                onCopy={handleCopy}
+                onFeedback={handleFeedback}
+                onRetry={handleRetry}
+                onQuestionSubmit={onQuestionSubmit}
+                questionSubmitDisabled={questionSubmitDisabled}
+              />
+            ) : null}
+          </>
+        ) : parts.length ? parts.map((part) => (
+          <MemoTranscriptPartBlock
             key={part.id}
             part={part}
             onCopy={handleCopy}

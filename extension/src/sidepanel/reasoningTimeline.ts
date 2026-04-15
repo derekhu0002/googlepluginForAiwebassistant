@@ -187,6 +187,15 @@ export interface TranscriptMessageModel {
   actionAnchorId?: string;
 }
 
+export interface TranscriptTailPatchModel {
+  activeMessageId: string | null;
+  anchorId: string | null;
+  fullText: string;
+  deltaText: string;
+  updatedAt: string | null;
+  revision: string;
+}
+
 export interface TranscriptSummaryModel {
   label: string;
   detail: string;
@@ -197,8 +206,13 @@ export interface TranscriptSummaryModel {
 
 export interface TranscriptReadModel {
   messages: TranscriptMessageModel[];
+  sealedMessages: TranscriptMessageModel[];
+  activeMessage: TranscriptMessageModel | null;
+  activeAssistantMessageId: string | null;
+  tailPatch: TranscriptTailPatchModel | null;
   parts: TranscriptPartModel[];
   summaryPart: TranscriptPartModel | null;
+  summaryState: TranscriptSummaryModel | null;
   historicalMessages: TranscriptMessageModel[];
   historicalParts: TranscriptPartModel[];
   liveMessages: TranscriptMessageModel[];
@@ -240,6 +254,8 @@ interface LiveTranscriptProjectionState {
   reasoningOnlyText: string;
   hasResultEvent: boolean;
   assistantGroupIndex: number;
+  assistantNodeIndex: number;
+  currentAssistantLogicalMessageId: string | null;
   currentAssistantGroupAnchorId: string;
   currentOutputAnchorId: string | null;
   currentOutputItemId: string | null;
@@ -365,16 +381,39 @@ function getEventSemanticPartId(event: Pick<NormalizedRunEvent, "semantic">) {
   return event.semantic?.partId?.trim() || undefined;
 }
 
-function getAssistantLogicalMessageId(event: Pick<NormalizedRunEvent, "id" | "data" | "semantic">) {
+function getAssistantStableMessageId(event: Pick<NormalizedRunEvent, "data" | "semantic">) {
   return event.semantic?.messageId?.trim()
     || getEventDataValue(event, "message_id")
-    || getEventSemanticPartId(event)
-    || getEventSemanticIdentity(event)
-    || event.id;
+    || null;
 }
 
-function getAssistantTranscriptGroupAnchorId(runId: string, event: Pick<NormalizedRunEvent, "id" | "data" | "semantic">) {
+function createProvisionalAssistantMessageId(runId: string, assistantNodeIndex: number) {
+  return `assistant-provisional:${runId}:${assistantNodeIndex}`;
+}
+
+function getAssistantLogicalMessageId(
+  event: Pick<NormalizedRunEvent, "runId" | "data" | "semantic">,
+  fallbackMessageId?: string | null
+) {
+  return getAssistantStableMessageId(event)
+    || fallbackMessageId
+    || createProvisionalAssistantMessageId(event.runId, 0);
+}
+
+function getAssistantTranscriptGroupAnchorId(runId: string, event: Pick<NormalizedRunEvent, "runId" | "data" | "semantic">) {
   return `assistant-message:${runId}:${getAssistantLogicalMessageId(event)}`;
+}
+
+function getAssistantGroupAnchorId(runId: string, logicalMessageId: string) {
+  return `assistant-message:${runId}:${logicalMessageId}`;
+}
+
+function isProvisionalAssistantMessageId(logicalMessageId: string | null | undefined) {
+  return Boolean(logicalMessageId?.startsWith("assistant-provisional:"));
+}
+
+function isMeaningfulAnswerRecord(answer: AnswerRecord) {
+  return Boolean(answer.answer.trim());
 }
 
 function getTimelineCardSemanticIdentity(item: Pick<TimelineCardModel, "entries">) {
@@ -385,7 +424,7 @@ function getTimelineCardSemanticChannel(item: Pick<TimelineCardModel, "entries">
   return item.entries.map((entry) => entry.semantic?.channel).find(Boolean);
 }
 
-function getAssistantResponseMessageId(event: Pick<NormalizedRunEvent, "id" | "data" | "semantic">) {
+function getAssistantResponseMessageId(event: Pick<NormalizedRunEvent, "runId" | "data" | "semantic">) {
   return getAssistantLogicalMessageId(event);
 }
 
@@ -1071,7 +1110,7 @@ export function collectAssistantResponseAggregation(events: NormalizedRunEvent[]
   for (const event of events) {
     const thinkingEmissionKind = getAssistantResponseThinkingEmissionKind(event);
     if (thinkingEmissionKind) {
-      const logicalMessageId = getAssistantLogicalMessageId(event);
+      const logicalMessageId: string = getAssistantStableMessageId(event) ?? currentLogicalMessageId ?? createProvisionalAssistantMessageId(event.runId, 0);
       if (currentLogicalMessageId && logicalMessageId !== currentLogicalMessageId) {
         aggregation = createEmptyAssistantResponseAggregation();
       }
@@ -1087,7 +1126,7 @@ export function collectAssistantResponseAggregation(events: NormalizedRunEvent[]
     }
 
     if (isAssistantResponseSnapshotEvent(event)) {
-      const logicalMessageId = getAssistantLogicalMessageId(event);
+      const logicalMessageId: string = getAssistantStableMessageId(event) ?? currentLogicalMessageId ?? createProvisionalAssistantMessageId(event.runId, 0);
       if (currentLogicalMessageId && logicalMessageId !== currentLogicalMessageId) {
         aggregation = createEmptyAssistantResponseAggregation();
       }
@@ -1499,6 +1538,10 @@ function isFragmentGroupAnchorId(groupAnchorId: string) {
 function hasAssistantGroupAnchorDrift(left: string, right: string) {
   if (left === right) {
     return false;
+  }
+
+  if (isAssistantMessageGroupAnchorId(left) && isAssistantMessageGroupAnchorId(right)) {
+    return left.includes("assistant-provisional:") || right.includes("assistant-provisional:");
   }
 
   return (isAssistantMessageGroupAnchorId(left) && isFragmentGroupAnchorId(right))
@@ -1929,6 +1972,29 @@ function buildLiveProjectionDebug(reusedPreviousStore: boolean, appliedDeltaEven
   };
 }
 
+function resolveAssistantEventMessageId(state: LiveTranscriptProjectionState, event: NormalizedRunEvent) {
+  return getAssistantStableMessageId(event)
+    || state.currentAssistantLogicalMessageId
+    || createProvisionalAssistantMessageId(state.runId, state.assistantNodeIndex);
+}
+
+function shouldOpenNextAssistantNode(state: LiveTranscriptProjectionState, event: NormalizedRunEvent) {
+  const stableMessageId = getAssistantStableMessageId(event);
+  if (!state.currentAssistantLogicalMessageId) {
+    return false;
+  }
+
+  if (!stableMessageId) {
+    return false;
+  }
+
+  if (state.currentAssistantLogicalMessageId === stableMessageId) {
+    return false;
+  }
+
+  return !isProvisionalAssistantMessageId(stableMessageId);
+}
+
 function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, options: BuildTranscriptSegmentReadModelOptions) {
   const assistantDisplayText = resolveAssistantDisplayText(state.assistantResponse.text, options.finalOutput, options.status)
     || state.latestResultText
@@ -2050,9 +2116,9 @@ function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, optio
   const transcriptItems = filterTranscriptFragments(normalizedItems, options.includeToolCallParts ?? false);
   const messages = buildTranscriptMessagesFromFragments(transcriptItems);
   const parts = flattenTranscriptMessages(messages);
-  const summaryPart = options.includeSummary === false
+  const summaryState = options.includeSummary === false
     ? null
-    : createTranscriptSummaryPart(buildTranscriptSummary({
+    : buildTranscriptSummary({
       events: options.events,
       runStatus: options.runStatus ?? options.status,
       streamStatus: options.streamStatus,
@@ -2061,7 +2127,8 @@ function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, optio
       pendingQuestionId: options.pendingQuestionId,
       runId: options.runId,
       updatedAt: options.updatedAt
-    }));
+    });
+  const summaryPart = summaryState ? createTranscriptSummaryPart(summaryState) : null;
 
   return {
     liveState: {
@@ -2082,6 +2149,7 @@ function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, optio
     messages,
     parts,
     summaryPart,
+    summaryState,
     signature: createTranscriptSegmentSignature(options)
   };
 }
@@ -2090,6 +2158,7 @@ function createEmptyLiveProjectionState(options: BuildTranscriptSegmentReadModel
   const runId = options.runId ?? "standalone-run";
   const prompt = options.prompt?.trim() || "";
   const fallbackTimestamp = options.updatedAt ?? options.events[options.events.length - 1]?.createdAt ?? "1970-01-01T00:00:00.000Z";
+  const initialAssistantLogicalMessageId = createProvisionalAssistantMessageId(runId, 0);
 
   return {
     runId,
@@ -2116,7 +2185,9 @@ function createEmptyLiveProjectionState(options: BuildTranscriptSegmentReadModel
     reasoningOnlyText: "",
     hasResultEvent: false,
     assistantGroupIndex: 0,
-    currentAssistantGroupAnchorId: `fragment-group:${runId}:assistant:0`,
+    assistantNodeIndex: 0,
+    currentAssistantLogicalMessageId: initialAssistantLogicalMessageId,
+    currentAssistantGroupAnchorId: getAssistantGroupAnchorId(runId, initialAssistantLogicalMessageId),
     currentOutputAnchorId: null,
     currentOutputItemId: null,
     assistantTextSoFar: "",
@@ -2132,7 +2203,9 @@ function closeCurrentOutputSegmentInState(state: LiveTranscriptProjectionState) 
 
 function advanceAssistantGroupInState(state: LiveTranscriptProjectionState) {
   state.assistantGroupIndex += 1;
-  state.currentAssistantGroupAnchorId = `fragment-group:${state.runId}:assistant:${state.assistantGroupIndex}`;
+  state.assistantNodeIndex += 1;
+  state.currentAssistantLogicalMessageId = createProvisionalAssistantMessageId(state.runId, state.assistantNodeIndex);
+  state.currentAssistantGroupAnchorId = getAssistantGroupAnchorId(state.runId, state.currentAssistantLogicalMessageId);
   closeCurrentOutputSegmentInState(state);
 }
 
@@ -2142,8 +2215,11 @@ function upsertAssistantOutputSegmentInState(state: LiveTranscriptProjectionStat
     return;
   }
 
-  const anchorId = getAssistantResponseMessageId(event);
-  const groupAnchorId = getAssistantTranscriptGroupAnchorId(state.runId, event);
+  const logicalMessageId = resolveAssistantEventMessageId(state, event);
+  state.currentAssistantLogicalMessageId = logicalMessageId;
+  state.currentAssistantGroupAnchorId = getAssistantGroupAnchorId(state.runId, logicalMessageId);
+  const anchorId = logicalMessageId;
+  const groupAnchorId = state.currentAssistantGroupAnchorId;
   const currentOutputIndex = state.currentOutputItemId
     ? state.items.findIndex((item) => item.id === state.currentOutputItemId)
     : -1;
@@ -2188,7 +2264,7 @@ function upsertAssistantOutputSegmentInState(state: LiveTranscriptProjectionStat
 }
 
 function appendLiveAnswerItem(state: LiveTranscriptProjectionState, answer: AnswerRecord) {
-  if (state.answerIds.includes(answer.id)) {
+  if (state.answerIds.includes(answer.id) || !isMeaningfulAnswerRecord(answer)) {
     return;
   }
 
@@ -2218,13 +2294,15 @@ function processLiveProjectionEvent(
   pendingQuestionId?: string | null
 ) {
   if (isAssistantResponseDeltaEvent(event) || event.type === "result") {
-    const logicalMessageId = getAssistantLogicalMessageId(event);
-    if (state.assistantResponse.preferredMessageId && logicalMessageId !== state.assistantResponse.preferredMessageId) {
+    if (shouldOpenNextAssistantNode(state, event)) {
       advanceAssistantGroupInState(state);
       state.assistantTextSoFar = "";
       state.assistantResponse = createEmptyAssistantResponseAggregation();
       state.latestResultText = "";
     }
+    const logicalMessageId = resolveAssistantEventMessageId(state, event);
+    state.currentAssistantLogicalMessageId = logicalMessageId;
+    state.currentAssistantGroupAnchorId = getAssistantGroupAnchorId(state.runId, logicalMessageId);
     const thinkingEmissionKind = getAssistantResponseThinkingEmissionKind(event);
     state.assistantTextSoFar = thinkingEmissionKind === "snapshot" || event.type === "result"
       ? mergeAssistantResponseSnapshot(state.assistantTextSoFar, event.message)
@@ -2233,7 +2311,7 @@ function processLiveProjectionEvent(
       text: state.assistantTextSoFar.trim(),
       firstResponseAt: state.assistantResponse.firstResponseAt ?? event.createdAt,
       lastResponseAt: event.createdAt,
-      preferredMessageId: state.assistantResponse.preferredMessageId ?? logicalMessageId,
+      preferredMessageId: logicalMessageId,
       hasResponseEvent: true
     };
     if (event.type === "result") {
@@ -2309,12 +2387,14 @@ function processLiveProjectionEvent(
         closeCurrentOutputSegmentInState(state);
       }
 
+      const processMessageId = resolveAssistantEventMessageId(state, event);
+      state.currentAssistantLogicalMessageId = processMessageId;
+      state.currentAssistantGroupAnchorId = getAssistantGroupAnchorId(state.runId, processMessageId);
+
       state.items.push(createBaseItem({
         id: `process:${state.runId}:${event.id}`,
         anchorId: getEventSemanticIdentity(event) || event.id,
-        groupAnchorId: event.semantic?.messageId
-          ? getAssistantTranscriptGroupAnchorId(state.runId, event)
-          : state.currentAssistantGroupAnchorId,
+        groupAnchorId: state.currentAssistantGroupAnchorId,
         runId: state.runId,
       kind: "assistant_process",
       title: getEventTitle(event),
@@ -2349,6 +2429,9 @@ function buildIncrementalLiveTranscriptSegmentReadModel(
   const answersByQuestionId = new Map<string, AnswerRecord[]>();
 
   for (const answer of answers) {
+    if (!isMeaningfulAnswerRecord(answer)) {
+      continue;
+    }
     const bucket = answersByQuestionId.get(answer.questionId) ?? [];
     bucket.push(answer);
     answersByQuestionId.set(answer.questionId, bucket);
@@ -2448,9 +2531,9 @@ function buildTranscriptSegmentReadModel(options: BuildTranscriptSegmentReadMode
     includeToolCallParts: options.includeToolCallParts ?? false
   });
   const parts = flattenTranscriptMessages(messages);
-  const summaryPart = options.includeSummary === false
+  const summaryState = options.includeSummary === false
     ? null
-    : createTranscriptSummaryPart(buildTranscriptSummary({
+    : buildTranscriptSummary({
       events: options.events,
       runStatus: options.runStatus ?? options.status,
       streamStatus: options.streamStatus,
@@ -2459,12 +2542,14 @@ function buildTranscriptSegmentReadModel(options: BuildTranscriptSegmentReadMode
       pendingQuestionId: options.pendingQuestionId,
       runId: options.runId,
       updatedAt: options.updatedAt
-    }));
+    });
+  const summaryPart = summaryState ? createTranscriptSummaryPart(summaryState) : null;
 
   return {
     messages,
     parts,
     summaryPart,
+    summaryState,
     signature: createTranscriptSegmentSignature(options)
   };
 }
@@ -2475,6 +2560,7 @@ function mergeTranscriptMessageCollections(options: {
   liveMessages: TranscriptMessageModel[];
   liveParts: TranscriptPartModel[];
   summaryPart: TranscriptPartModel | null;
+  summaryState?: TranscriptSummaryModel | null;
   historicalSignature: string;
   liveSignature: string | null;
   liveProjectionState?: LiveTranscriptProjectionState | null;
@@ -2485,6 +2571,13 @@ function mergeTranscriptMessageCollections(options: {
   const messages = normalizeTranscriptMessages(liveMessages.length
     ? [...historicalMessages, ...liveMessages]
     : historicalMessages);
+  const activeMessageCandidate = liveMessages.length ? liveMessages[liveMessages.length - 1] ?? null : null;
+  const activeMessage = activeMessageCandidate?.role === "assistant"
+    ? activeMessageCandidate
+    : null;
+  const sealedMessages = activeMessage
+    ? messages.filter((message) => message.id !== activeMessage.id)
+    : messages;
   const historicalParts = historicalMessages === options.historicalMessages
     ? options.historicalParts
     : flattenTranscriptMessages(historicalMessages);
@@ -2492,10 +2585,32 @@ function mergeTranscriptMessageCollections(options: {
     ? options.liveParts
     : flattenTranscriptMessages(liveMessages);
   const parts = flattenTranscriptMessages(messages);
+  const activeText = activeMessage
+    ? getTranscriptMessageTextParts(activeMessage).map((part) => part.text).join("")
+    : "";
+  const previousActiveText = options.liveProjectionState?.segmentBaselineText ?? "";
+  const tailDeltaText = activeText && activeMessage
+    ? deriveVisibleAssistantSegmentText(activeText, previousActiveText)
+    : "";
+  const tailPatch = activeMessage
+    ? {
+        activeMessageId: activeMessage.id,
+        anchorId: activeMessage.anchorId,
+        fullText: activeText,
+        deltaText: tailDeltaText,
+        updatedAt: activeMessage.updatedAt,
+        revision: `${activeMessage.id}:${activeText.length}:${activeMessage.updatedAt}`
+      } satisfies TranscriptTailPatchModel
+    : null;
   return {
     messages,
+    sealedMessages,
+    activeMessage,
+    activeAssistantMessageId: activeMessage?.id ?? null,
+    tailPatch,
     parts,
     summaryPart: options.summaryPart,
+    summaryState: options.summaryState ?? null,
     historicalMessages,
     historicalParts,
     liveMessages,
@@ -2538,11 +2653,13 @@ export function buildTranscriptReadModel(options: BuildTranscriptSegmentReadMode
     liveMessages: [],
     liveParts: [],
     summaryPart: segment.summaryPart,
+    summaryState: segment.summaryState,
     historicalSignature: segment.signature,
     liveSignature: null
   });
 }
 
+/** @ArchitectureID: ELM-COMP-EXT-SIDEPANEL */
 /** @ArchitectureID: ELM-FUNC-EXT-PROJECT-TRANSCRIPT */
 /** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
 export function buildStableTranscriptProjection(options: StableTranscriptProjectionOptions): TranscriptReadModel {
@@ -2591,6 +2708,15 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
       liveMessages: [],
       liveParts: [],
       summaryPart: historicalSummaryPart,
+      summaryState: historicalSummaryPart
+        ? {
+            label: historicalSummaryPart.text,
+            detail: historicalSummaryPart.detail ?? "",
+            tone: historicalSummaryPart.tone ?? "neutral",
+            runId: historicalSummaryPart.runId,
+            updatedAt: historicalSummaryPart.updatedAt
+          }
+        : null,
       historicalSignature: historySignature,
       liveSignature: null,
       liveProjectionState: null,
@@ -2609,6 +2735,7 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
     liveMessages: liveSegment.messages,
     liveParts: liveSegment.parts,
     summaryPart: liveSegment.summaryPart,
+    summaryState: liveSegment.summaryState,
     historicalSignature: historySignature,
     liveSignature: liveSegment.signature,
     liveProjectionState: liveSegment.liveState,
@@ -2688,12 +2815,13 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
   const firstOutputEvent = events.find((event) => isAssistantResponseDeltaEvent(event) || event.type === "result");
   const outputAnchorId = getOutputAnchorId({ runId, assistantResponse, firstOutputEvent });
   let assistantGroupIndex = 0;
-  let currentAssistantGroupAnchorId = `fragment-group:${runId}:assistant:${assistantGroupIndex}`;
+  let assistantNodeIndex = 0;
+  let currentAssistantMessageId: string | null = createProvisionalAssistantMessageId(runId, assistantNodeIndex);
+  let currentAssistantGroupAnchorId = getAssistantGroupAnchorId(runId, currentAssistantMessageId);
   let assistantTextSoFar = "";
   let currentOutputIndex = -1;
   let currentOutputAnchorId: string | null = null;
   let segmentBaselineText = "";
-  let currentAssistantMessageId: string | null = null;
 
   const closeCurrentOutputSegment = () => {
     currentOutputIndex = -1;
@@ -2703,7 +2831,9 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
 
   const advanceAssistantGroup = () => {
     assistantGroupIndex += 1;
-    currentAssistantGroupAnchorId = `fragment-group:${runId}:assistant:${assistantGroupIndex}`;
+    assistantNodeIndex += 1;
+    currentAssistantMessageId = createProvisionalAssistantMessageId(runId, assistantNodeIndex);
+    currentAssistantGroupAnchorId = getAssistantGroupAnchorId(runId, currentAssistantMessageId);
     closeCurrentOutputSegment();
   };
 
@@ -2713,8 +2843,8 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
       return;
     }
 
-    const anchorId = getAssistantResponseMessageId(event);
-    const groupAnchorId = getAssistantTranscriptGroupAnchorId(runId, event);
+    const anchorId = currentAssistantMessageId ?? createProvisionalAssistantMessageId(runId, assistantNodeIndex);
+    const groupAnchorId = currentAssistantGroupAnchorId;
     const existingOutputIndex = currentOutputIndex >= 0 && items[currentOutputIndex]?.groupAnchorId === groupAnchorId
       ? currentOutputIndex
       : findAssistantOutputIndexByGroupAnchor(items, groupAnchorId);
@@ -2754,6 +2884,9 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
   };
 
   for (const answer of sortAnswers(orderedOptions.answers ?? [])) {
+    if (!isMeaningfulAnswerRecord(answer)) {
+      continue;
+    }
     const bucket = answersByQuestionId.get(answer.questionId) ?? [];
     bucket.push(answer);
     answersByQuestionId.set(answer.questionId, bucket);
@@ -2770,12 +2903,13 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
 
   for (const event of events) {
     if (isAssistantResponseDeltaEvent(event) || event.type === "result") {
-      const logicalMessageId = getAssistantLogicalMessageId(event);
-      if (currentAssistantMessageId && logicalMessageId !== currentAssistantMessageId) {
+      const stableMessageId = getAssistantStableMessageId(event);
+      if (stableMessageId && currentAssistantMessageId && stableMessageId !== currentAssistantMessageId && !isProvisionalAssistantMessageId(stableMessageId)) {
         advanceAssistantGroup();
         assistantTextSoFar = "";
       }
-      currentAssistantMessageId = logicalMessageId;
+      currentAssistantMessageId = stableMessageId ?? currentAssistantMessageId;
+      currentAssistantGroupAnchorId = getAssistantGroupAnchorId(runId, currentAssistantMessageId);
       const thinkingEmissionKind = getAssistantResponseThinkingEmissionKind(event);
       assistantTextSoFar = thinkingEmissionKind === "snapshot" || event.type === "result"
         ? mergeAssistantResponseSnapshot(assistantTextSoFar, event.message)
@@ -2861,12 +2995,14 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
         closeCurrentOutputSegment();
       }
 
+      const stableMessageId = getAssistantStableMessageId(event);
+      currentAssistantMessageId = stableMessageId ?? currentAssistantMessageId;
+      currentAssistantGroupAnchorId = getAssistantGroupAnchorId(runId, currentAssistantMessageId);
+
       items.push(createBaseItem({
         id: `process:${runId}:${event.id}`,
         anchorId: getEventSemanticIdentity(event) || event.id,
-        groupAnchorId: event.semantic?.messageId
-          ? getAssistantTranscriptGroupAnchorId(runId, event)
-          : currentAssistantGroupAnchorId,
+        groupAnchorId: currentAssistantGroupAnchorId,
         runId,
         kind: "assistant_process",
         title: getEventTitle(event),
@@ -2883,7 +3019,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
   }
 
   for (const answer of sortAnswers(orderedOptions.answers ?? [])) {
-    if (consumedQuestionAnswerIds.has(answer.id)) {
+    if (consumedQuestionAnswerIds.has(answer.id) || !isMeaningfulAnswerRecord(answer)) {
       continue;
     }
 
