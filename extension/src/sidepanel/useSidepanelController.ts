@@ -62,11 +62,11 @@ async function syncRunStateToBackground(nextState: SyncableAssistantRunState) {
   }).catch(() => ({ ok: false }));
 }
 
-/** @ArchitectureID: ELM-COMP-EXT-SIDEPANEL */
-/** @ArchitectureID: ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT */
-/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL */
-/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
-/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
+// @ArchitectureID: ELM-COMP-EXT-SIDEPANEL
+// @ArchitectureID: ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT
+// @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL
+// @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX
+// @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER
 export function useSidepanelController() {
   const [state, setState] = useState<AssistantState>(initialAssistantState);
   const [rules, setRules] = useState<PageRule[]>([]);

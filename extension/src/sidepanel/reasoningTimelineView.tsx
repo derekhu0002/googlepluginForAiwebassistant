@@ -356,9 +356,9 @@ export interface ChatStreamViewProps {
   questionSubmitDisabled?: boolean;
 }
 
-/** @ArchitectureID: ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT */
-/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
-/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
+// @ArchitectureID: ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT
+// @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER
+// @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX
 export function ReasoningTimeline({
   runId,
   prompt,

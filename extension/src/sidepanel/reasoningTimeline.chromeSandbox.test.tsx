@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildStableTranscriptProjection } from "./reasoningTimeline";
 import { ReasoningTimeline } from "./reasoningTimelineView";
 
-/** @ArchitectureID: ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT */
-/** @ArchitectureID: ELM-COMP-EXT-SIDEPANEL */
+// @ArchitectureID: ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT
+// @ArchitectureID: ELM-COMP-EXT-SIDEPANEL
 describe("ReasoningTimeline chrome sandbox transcript boundary", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;

@@ -11,8 +11,8 @@ vi.mock("../shared/api", () => ({
 const { ReasoningTimeline } = await import("./reasoningTimelineView");
 const { buildStableTranscriptProjection } = await import("./reasoningTimeline");
 
-/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
-/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
+// @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER
+// @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX
 describe("ReasoningTimeline transcript rendering", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
@@ -661,8 +661,8 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(summaryPart?.hasAttribute("tabindex")).toBe(false);
   });
 
-  /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
-  /** @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX */
+  // @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER
+  // @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX
   it("keeps transcript action controls hidden by default and reveals them only on hover or focus-within selectors", () => {
     const css = readFileSync(path.join(process.cwd(), "src/sidepanel/style/transcript.css"), "utf8");
 

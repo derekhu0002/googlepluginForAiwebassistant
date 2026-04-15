@@ -1102,7 +1102,7 @@ function sortAnswers(answers: AnswerRecord[]) {
   return [...answers].sort((left, right) => new Date(left.submittedAt).getTime() - new Date(right.submittedAt).getTime());
 }
 
-/** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
+// @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER
 export function collectAssistantResponseAggregation(events: NormalizedRunEvent[], finalOutput?: string | null): AssistantResponseAggregation {
   let aggregation = createEmptyAssistantResponseAggregation();
   let currentLogicalMessageId: string | null = null;
@@ -1195,7 +1195,7 @@ export function resolveTimelinePresentationState(options: {
   };
 }
 
-/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+// @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER
 export function resolveCockpitStatusModel(options: {
   events: NormalizedRunEvent[];
   assistantStatus?: TimelineAssistantStatus;
@@ -2410,7 +2410,7 @@ function processLiveProjectionEvent(
   }
 }
 
-/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+// @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER
 function buildIncrementalLiveTranscriptSegmentReadModel(
   options: BuildTranscriptSegmentReadModelOptions,
   previousModel?: TranscriptReadModel | null
@@ -2644,7 +2644,7 @@ function createTranscriptSummaryPart(summary: TranscriptSummaryModel): Transcrip
   };
 }
 
-/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+// @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER
 export function buildTranscriptReadModel(options: BuildTranscriptSegmentReadModelOptions): TranscriptReadModel {
   const segment = buildTranscriptSegmentReadModel(options);
   return mergeTranscriptMessageCollections({
@@ -2659,9 +2659,9 @@ export function buildTranscriptReadModel(options: BuildTranscriptSegmentReadMode
   });
 }
 
-/** @ArchitectureID: ELM-COMP-EXT-SIDEPANEL */
-/** @ArchitectureID: ELM-FUNC-EXT-PROJECT-TRANSCRIPT */
-/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+// @ArchitectureID: ELM-COMP-EXT-SIDEPANEL
+// @ArchitectureID: ELM-FUNC-EXT-PROJECT-TRANSCRIPT
+// @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER
 export function buildStableTranscriptProjection(options: StableTranscriptProjectionOptions): TranscriptReadModel {
   logProjection({
     phase: "start",
@@ -2768,13 +2768,13 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
   return projectionWithAnomalies;
 }
 
-/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+// @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER
 export function buildTranscriptPartStream(options: BuildTranscriptSegmentReadModelOptions) {
   const readModel = buildTranscriptReadModel(options);
   return readModel.summaryPart ? [...readModel.parts, readModel.summaryPart] : readModel.parts;
 }
 
-/** @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER */
+// @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER
 export function buildFragmentSequence(options: BuildChatStreamItemsOptions): ChatStreamItemModel[] {
   const orderedOptions = {
     ...options,
@@ -3143,7 +3143,7 @@ export function buildTranscriptMessages(options: BuildChatStreamItemsOptions): T
   return normalizeTranscriptMessages(messages);
 }
 
-/** @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER */
+// @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER
 export function buildTranscriptSummary(options: {
   events: NormalizedRunEvent[];
   runStatus?: TimelineRunStatus;
