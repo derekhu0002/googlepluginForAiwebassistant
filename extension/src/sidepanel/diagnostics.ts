@@ -49,6 +49,15 @@ export interface RunDiagnosticsSnapshot {
       hiddenReasoningPartCount: number;
     };
   };
+  sessionUi: {
+    mainStageTranscriptSource: "transcript.visible";
+    includeToolCallParts: false;
+    displayRule: string;
+    displayedPartCount: number;
+    hiddenDiagnosticOnlyPartCount: number;
+    displayedParts: ReturnType<typeof summarizeTranscriptPartsForDiagnostics>;
+    diagnosticOnlyParts: ReturnType<typeof summarizeTranscriptPartsForDiagnostics>;
+  };
   transcript: {
     visible: ReturnType<typeof summarizeTranscriptReadModel>;
     withTools: ReturnType<typeof summarizeTranscriptReadModel>;
@@ -102,19 +111,23 @@ function summarizeTranscriptReadModel(model: TranscriptReadModel, includeToolCal
           includeToolCallParts: model.liveProjectionState.includeToolCallParts
         }
       : null,
-    parts: model.parts.map((part) => ({
-      id: part.id,
-      role: part.role,
-      kind: part.kind,
-      runId: part.runId,
-      createdAt: part.createdAt,
-      updatedAt: part.updatedAt,
-      originEventTypes: part.originEventTypes,
-      pendingQuestion: part.pendingQuestion ?? false,
-      textPreview: truncateText(part.text, 160),
-      detailPreview: truncateText(part.detail ?? "", 160)
-    }))
+    parts: summarizeTranscriptPartsForDiagnostics(model.parts)
   };
+}
+
+function summarizeTranscriptPartsForDiagnostics(parts: TranscriptPartModel[]) {
+  return parts.map((part) => ({
+    id: part.id,
+    role: part.role,
+    kind: part.kind,
+    runId: part.runId,
+    createdAt: part.createdAt,
+    updatedAt: part.updatedAt,
+    originEventTypes: part.originEventTypes,
+    pendingQuestion: part.pendingQuestion ?? false,
+    textPreview: truncateText(part.text, 160),
+    detailPreview: truncateText(part.detail ?? "", 160)
+  }));
 }
 
 function summarizeAssistantState(state: AssistantState | null, runId: string) {
@@ -213,6 +226,10 @@ export function buildRunDiagnosticsSnapshot(options: {
   const withToolsTranscript = buildRunTranscriptModel(options.source, true);
   const visibleSummary = summarizeTranscriptReadModel(visibleTranscript, false);
   const withToolsSummary = summarizeTranscriptReadModel(withToolsTranscript, true);
+  const visiblePartIds = new Set(visibleTranscript.parts.map((part) => part.id));
+  const diagnosticOnlyParts = summarizeTranscriptPartsForDiagnostics(
+    withToolsTranscript.parts.filter((part) => !visiblePartIds.has(part.id))
+  );
   const visibleToolPartCount = countTranscriptParts(visibleTranscript.parts, "tool");
   const visibleReasoningPartCount = countTranscriptParts(visibleTranscript.parts, "reasoning");
   const withToolsToolPartCount = countTranscriptParts(withToolsTranscript.parts, "tool");
@@ -265,6 +282,15 @@ export function buildRunDiagnosticsSnapshot(options: {
         hiddenReasoningPartCount: Math.max(0, withToolsReasoningPartCount - visibleReasoningPartCount)
       }
     },
+    sessionUi: {
+      mainStageTranscriptSource: "transcript.visible",
+      includeToolCallParts: false,
+      displayRule: "MainStage renders transcriptReadModel built with includeToolCallParts=false, so transcript.visible is the session UI view. Parts listed in diagnosticOnlyParts are export-only diagnostics and are not shown in the main session transcript by default.",
+      displayedPartCount: visibleSummary.partCount,
+      hiddenDiagnosticOnlyPartCount: diagnosticOnlyParts.length,
+      displayedParts: visibleSummary.parts,
+      diagnosticOnlyParts
+    },
     transcript: {
       visible: visibleSummary,
       withTools: withToolsSummary
@@ -302,6 +328,9 @@ export function formatRunDiagnosticsLog(snapshot: RunDiagnosticsSnapshot) {
     "",
     "=== DERIVED ===",
     JSON.stringify(snapshot.derived, null, 2),
+    "",
+    "=== SESSION_UI ===",
+    JSON.stringify(snapshot.sessionUi, null, 2),
     "",
     "=== ANSWERS ===",
     JSON.stringify(snapshot.answers, null, 2),

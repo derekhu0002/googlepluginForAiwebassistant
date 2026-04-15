@@ -87,6 +87,10 @@ describe("run diagnostics exporter", () => {
     expect(snapshot.derived.visibilityHints.withToolsToolPartCount).toBeGreaterThan(0);
     expect(snapshot.derived.visibilityHints.hiddenToolPartCount).toBeGreaterThan(0);
     expect(snapshot.transcript.visible.partCount).toBeLessThan(snapshot.transcript.withTools.partCount);
+    expect(snapshot.sessionUi.mainStageTranscriptSource).toBe("transcript.visible");
+    expect(snapshot.sessionUi.displayedPartCount).toBe(snapshot.transcript.visible.partCount);
+    expect(snapshot.sessionUi.hiddenDiagnosticOnlyPartCount).toBeGreaterThan(0);
+    expect(snapshot.sessionUi.diagnosticOnlyParts.some((part) => part.kind === "tool")).toBe(true);
   });
 
   it("formats a human-readable diagnostics log", () => {
@@ -109,6 +113,8 @@ describe("run diagnostics exporter", () => {
     const content = formatRunDiagnosticsLog(snapshot);
 
     expect(content).toContain("=== RUN_METADATA ===");
+    expect(content).toContain("=== SESSION_UI ===");
+    expect(content).toContain("transcript.visible");
     expect(content).toContain("=== TRANSCRIPT_WITH_TOOLS ===");
     expect(content).toContain("event-tool");
     expect(createRunDiagnosticsFilename("run-diag-1", "2026-04-02T00:00:06.000Z")).toBe("aiwa-diagnostics-run-diag-1-2026-04-02T00-00-06-000Z.log");
