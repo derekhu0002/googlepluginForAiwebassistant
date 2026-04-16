@@ -1,10 +1,12 @@
 import { ReasoningTimeline } from "../../reasoningTimelineView";
 import type { BuildChatStreamItemsOptions, TranscriptReadModel } from "../../reasoningTimeline";
 import type { ActiveTabContext, AssistantState } from "../../../shared/types";
-import type { RunRecord } from "../../../shared/protocol";
+import type { RunRecord, TranscriptTraceRecord } from "../../../shared/protocol";
 import type { SessionNavigationItem } from "../../model";
 import { deriveRunTitle } from "../../model";
 
+// @ArchitectureID: ELM-FUNC-SP-ANALYZE-FINAL-TRANSCRIPT-RENDER
+// @SoftwareUnitID: SU-SP-CONVERSATION-VIEWPORT
 export function MainStage({
   activeContext,
   canShowPermissionButton,
@@ -18,6 +20,7 @@ export function MainStage({
   onQuestionSubmit,
   onRequestPermission,
   onRetry,
+  onRenderTrace,
   onStartFreshSession,
   questionSubmitDisabled,
   requestingPermission,
@@ -46,6 +49,7 @@ export function MainStage({
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   onRequestPermission: () => void | Promise<void>;
   onRetry: (payload: { prompt: string; runId: string; messageId: string }) => void | Promise<void>;
+  onRenderTrace?: (traces: TranscriptTraceRecord[]) => void;
   onStartFreshSession: () => void | Promise<void>;
   questionSubmitDisabled: boolean;
   requestingPermission: boolean;
@@ -133,6 +137,7 @@ export function MainStage({
             pendingQuestionId={selectedSessionIsCurrent ? state.stream.pendingQuestionId : null}
             emptyText="正在继续…"
             onRetry={onRetry}
+            onRenderTrace={onRenderTrace}
             onQuestionSubmit={onQuestionSubmit}
             questionSubmitDisabled={questionSubmitDisabled}
           />

@@ -1181,6 +1181,55 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(summaryPart?.hasAttribute("tabindex")).toBe(false);
   });
 
+  it("emits correlated render traces without changing visible transcript rendering", async () => {
+    const onRenderTrace = vi.fn();
+    const transcriptReadModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-current",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, {
+            type: "thinking",
+            message: "第一段",
+            data: { field: "text", message_id: "msg-current" }
+          }),
+          createEvent(2, {
+            type: "result",
+            message: "最终回答",
+            data: { message_id: "msg-current" }
+          })
+        ],
+        status: "done",
+        runStatus: "done",
+        streamStatus: "done",
+        finalOutput: "最终回答",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={transcriptReadModel}
+          runId="run-current"
+          prompt="当前问题"
+          events={[]}
+          runStatus="done"
+          onRenderTrace={onRenderTrace}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("最终回答");
+    expect(onRenderTrace).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ stage: "render", step: "render_path" }),
+      expect.objectContaining({ stage: "render", step: "visible_order", outcome: "visible" }),
+      expect.objectContaining({ stage: "render", step: "tail_revision" })
+    ]));
+  });
+
   // @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER
   // @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX
   it("keeps transcript action controls hidden by default and reveals them only on hover or focus-within selectors", () => {

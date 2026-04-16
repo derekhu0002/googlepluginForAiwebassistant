@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createRunEventStream, submitQuestionAnswer } from "../shared/api";
 import { toDisplayMessage } from "../shared/errors";
 import { initialAssistantState } from "../shared/state";
-import { DEFAULT_MAIN_AGENT, MAIN_AGENTS, createEmptyRunEventState, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
+import { appendTranscriptTraceRecord, DEFAULT_MAIN_AGENT, MAIN_AGENTS, type TranscriptTraceRecord, createEmptyRunEventState, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage, SyncableAssistantRunState } from "../shared/types";
 import { getActiveQuestionEvent, hasPendingQuestion } from "./questionState";
 import { buildRunDiagnosticsSnapshot, downloadRunDiagnosticsLog, type RunDiagnosticsSource } from "./diagnostics";
@@ -48,6 +48,11 @@ function logSidepanelRunEvent(entry: Record<string, unknown>) {
   console.info("[sidepanel-run-event]", entry);
 }
 
+function getTransportTrace(entry: Record<string, unknown>) {
+  const trace = entry.trace;
+  return trace && typeof trace === "object" ? trace as TranscriptTraceRecord : null;
+}
+
 async function syncRunStateToBackground(nextState: SyncableAssistantRunState) {
   logSidepanelRunEvent({
     phase: "sync_to_background",
@@ -67,6 +72,9 @@ async function syncRunStateToBackground(nextState: SyncableAssistantRunState) {
 // @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL
 // @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX
 // @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER
+// @ArchitectureID: ELM-FUNC-SP-TRACE-STREAM-ACCEPTANCE-FRONTIER
+// @ArchitectureID: ELM-FUNC-SP-ASSEMBLE-CORRELATED-TRANSCRIPT-DIAGNOSTICS
+// @SoftwareUnitID: SU-SP-RUN-STREAM-CONTROLLER
 export function useSidepanelController() {
   const [state, setState] = useState<AssistantState>(initialAssistantState);
   const [rules, setRules] = useState<PageRule[]>([]);
@@ -607,10 +615,42 @@ export function useSidepanelController() {
     eventSourceRef.current = createRunEventStream(responseData.runId, {
       onTransportLog: (entry) => {
         logSidepanelRunEvent(entry);
+        const trace = getTransportTrace(entry);
+        if (!trace) {
+          return;
+        }
+        setState((current) => ({
+          ...current,
+          runEventState: {
+            ...current.runEventState,
+            transportTraces: appendTranscriptTraceRecord(current.runEventState.transportTraces, trace)
+          }
+        }));
       },
       onEvent: async (event) => {
         setState((current) => {
           const acceptance = acceptIncomingRunEvent(current.runEvents, event, current.runEventState);
+          const nextSyncMetadata = createRunStateSyncMetadata("sidepanel", acceptance.nextRunEventState);
+          const enrichedDiagnostic = {
+            ...acceptance.diagnostic,
+            persistence: {
+              eventSaveScheduled: acceptance.accepted,
+              runSaveScheduled: acceptance.accepted
+            },
+            sync: {
+              origin: nextSyncMetadata.origin,
+              snapshotVersion: nextSyncMetadata.snapshotVersion,
+              generatedAt: nextSyncMetadata.generatedAt,
+              lastAcceptedCanonicalKey: nextSyncMetadata.lastAcceptedCanonicalKey
+            }
+          };
+          const nextRunEventState = {
+            ...acceptance.nextRunEventState,
+            diagnostics: [
+              ...acceptance.nextRunEventState.diagnostics.slice(0, -1),
+              enrichedDiagnostic
+            ]
+          };
           logSidepanelRunEvent({
             phase: "accept_event",
             runId: event.runId,
@@ -622,13 +662,16 @@ export function useSidepanelController() {
             partId: event.semantic?.partId,
             decision: acceptance.decision,
             priorFrontierSequence: current.runEventState.frontier.lastSequence,
-            resultingFrontierSequence: acceptance.nextRunEventState.frontier.lastSequence
+            resultingFrontierSequence: nextRunEventState.frontier.lastSequence,
+            priorFrontier: acceptance.diagnostic.priorFrontier,
+            resultingFrontier: acceptance.diagnostic.resultingFrontier,
+            rejected: !acceptance.accepted
           });
 
           if (!acceptance.accepted) {
             return {
               ...current,
-              runEventState: acceptance.nextRunEventState
+              runEventState: nextRunEventState
             };
           }
 
@@ -649,11 +692,11 @@ export function useSidepanelController() {
           const nextState: AssistantState = {
             ...current,
             runEvents: nextEvents,
-            runEventState: acceptance.nextRunEventState,
+            runEventState: nextRunEventState,
             currentRun: nextRun,
             status: lifecycleStatus.assistantStatus,
             errorMessage: acceptance.event.type === "error" ? acceptance.event.message : current.errorMessage,
-            syncMetadata: createRunStateSyncMetadata("sidepanel", acceptance.nextRunEventState),
+            syncMetadata: nextSyncMetadata,
             stream: {
               runId: acceptance.event.runId,
               status: lifecycleStatus.streamStatus,
@@ -901,6 +944,13 @@ export function useSidepanelController() {
     setActiveDrawer("sessions");
   }
 
+  function handleRenderTrace(traces: TranscriptTraceRecord[]) {
+    setState((current) => ({
+      ...current,
+      renderTrace: traces
+    }));
+  }
+
   function handleSelectRule(rule: PageRule) {
     setSelectedRuleId(rule.id);
     setDraftRule(cloneRule(rule));
@@ -963,7 +1013,9 @@ export function useSidepanelController() {
       const snapshot = buildRunDiagnosticsSnapshot({
         source,
         sidepanelState: state,
-        backgroundState
+        backgroundState,
+        transcriptReadModel,
+        renderTrace: state.renderTrace ?? []
       });
 
       downloadRunDiagnosticsLog(snapshot);
@@ -997,6 +1049,7 @@ export function useSidepanelController() {
     handleCaptureOnly,
     handleExportDiagnostics,
     handleQuestionSubmit,
+    handleRenderTrace,
     handleRemoveFieldRule,
     handleRetry,
     handleReturnToCurrentSession,

@@ -28,5 +28,6 @@ export const initialAssistantState: AssistantState = {
     reconnectCount: 0
   },
   runEventState: createEmptyRunEventState(),
-  syncMetadata: null
+  syncMetadata: null,
+  renderTrace: []
 };

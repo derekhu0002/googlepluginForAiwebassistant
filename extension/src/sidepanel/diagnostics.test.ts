@@ -3,6 +3,7 @@ import { DEFAULT_MAIN_AGENT } from "../shared/protocol";
 import { initialAssistantState } from "../shared/state";
 import type { AssistantState } from "../shared/types";
 import { buildRunDiagnosticsSnapshot, createRunDiagnosticsFilename, formatRunDiagnosticsLog } from "./diagnostics";
+import { buildStableTranscriptProjection } from "./reasoningTimeline";
 
 function createRun() {
   return {
@@ -61,7 +62,38 @@ function createSidepanelState(): AssistantState {
       runId: run.runId,
       status: "done",
       pendingQuestionId: null
-    }
+    },
+    runEventState: {
+      ...initialAssistantState.runEventState,
+      transportTraces: [{
+        stage: "transport",
+        step: "receipt",
+        outcome: "info",
+        createdAt: "2026-04-02T00:00:01.000Z",
+        correlation: {
+          runId: run.runId,
+          rawEventId: "event-tool",
+          canonicalEventKey: null,
+          sequence: 1,
+          contentKey: "tool",
+          contentPreview: "Inspecting tool output"
+        }
+      }]
+    },
+    renderTrace: [{
+      stage: "render",
+      step: "render_path",
+      outcome: "info",
+      createdAt: "2026-04-02T00:00:06.000Z",
+      correlation: {
+        runId: run.runId,
+        rawEventId: "event-result",
+        canonicalEventKey: "msg-1",
+        sequence: 3,
+        contentKey: "result",
+        contentPreview: "Final answer"
+      }
+    }]
   };
 }
 
@@ -80,6 +112,22 @@ describe("run diagnostics exporter", () => {
       },
       sidepanelState: state,
       backgroundState: state,
+      transcriptReadModel: buildStableTranscriptProjection({
+        historicalSegments: [],
+        liveSegment: {
+          runId: state.currentRun!.runId,
+          prompt: state.currentRun!.prompt,
+          events: state.runEvents,
+          answers: state.answers,
+          finalOutput: state.currentRun!.finalOutput,
+          status: state.currentRun!.status,
+          runStatus: state.currentRun!.status,
+          streamStatus: state.stream.status,
+          includeSummary: true,
+          includeToolCallParts: false
+        }
+      }),
+      renderTrace: state.renderTrace,
       exportedAt: "2026-04-02T00:00:06.000Z"
     });
 
@@ -91,6 +139,8 @@ describe("run diagnostics exporter", () => {
     expect(snapshot.sessionUi.displayedPartCount).toBe(snapshot.transcript.visible.partCount);
     expect(snapshot.sessionUi.hiddenDiagnosticOnlyPartCount).toBeGreaterThan(0);
     expect(snapshot.sessionUi.diagnosticOnlyParts.some((part) => part.kind === "tool")).toBe(true);
+    expect(snapshot.observability.stageCounts.transport).toBeGreaterThan(0);
+    expect(snapshot.observability.stageCounts.render).toBeGreaterThan(0);
   });
 
   it("formats a human-readable diagnostics log", () => {
@@ -107,6 +157,22 @@ describe("run diagnostics exporter", () => {
       },
       sidepanelState: state,
       backgroundState: null,
+      transcriptReadModel: buildStableTranscriptProjection({
+        historicalSegments: [],
+        liveSegment: {
+          runId: state.currentRun!.runId,
+          prompt: state.currentRun!.prompt,
+          events: state.runEvents,
+          answers: state.answers,
+          finalOutput: state.currentRun!.finalOutput,
+          status: state.currentRun!.status,
+          runStatus: state.currentRun!.status,
+          streamStatus: state.stream.status,
+          includeSummary: true,
+          includeToolCallParts: false
+        }
+      }),
+      renderTrace: state.renderTrace,
       exportedAt: "2026-04-02T00:00:06.000Z"
     });
 
@@ -116,6 +182,7 @@ describe("run diagnostics exporter", () => {
     expect(content).toContain("=== SESSION_UI ===");
     expect(content).toContain("transcript.visible");
     expect(content).toContain("=== TRANSCRIPT_WITH_TOOLS ===");
+    expect(content).toContain("=== OBSERVABILITY ===");
     expect(content).toContain("event-tool");
     expect(createRunDiagnosticsFilename("run-diag-1", "2026-04-02T00:00:06.000Z")).toBe("aiwa-diagnostics-run-diag-1-2026-04-02T00-00-06-000Z.log");
   });

@@ -1,4 +1,4 @@
-import type { AnswerRecord, NormalizedRunEvent, RunRecord } from "../shared/protocol";
+import type { AnswerRecord, NormalizedRunEvent, RunRecord, TranscriptTraceRecord } from "../shared/protocol";
 import type { AssistantState } from "../shared/types";
 import { hasTerminalRunEvidence, truncateText } from "./model";
 import { buildStableTranscriptProjection, resolveCockpitStatusModel, resolveTimelinePresentationState, type TranscriptPartModel, type TranscriptReadModel } from "./reasoningTimeline";
@@ -61,6 +61,19 @@ export interface RunDiagnosticsSnapshot {
   transcript: {
     visible: ReturnType<typeof summarizeTranscriptReadModel>;
     withTools: ReturnType<typeof summarizeTranscriptReadModel>;
+  };
+  observability: {
+    stageCounts: Record<string, number>;
+    earliestAnomalyStage: "transport" | "acceptance" | "projection" | "render" | null;
+    stageSequence: TranscriptTraceRecord[];
+    correlationIndex: Array<{
+      runId: string;
+      canonicalEventKey: string | null;
+      rawEventId: string | null;
+      stages: string[];
+      outcomes: string[];
+      contentPreview: string;
+    }>;
   };
   answers: AnswerRecord[];
   events: Array<{
@@ -166,7 +179,53 @@ function summarizeAssistantState(state: AssistantState | null, runId: string) {
     errorMessage: state.errorMessage || state.error?.message || "",
     lastUpdatedAt: state.lastUpdatedAt,
     hasTerminalRunEvidence: hasTerminalRunEvidence(state),
-    currentRunPresentationState
+    currentRunPresentationState,
+    renderTraceCount: state.renderTrace?.length ?? 0
+  };
+}
+
+function getTraceSortKey(trace: TranscriptTraceRecord) {
+  return [trace.createdAt, trace.stage, trace.step, trace.correlation.canonicalEventKey ?? trace.correlation.rawEventId ?? ""].join("|");
+}
+
+function summarizeObservability(stageSequence: TranscriptTraceRecord[]) {
+  const ordered = [...stageSequence].sort((left, right) => getTraceSortKey(left).localeCompare(getTraceSortKey(right)));
+  const stageCounts = ordered.reduce<Record<string, number>>((counts, trace) => {
+    counts[trace.stage] = (counts[trace.stage] ?? 0) + 1;
+    return counts;
+  }, {});
+  const earliestAnomalyStage = ordered.find((trace) => trace.outcome === "failure" || trace.outcome === "rejected" || trace.outcome === "anomaly")?.stage ?? null;
+  const correlationMap = new Map<string, {
+    runId: string;
+    canonicalEventKey: string | null;
+    rawEventId: string | null;
+    stages: string[];
+    outcomes: string[];
+    contentPreview: string;
+  }>();
+
+  for (const trace of ordered) {
+    const correlationKey = [trace.correlation.runId, trace.correlation.canonicalEventKey ?? trace.correlation.rawEventId ?? trace.correlation.contentKey ?? trace.step].join("::");
+    const current = correlationMap.get(correlationKey) ?? {
+      runId: trace.correlation.runId,
+      canonicalEventKey: trace.correlation.canonicalEventKey,
+      rawEventId: trace.correlation.rawEventId,
+      stages: [],
+      outcomes: [],
+      contentPreview: trace.correlation.contentPreview
+    };
+    if (!current.stages.includes(trace.stage)) {
+      current.stages.push(trace.stage);
+    }
+    current.outcomes.push(trace.outcome);
+    correlationMap.set(correlationKey, current);
+  }
+
+  return {
+    stageCounts,
+    earliestAnomalyStage,
+    stageSequence: ordered,
+    correlationIndex: [...correlationMap.values()]
   };
 }
 
@@ -199,10 +258,14 @@ function buildRunTranscriptModel(source: RunDiagnosticsSource, includeToolCallPa
   });
 }
 
+// @ArchitectureID: ELM-FUNC-SP-ASSEMBLE-CORRELATED-TRANSCRIPT-DIAGNOSTICS
+// @SoftwareUnitID: SU-SP-RUN-DIAGNOSTICS-EXPORT
 export function buildRunDiagnosticsSnapshot(options: {
   source: RunDiagnosticsSource;
   sidepanelState: AssistantState;
   backgroundState: AssistantState | null;
+  transcriptReadModel?: TranscriptReadModel | null;
+  renderTrace?: TranscriptTraceRecord[];
   exportedAt?: string;
 }): RunDiagnosticsSnapshot {
   const exportedAt = options.exportedAt ?? new Date().toISOString();
@@ -234,6 +297,12 @@ export function buildRunDiagnosticsSnapshot(options: {
   const visibleReasoningPartCount = countTranscriptParts(visibleTranscript.parts, "reasoning");
   const withToolsToolPartCount = countTranscriptParts(withToolsTranscript.parts, "tool");
   const withToolsReasoningPartCount = countTranscriptParts(withToolsTranscript.parts, "reasoning");
+  const stageSequence = [
+    ...(options.source.scope === "live" ? options.sidepanelState.runEventState.transportTraces : []),
+    ...(options.source.events.flatMap((event) => event.observability?.traces ?? [])),
+    ...(options.transcriptReadModel?.projectionTraces ?? []),
+    ...(options.renderTrace ?? [])
+  ];
 
   return {
     exportedAt,
@@ -295,6 +364,7 @@ export function buildRunDiagnosticsSnapshot(options: {
       visible: visibleSummary,
       withTools: withToolsSummary
     },
+    observability: summarizeObservability(stageSequence),
     answers: options.source.answers,
     events: options.source.events.map((event) => ({
       id: event.id,
@@ -340,6 +410,9 @@ export function formatRunDiagnosticsLog(snapshot: RunDiagnosticsSnapshot) {
     "",
     "=== TRANSCRIPT_WITH_TOOLS ===",
     JSON.stringify(snapshot.transcript.withTools, null, 2),
+    "",
+    "=== OBSERVABILITY ===",
+    JSON.stringify(snapshot.observability, null, 2),
     "",
     "=== EVENTS ===",
     JSON.stringify(snapshot.events, null, 2),

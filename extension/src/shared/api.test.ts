@@ -219,6 +219,52 @@ describe("streaming api client", () => {
     expect(stream.url).toBe("http://localhost:8000/api/runs/run-1/events");
   });
 
+  it("attaches correlated transport observability traces to normalized events", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    global.EventSource = FakeEventSource as unknown as typeof EventSource;
+
+    const { createRunEventStream } = await import("./api");
+    const onEvent = vi.fn();
+    const stream = createRunEventStream("run-observe", { onEvent, onError() {} }) as unknown as FakeEventSource;
+
+    stream.emit("message", JSON.stringify({
+      id: "event-observe",
+      runId: "run-observe",
+      type: "thinking",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      message: "delta",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    }));
+
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({
+      observability: expect.objectContaining({
+        correlation: expect.objectContaining({
+          runId: "run-observe",
+          canonicalEventKey: "assistant_text:msg-1:part-1",
+          messageId: "msg-1",
+          partId: "part-1"
+        }),
+        traces: expect.arrayContaining([
+          expect.objectContaining({ stage: "transport", step: "receipt" }),
+          expect.objectContaining({ stage: "transport", step: "parse", outcome: "success" }),
+          expect.objectContaining({ stage: "transport", step: "canonicalize", outcome: "success" }),
+          expect.objectContaining({ stage: "transport", step: "normalize", outcome: "success" })
+        ])
+      })
+    }));
+  });
+
   /** @ArchitectureID: ELM-APP-EXT-SHARED-API-CONTRACT */
   it("preserves normalized event semantic and tool metadata defined by the shared contract", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
@@ -633,6 +679,37 @@ describe("streaming api client", () => {
       rawEventId: "event-telemetry",
       canonicalEventKey: "assistant_text:msg-1:part-1",
       semanticIdentity: "assistant_text:msg-1:part-1"
+    }));
+  });
+
+  it("distinguishes transport parse failures from normalization failures in telemetry", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    global.EventSource = FakeEventSource as unknown as typeof EventSource;
+    const { createRunEventStream } = await import("./api");
+    const onTransportLog = vi.fn();
+    const onError = vi.fn();
+    const stream = createRunEventStream("run-failure-telemetry", {
+      onEvent() {},
+      onError,
+      onTransportLog
+    }) as unknown as FakeEventSource;
+
+    stream.emit("message", "{not-json");
+    stream.emit("message", JSON.stringify({ runId: "run-failure-telemetry" }));
+
+    expect(onError).toHaveBeenCalledTimes(2);
+    expect(onTransportLog).toHaveBeenCalledWith(expect.objectContaining({
+      transition: "message_error",
+      failureStep: "parse",
+      trace: expect.objectContaining({ step: "parse", outcome: "failure" })
+    }));
+    expect(onTransportLog).toHaveBeenCalledWith(expect.objectContaining({
+      transition: "message_error",
+      failureStep: "normalize",
+      trace: expect.objectContaining({ step: "normalize", outcome: "failure" })
     }));
   });
 });

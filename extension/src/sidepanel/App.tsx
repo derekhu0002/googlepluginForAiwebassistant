@@ -37,6 +37,7 @@ export function App() {
             onQuestionSubmit={controller.selectedSessionIsCurrent ? controller.handleQuestionSubmit : undefined}
             onRequestPermission={controller.requestPermission}
             onRetry={controller.handleRetry}
+            onRenderTrace={controller.handleRenderTrace}
             onStartFreshSession={controller.handleStartFreshSession}
             questionSubmitDisabled={controller.selectedSessionIsCurrent ? !controller.questionEvent?.question : true}
             requestingPermission={controller.requestingPermission}

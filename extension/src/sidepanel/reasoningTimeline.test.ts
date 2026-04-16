@@ -924,6 +924,53 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     });
 
     expect(model.anomalies?.some((anomaly) => anomaly.anomalyType === "terminal_reopen")).toBe(true);
+    expect(model.projectionTraces).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "projection", step: "incremental_refresh" }),
+      expect.objectContaining({ stage: "projection", step: "anomaly", outcome: "anomaly" })
+    ]));
+  });
+
+  it("captures projection visibility traces for hidden tool fragments without changing visible transcript output", () => {
+    const model = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, {
+            runId: "run-live",
+            type: "tool_call",
+            message: "调用工具",
+            semantic: {
+              channel: "tool",
+              emissionKind: "delta",
+              identity: "tool:msg-1:part-1",
+              itemKind: "tool",
+              messageId: "msg-1",
+              partId: "part-1"
+            }
+          }),
+          createEvent(2, {
+            runId: "run-live",
+            type: "result",
+            message: "最终回答",
+            data: { message_id: "msg-1" }
+          })
+        ],
+        status: "done",
+        runStatus: "done",
+        streamStatus: "done",
+        finalOutput: "最终回答",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    expect(model.parts.map((part) => part.kind)).toEqual(["prompt", "text"]);
+    expect(model.summaryPart?.kind).toBe("summary");
+    expect(model.projectionTraces).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "projection", step: "visibility", outcome: "hidden" })
+    ]));
   });
 
   it("keeps one assistant node and suppresses ghost user bubbles for adversarial mixed-order SSE", () => {

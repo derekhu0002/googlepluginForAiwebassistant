@@ -2,9 +2,12 @@ import type { AssistantState, FieldRuleDefinition, PageRule, RuntimeMessage } fr
 import { createDefaultFieldTemplates, createDefaultRule, createId } from "../shared/rules";
 import {
   appendRunEventDiagnostic,
+  appendTranscriptTrace,
+  appendTranscriptTraceRecord,
   compareRunEventFrontiers,
   createEmptyRunEventFrontier,
   createEmptyRunEventState,
+  deriveTranscriptTraceCorrelation,
   deriveRunEventFrontier,
   sortNormalizedRunEvents,
   withCanonicalEventMetadata,
@@ -12,6 +15,7 @@ import {
   type RunEventDiagnostic,
   type RunEventState,
   type RunStateSyncMetadata,
+  type TranscriptTraceRecord,
   type RunRecord
 } from "../shared/protocol";
 import { collectRunAssistantResponseText, isAssistantResponseDeltaEvent } from "./reasoningTimeline";
@@ -140,7 +144,8 @@ export function normalizeRunEventState(runEvents: NormalizedRunEvent[], runEvent
   return {
     frontier,
     acceptedCanonicalKeys,
-    diagnostics: runEventState?.diagnostics ?? []
+    diagnostics: runEventState?.diagnostics ?? [],
+    transportTraces: runEventState?.transportTraces ?? []
   };
 }
 
@@ -155,6 +160,8 @@ export function createRunStateSyncMetadata(origin: RunStateSyncMetadata["origin"
 }
 
 /** @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM */
+/** @ArchitectureID: ELM-FUNC-SP-TRACE-STREAM-ACCEPTANCE-FRONTIER */
+/** @SoftwareUnitID: SU-SP-RUN-STREAM-CONTROLLER */
 export function acceptIncomingRunEvent(
   currentEvents: NormalizedRunEvent[],
   incomingEvent: NormalizedRunEvent,
@@ -167,6 +174,13 @@ export function acceptIncomingRunEvent(
   const canonicalKey = event.canonical?.key ?? null;
   const currentAcceptedCanonicalKeys = new Set(currentState.acceptedCanonicalKeys);
   const sequence = Number.isFinite(event.sequence) ? event.sequence : null;
+
+  const acceptanceTraceBase = {
+    stage: "acceptance",
+    step: "decision",
+    createdAt: new Date().toISOString(),
+    correlation: deriveTranscriptTraceCorrelation(event)
+  } satisfies Omit<TranscriptTraceRecord, "outcome">;
 
   let decision: RunEventDiagnostic["decision"] = "accepted";
   let classification: RunEventDiagnostic["classification"] = "in_order";
@@ -202,25 +216,53 @@ export function acceptIncomingRunEvent(
     classification = "out_of_order";
   }
 
-  const nextEvents = accepted ? mergeRunEvent(normalizedCurrentEvents, event) : normalizedCurrentEvents;
+  const provisionalTracedEvent = appendTranscriptTrace(event, {
+    ...acceptanceTraceBase,
+    outcome: accepted ? "accepted" : "rejected",
+    details: {
+      decision,
+      classification,
+      priorFrontier,
+      resultingFrontier: null
+    }
+  });
+  const nextEvents = accepted ? mergeRunEvent(normalizedCurrentEvents, provisionalTracedEvent) : normalizedCurrentEvents;
   const nextRunEventStateBase = normalizeRunEventState(nextEvents, currentState);
+  const acceptanceTrace: TranscriptTraceRecord = {
+    ...acceptanceTraceBase,
+    outcome: accepted ? "accepted" : "rejected",
+    details: {
+      decision,
+      classification,
+      priorFrontier,
+      resultingFrontier: nextRunEventStateBase.frontier
+    }
+  };
+  const tracedEvent = appendTranscriptTrace(event, acceptanceTrace);
+  const tracedNextEvents = accepted ? mergeRunEvent(normalizedCurrentEvents, tracedEvent) : normalizedCurrentEvents;
+  const transportAndAcceptanceTraces = [
+    ...(event.observability?.traces ?? []),
+    acceptanceTrace
+  ];
   const diagnostic: RunEventDiagnostic = {
-    runId: event.runId,
+    runId: tracedEvent.runId,
     source: "sidepanel",
     decision,
     classification,
     createdAt: new Date().toISOString(),
-    rawEventId: event.id,
+    rawEventId: tracedEvent.id,
     canonicalEventKey: canonicalKey,
     sequence,
     priorFrontierSequence: priorFrontier.lastSequence,
     resultingFrontierSequence: nextRunEventStateBase.frontier.lastSequence,
-    semanticIdentity: event.semantic?.identity,
-    messageId: event.semantic?.messageId,
-    partId: event.semantic?.partId,
-    channel: event.semantic?.channel,
-    emissionKind: event.semantic?.emissionKind,
-    identitySource: event.canonical?.identitySource,
+    semanticIdentity: tracedEvent.semantic?.identity,
+    messageId: tracedEvent.semantic?.messageId,
+    partId: tracedEvent.semantic?.partId,
+    channel: tracedEvent.semantic?.channel,
+    emissionKind: tracedEvent.semantic?.emissionKind,
+    identitySource: tracedEvent.canonical?.identitySource,
+    priorFrontier,
+    resultingFrontier: nextRunEventStateBase.frontier,
     reason: accepted ? undefined : decision === "stale_replay"
       ? "incoming event did not advance accepted contiguous frontier"
       : decision === "duplicate"
@@ -230,8 +272,12 @@ export function acceptIncomingRunEvent(
           : undefined
   };
   const nextRunEventState: RunEventState = {
-    ...nextRunEventStateBase,
-    diagnostics: appendRunEventDiagnostic(currentState.diagnostics, diagnostic)
+    ...normalizeRunEventState(tracedNextEvents, currentState),
+    diagnostics: appendRunEventDiagnostic(currentState.diagnostics, diagnostic),
+    transportTraces: transportAndAcceptanceTraces.reduce(
+      (traces, trace) => appendTranscriptTraceRecord(traces, trace),
+      currentState.transportTraces
+    )
   };
 
   logRunAcceptance({
@@ -253,8 +299,8 @@ export function acceptIncomingRunEvent(
   return {
     accepted,
     decision,
-    event,
-    nextEvents,
+    event: tracedEvent,
+    nextEvents: tracedNextEvents,
     nextRunEventState,
     diagnostic
   };

@@ -8,6 +8,7 @@ import type {
   QuestionAnswerRequest,
   RunEventState,
   RunStateSyncMetadata,
+  TranscriptTraceRecord,
   RunHistoryDetail,
   RunRecord,
   UsernameSource
@@ -107,6 +108,7 @@ export interface AssistantState {
   stream: StreamConnectionState;
   runEventState: RunEventState;
   syncMetadata: RunStateSyncMetadata | null;
+  renderTrace?: TranscriptTraceRecord[];
 }
 
 export type SyncableAssistantRunState = Pick<AssistantState,
@@ -125,6 +127,7 @@ export type SyncableAssistantRunState = Pick<AssistantState,
   | "stream"
   | "runEventState"
   | "syncMetadata"
+  | "renderTrace"
 >;
 
 export interface StartRunResponse {

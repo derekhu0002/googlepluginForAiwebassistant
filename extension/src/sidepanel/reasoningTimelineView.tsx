@@ -13,6 +13,7 @@ import {
   type TranscriptReadModel,
   type TranscriptTailPatchModel
 } from "./reasoningTimeline";
+import { deriveTranscriptTraceCorrelation } from "../shared/protocol";
 import { useScrollFollowController } from "./useScrollFollowController";
 
 const MAX_MARKDOWN_FPS = 30;
@@ -574,6 +575,106 @@ function LatestMessageButton({ visible, onClick }: { visible: boolean; onClick: 
   );
 }
 
+function buildRenderTrace(details: {
+  runId: string | null | undefined;
+  transcriptReadModel?: TranscriptReadModel | null;
+  fallbackParts: TranscriptPartModel[];
+  contentRevision: string;
+  tailRenderRevision: string;
+  projectedTranscriptPresent: boolean;
+  presentationState: ReturnType<typeof resolveTimelinePresentationState>;
+}): import("../shared/protocol").TranscriptTraceRecord[] {
+  const runId = details.runId ?? details.transcriptReadModel?.summaryPart?.runId ?? details.fallbackParts[0]?.runId ?? "render";
+  const renderBaseCorrelation = details.transcriptReadModel?.finalAnswerPart
+      ? deriveTranscriptTraceCorrelation({
+        runId,
+        id: details.transcriptReadModel.finalAnswerPart.anchorId,
+        sequence: Number.NaN,
+        message: details.transcriptReadModel.finalAnswerPart.text,
+        canonical: { key: details.transcriptReadModel.finalAnswerPart.anchorId } as never,
+        semantic: undefined,
+        question: undefined,
+        tool: undefined
+      })
+    : {
+        runId,
+        rawEventId: null,
+        canonicalEventKey: details.transcriptReadModel?.activeAssistantMessageId ?? null,
+        sequence: null,
+        contentKey: details.contentRevision,
+        contentPreview: details.fallbackParts[0]?.text.slice(0, 160) ?? ""
+      };
+
+  const stageRecords: import("../shared/protocol").TranscriptTraceRecord[] = [
+    {
+      stage: "render",
+      step: "render_path",
+      outcome: "info",
+      createdAt: new Date().toISOString(),
+      correlation: renderBaseCorrelation,
+      details: {
+        projectedTranscriptPresent: details.projectedTranscriptPresent,
+        fallbackPartCount: details.fallbackParts.length,
+        sealedMessageCount: details.transcriptReadModel?.sealedMessages.length ?? 0,
+        activeMessageId: details.transcriptReadModel?.activeAssistantMessageId ?? null
+      }
+    },
+    {
+      stage: "render",
+      step: "visible_order",
+      outcome: "visible",
+      createdAt: new Date().toISOString(),
+      correlation: renderBaseCorrelation,
+      details: {
+        visiblePartIds: details.transcriptReadModel?.parts.map((part) => part.id) ?? details.fallbackParts.map((part) => part.id),
+        summaryPartId: details.transcriptReadModel?.summaryPart?.id ?? null,
+        contentRevision: details.contentRevision
+      }
+    },
+    {
+      stage: "render",
+      step: "tail_revision",
+      outcome: details.transcriptReadModel?.tailPatch ? "visible" : "info",
+      createdAt: new Date().toISOString(),
+      correlation: renderBaseCorrelation,
+      details: {
+        tailPatchRevision: details.transcriptReadModel?.tailPatch?.revision ?? null,
+        tailRenderRevision: details.tailRenderRevision || null,
+        terminalState: details.transcriptReadModel?.terminalState ?? details.presentationState.hasTerminalEvidence
+      }
+    }
+  ];
+
+  if (details.transcriptReadModel) {
+    const projectedIds = new Set(details.transcriptReadModel.parts.map((part) => part.id));
+    const renderedIds = new Set([
+      ...details.transcriptReadModel.sealedMessages.flatMap((message) => message.parts.map((part) => part.id)),
+      ...details.transcriptReadModel.processParts.map((part) => part.id),
+      details.transcriptReadModel.finalAnswerPart?.id,
+      details.transcriptReadModel.questionPart?.id,
+      details.transcriptReadModel.errorPart?.id,
+      details.transcriptReadModel.summaryPart?.id
+    ].filter((value): value is string => Boolean(value)));
+    const missingRenderedIds = [...projectedIds].filter((id) => !renderedIds.has(id));
+    if (missingRenderedIds.length) {
+      stageRecords.push({
+        stage: "render",
+        step: "projection_vs_render",
+        outcome: "anomaly",
+        createdAt: new Date().toISOString(),
+        correlation: renderBaseCorrelation,
+        details: {
+          missingRenderedIds,
+          projectedPartCount: projectedIds.size,
+          renderedPartCount: renderedIds.size
+        }
+      });
+    }
+  }
+
+  return stageRecords;
+}
+
 function ConversationViewport({
   activeMessageId,
   processParts,
@@ -686,12 +787,14 @@ export interface ChatStreamViewProps {
   onRetry?: (payload: { prompt: string; runId: string; messageId: string }) => void | Promise<void>;
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
+  onRenderTrace?: (traces: import("../shared/protocol").TranscriptTraceRecord[]) => void;
 }
 
 // @ArchitectureID: ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT
 // @ArchitectureID: ELM-APP-EXT-CONVERSATION-RENDERER
 // @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX
 // @ArchitectureID: ELM-REQ-OPENCODE-UX
+// @ArchitectureID: ELM-FUNC-SP-ANALYZE-FINAL-TRANSCRIPT-RENDER
 // @SoftwareUnitID: SU-SP-CONVERSATION-VIEWPORT
 // @SoftwareUnitID: SU-SP-HISTORICAL-TRANSCRIPT-LIST
 // @SoftwareUnitID: SU-SP-ACTIVE-TAIL-RENDERER
@@ -712,7 +815,8 @@ export function ReasoningTimeline({
   emptyText = "暂无事件。",
   onRetry,
   onQuestionSubmit,
-  questionSubmitDisabled = false
+  questionSubmitDisabled = false,
+  onRenderTrace
 }: ChatStreamViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, MessageFeedbackUiState>>({});
@@ -804,6 +908,18 @@ export function ReasoningTimeline({
 
   const contentRevision = projectedTranscript?.contentRevision
     ?? fallbackParts.map((part) => `${part.id}:${part.text.length}:${part.updatedAt}`).join("|");
+
+  useEffect(() => {
+    onRenderTrace?.(buildRenderTrace({
+      runId,
+      transcriptReadModel: transcriptReadModel ?? null,
+      fallbackParts,
+      contentRevision,
+      tailRenderRevision,
+      projectedTranscriptPresent: Boolean(projectedTranscript),
+      presentationState
+    }));
+  }, [contentRevision, fallbackParts, onRenderTrace, presentationState, projectedTranscript, runId, tailRenderRevision, transcriptReadModel]);
 
   const scrollFollow = useScrollFollowController({
     containerRef,

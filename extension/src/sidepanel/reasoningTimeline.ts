@@ -1,4 +1,15 @@
-import { sortNormalizedRunEvents, type AnswerRecord, type MessageFeedbackValue, type NormalizedEventType, type NormalizedRunEvent, type QuestionPayload, type RunRecord } from "../shared/protocol";
+import {
+  appendTranscriptTraceRecord,
+  deriveTranscriptTraceCorrelation,
+  sortNormalizedRunEvents,
+  type AnswerRecord,
+  type MessageFeedbackValue,
+  type NormalizedEventType,
+  type NormalizedRunEvent,
+  type QuestionPayload,
+  type RunRecord,
+  type TranscriptTraceRecord
+} from "../shared/protocol";
 import type { MessageFeedbackUiState } from "../shared/types";
 
 const DEFAULT_EVENT_TITLES: Record<NormalizedEventType, string> = {
@@ -228,6 +239,7 @@ export interface TranscriptReadModel {
   liveProjectionState?: LiveTranscriptProjectionState | null;
   liveProjectionDebug?: LiveTranscriptProjectionDebug | null;
   anomalies?: ProjectionAnomalyRecord[];
+  projectionTraces?: TranscriptTraceRecord[];
 }
 
 export interface ProjectionAnomalyRecord {
@@ -2479,6 +2491,117 @@ function logProjection(entry: Record<string, unknown>) {
   console.info("[transcript-projection]", entry);
 }
 
+function buildProjectionTraceRecord(
+  step: string,
+  outcome: TranscriptTraceRecord["outcome"],
+  event: NormalizedRunEvent,
+  details?: Record<string, unknown>
+): TranscriptTraceRecord {
+  return {
+    stage: "projection",
+    step,
+    outcome,
+    createdAt: new Date().toISOString(),
+    correlation: event.observability?.correlation ?? deriveTranscriptTraceCorrelation(event),
+    details
+  };
+}
+
+function collectProjectionTraceRecords(options: {
+  events: NormalizedRunEvent[];
+  fragments: ChatStreamItemModel[];
+  messages: TranscriptMessageModel[];
+  processParts: TranscriptPartModel[];
+  finalAnswerPart: TranscriptPartModel | null;
+  questionPart: TranscriptPartModel | null;
+  errorPart: TranscriptPartModel | null;
+  summaryPart: TranscriptPartModel | null;
+  liveProjectionDebug?: LiveTranscriptProjectionDebug | null;
+  anomalies?: ProjectionAnomalyRecord[];
+  sealActiveMessage: boolean;
+}): TranscriptTraceRecord[] {
+  let traces: TranscriptTraceRecord[] = [];
+  const visibleAnchors = new Set(options.messages.flatMap((message) => message.parts.map((part) => part.anchorId)));
+
+  for (const event of options.events) {
+    const mappedFragments = options.fragments.filter((fragment) => fragment.originEventTypes.includes(event.type));
+    const visibleFragments = mappedFragments.filter((fragment) => visibleAnchors.has(fragment.anchorId));
+    traces = appendTranscriptTraceRecord(traces, buildProjectionTraceRecord("event_mapping", "info", event, {
+      mappedFragmentIds: mappedFragments.map((fragment) => fragment.id),
+      mappedMessageIds: options.messages
+        .filter((message) => message.parts.some((part) => mappedFragments.some((fragment) => fragment.anchorId === part.anchorId)))
+        .map((message) => message.id),
+      visibleFragmentIds: visibleFragments.map((fragment) => fragment.id),
+      hiddenBecauseDiagnosticOnly: mappedFragments.length > 0 && visibleFragments.length === 0,
+      includeToolCallProjection: mappedFragments.some((fragment) => fragment.primaryType === "tool_call")
+    }));
+
+    const hidden = mappedFragments.length > 0 && visibleFragments.length === 0;
+    traces = appendTranscriptTraceRecord(traces, buildProjectionTraceRecord(
+      "visibility",
+      hidden ? "hidden" : "visible",
+      event,
+      {
+        visiblePartKinds: visibleFragments.map((fragment) => fragment.kind),
+        mappedPartKinds: mappedFragments.map((fragment) => fragment.kind)
+      }
+    ));
+  }
+
+  const syntheticProjectionEvent = options.events.at(-1) ?? {
+    id: "projection-synthetic",
+    runId: options.finalAnswerPart?.runId ?? options.questionPart?.runId ?? options.errorPart?.runId ?? options.summaryPart?.runId ?? "projection",
+    type: "thinking",
+    createdAt: options.summaryPart?.updatedAt ?? new Date().toISOString(),
+    sequence: Number.MAX_SAFE_INTEGER,
+    message: options.finalAnswerPart?.text ?? options.questionPart?.text ?? options.errorPart?.text ?? options.summaryPart?.text ?? "projection"
+  } satisfies NormalizedRunEvent;
+  traces = appendTranscriptTraceRecord(traces, buildProjectionTraceRecord("incremental_refresh", "info", syntheticProjectionEvent, {
+    reusedPreviousStore: options.liveProjectionDebug?.reusedPreviousStore ?? false,
+    appliedDeltaEventCount: options.liveProjectionDebug?.appliedDeltaEventCount ?? 0,
+    sealedHistoryCount: options.messages.length - (options.sealActiveMessage ? 0 : 1),
+    activeTailPresent: Boolean(options.finalAnswerPart && !options.sealActiveMessage)
+  }));
+  traces = appendTranscriptTraceRecord(traces, buildProjectionTraceRecord("active_tail_transition", options.sealActiveMessage ? "info" : "visible", syntheticProjectionEvent, {
+    sealActiveMessage: options.sealActiveMessage,
+    processPartCount: options.processParts.length,
+    finalAnswerPartId: options.finalAnswerPart?.id ?? null,
+    questionPartId: options.questionPart?.id ?? null,
+    errorPartId: options.errorPart?.id ?? null,
+    summaryPartId: options.summaryPart?.id ?? null
+  }));
+
+  for (const anomaly of options.anomalies ?? []) {
+    traces = appendTranscriptTraceRecord(traces, {
+      stage: "projection",
+      step: "anomaly",
+      outcome: "anomaly",
+      createdAt: new Date().toISOString(),
+      correlation: {
+        runId: anomaly.runId,
+        rawEventId: anomaly.sourceEventIds[0] ?? null,
+        canonicalEventKey: anomaly.groupAnchorId ?? null,
+        sequence: null,
+        messageId: anomaly.logicalMessageId,
+        partId: undefined,
+        channel: undefined,
+        emissionKind: undefined,
+        contentKey: anomaly.groupAnchorId ?? anomaly.logicalMessageId ?? null,
+        contentPreview: anomaly.resolution.slice(0, 160)
+      },
+      details: {
+        anomalyType: anomaly.anomalyType,
+        logicalMessageId: anomaly.logicalMessageId,
+        groupAnchorId: anomaly.groupAnchorId,
+        sourceEventIds: anomaly.sourceEventIds,
+        resolution: anomaly.resolution
+      }
+    });
+  }
+
+  return traces;
+}
+
 function collectProjectionAnomalies(messages: TranscriptMessageModel[], events: NormalizedRunEvent[], runId: string) {
   const anomalies: ProjectionAnomalyRecord[] = [];
   const seenGroups = new Set<string>();
@@ -2714,7 +2837,8 @@ function mergeTranscriptMessageCollections(options: {
     liveSignature: options.liveSignature,
     liveProjectionState: options.liveProjectionState ?? null,
     liveProjectionDebug: options.liveProjectionDebug ?? null,
-    anomalies: []
+    anomalies: [],
+    projectionTraces: []
   } satisfies TranscriptReadModel;
 }
 
@@ -2759,6 +2883,7 @@ export function buildTranscriptReadModel(options: BuildTranscriptSegmentReadMode
 // @ArchitectureID: ELM-FUNC-EXT-PROJECT-TRANSCRIPT
 // @ArchitectureID: ELM-APP-EXT-RUN-CONVERSATION-MAPPER
 // @ArchitectureID: ELM-REQ-OPENCODE-UX
+// @ArchitectureID: ELM-FUNC-SP-TRACE-INCREMENTAL-TRANSCRIPT-PROJECTION
 // @SoftwareUnitID: SU-SP-TRANSCRIPT-PROJECTION
 export function buildStableTranscriptProjection(options: StableTranscriptProjectionOptions): TranscriptReadModel {
   logProjection({
@@ -2870,7 +2995,47 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
   }
   const projectionWithAnomalies: TranscriptReadModel = {
     ...projection,
-    anomalies
+    anomalies,
+    projectionTraces: collectProjectionTraceRecords({
+      events: sortNormalizedRunEvents([
+        ...options.historicalSegments.flatMap((segment) => segment.events),
+        ...(options.liveSegment?.events ?? [])
+      ]),
+      fragments: [
+        ...projection.historicalMessages.flatMap((message) => message.parts.map((part) => ({
+          id: part.id,
+          anchorId: part.anchorId,
+          groupAnchorId: part.groupAnchorId,
+          runId: part.runId,
+          kind: part.kind === "prompt" ? "user_prompt" : part.kind === "answer" ? "user_answer" : part.kind === "question" ? "assistant_question" : part.kind === "error" ? "assistant_error" : part.kind === "text" ? "assistant_output" : "assistant_process",
+          title: "",
+          summary: part.text,
+          createdAt: part.createdAt,
+          updatedAt: part.updatedAt,
+          primaryType: (part.originEventTypes[0] ?? (part.kind === "error" ? "error" : part.kind === "question" ? "question" : "thinking")) as ChatStreamItemModel["primaryType"],
+          badges: part.badges,
+          originEventTypes: part.originEventTypes,
+          question: part.question,
+          answer: part.answer,
+          pendingQuestion: part.pendingQuestion,
+          sourceQuestionPrompt: part.sourceQuestionPrompt,
+          supportsCopy: part.supportsCopy,
+          supportsRetry: part.supportsRetry,
+          supportsFeedback: part.supportsFeedback,
+          feedbackState: part.feedbackState
+        } as ChatStreamItemModel))),
+        ...(projection.liveProjectionState?.items ?? [])
+      ],
+      messages: projection.messages,
+      processParts: projection.processParts,
+      finalAnswerPart: projection.finalAnswerPart,
+      questionPart: projection.questionPart,
+      errorPart: projection.errorPart,
+      summaryPart: projection.summaryPart,
+      liveProjectionDebug: projection.liveProjectionDebug,
+      anomalies,
+      sealActiveMessage
+    })
   };
   logProjection({
     phase: "complete",

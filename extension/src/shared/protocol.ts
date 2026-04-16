@@ -24,6 +24,37 @@ export type CanonicalEventIdentitySource =
 
 export type RunEventDecision = "accepted" | "duplicate" | "stale_replay" | "gap" | "out_of_order" | "invalid";
 
+export type TranscriptTraceStage = "transport" | "acceptance" | "projection" | "render";
+export type TranscriptTraceOutcome = "success" | "failure" | "accepted" | "rejected" | "visible" | "hidden" | "info" | "anomaly";
+
+export interface TranscriptTraceCorrelation {
+  runId: string;
+  rawEventId: string | null;
+  canonicalEventKey: string | null;
+  sequence: number | null;
+  semanticIdentity?: string;
+  messageId?: string;
+  partId?: string;
+  channel?: NormalizedEventChannel;
+  emissionKind?: NormalizedEventEmissionKind;
+  contentKey: string | null;
+  contentPreview: string;
+}
+
+export interface TranscriptTraceRecord {
+  stage: TranscriptTraceStage;
+  step: string;
+  createdAt: string;
+  outcome: TranscriptTraceOutcome;
+  correlation: TranscriptTraceCorrelation;
+  details?: Record<string, unknown>;
+}
+
+export interface TranscriptObservabilityEnvelope {
+  correlation: TranscriptTraceCorrelation;
+  traces: TranscriptTraceRecord[];
+}
+
 export interface RunEventCanonicalMetadata {
   key: string;
   identitySource: CanonicalEventIdentitySource;
@@ -71,12 +102,25 @@ export interface RunEventDiagnostic {
   identitySource?: CanonicalEventIdentitySource;
   classification?: "in_order" | "gap" | "out_of_order";
   reason?: string;
+  priorFrontier?: RunEventFrontier;
+  resultingFrontier?: RunEventFrontier;
+  persistence?: {
+    eventSaveScheduled: boolean;
+    runSaveScheduled: boolean;
+  };
+  sync?: {
+    origin: RunStateSyncMetadata["origin"];
+    snapshotVersion: number;
+    generatedAt: string;
+    lastAcceptedCanonicalKey: string | null;
+  };
 }
 
 export interface RunEventState {
   frontier: RunEventFrontier;
   acceptedCanonicalKeys: string[];
   diagnostics: RunEventDiagnostic[];
+  transportTraces: TranscriptTraceRecord[];
 }
 
 export interface RunStateSyncMetadata {
@@ -137,6 +181,7 @@ export interface NormalizedRunEvent {
   };
   canonical?: RunEventCanonicalMetadata;
   transport?: RunEventTransportMetadata;
+  observability?: TranscriptObservabilityEnvelope;
 }
 
 export interface RunStreamLifecycle {
@@ -235,8 +280,64 @@ export function createEmptyRunEventState(): RunEventState {
   return {
     frontier: createEmptyRunEventFrontier(),
     acceptedCanonicalKeys: [],
-    diagnostics: []
+    diagnostics: [],
+    transportTraces: []
   };
+}
+
+function truncateTranscriptTracePreview(value: string) {
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  return normalized.slice(0, 160);
+}
+
+function getTranscriptTraceContentValue(event: Pick<NormalizedRunEvent, "message" | "question" | "tool">) {
+  const questionMessage = event.question?.message?.trim();
+  if (questionMessage) {
+    return questionMessage;
+  }
+
+  const toolSummary = [event.tool?.title, event.tool?.name, event.tool?.status, event.tool?.callId]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join("|");
+  if (toolSummary) {
+    return toolSummary;
+  }
+
+  return event.message?.trim() ?? "";
+}
+
+export function deriveTranscriptTraceCorrelation(event: Pick<NormalizedRunEvent, "runId" | "id" | "sequence" | "message" | "question" | "tool" | "semantic" | "canonical">): TranscriptTraceCorrelation {
+  const contentValue = getTranscriptTraceContentValue(event);
+  const normalizedPreview = truncateTranscriptTracePreview(contentValue);
+  return {
+    runId: event.runId,
+    rawEventId: event.id ?? null,
+    canonicalEventKey: event.canonical?.key ?? null,
+    sequence: Number.isFinite(event.sequence) ? event.sequence : null,
+    semanticIdentity: event.semantic?.identity,
+    messageId: event.semantic?.messageId,
+    partId: event.semantic?.partId,
+    channel: event.semantic?.channel,
+    emissionKind: event.semantic?.emissionKind,
+    contentKey: normalizedPreview ? `${normalizedPreview.length}:${normalizedPreview}` : null,
+    contentPreview: normalizedPreview
+  };
+}
+
+export function appendTranscriptTrace(event: NormalizedRunEvent, trace: TranscriptTraceRecord): NormalizedRunEvent {
+  const correlation = event.observability?.correlation ?? deriveTranscriptTraceCorrelation(event);
+  return {
+    ...event,
+    observability: {
+      correlation,
+      traces: [...(event.observability?.traces ?? []), trace]
+    }
+  };
+}
+
+export function appendTranscriptTraceRecord(traces: TranscriptTraceRecord[], trace: TranscriptTraceRecord, limit = 200) {
+  const next = [...traces, trace];
+  return next.length > limit ? next.slice(next.length - limit) : next;
 }
 
 function toCanonicalPart(value?: string | null) {

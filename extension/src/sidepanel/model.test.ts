@@ -35,6 +35,12 @@ describe("sidepanel canonical run-event acceptance", () => {
     expect(result.nextEvents).toHaveLength(1);
     expect(result.nextRunEventState.frontier.lastAcceptedCanonicalKey).toBe("assistant_text:msg-1:part-1");
     expect(result.diagnostic.decision).toBe("accepted");
+    expect(result.event.observability?.traces).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "acceptance", step: "decision", outcome: "accepted" })
+    ]));
+    expect(result.nextRunEventState.transportTraces).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: "acceptance", step: "decision", outcome: "accepted" })
+    ]));
   });
 
   /** @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM */
@@ -111,5 +117,42 @@ describe("sidepanel canonical run-event acceptance", () => {
     expect(outOfOrder.decision).toBe("out_of_order");
     expect(outOfOrder.diagnostic.classification).toBe("out_of_order");
     expect(outOfOrder.nextEvents.map((event) => event.sequence)).toEqual([1, 2, 3]);
+  });
+
+  it("captures frontier before/after and sync-ready acceptance diagnostics for rejected events", () => {
+    const first = acceptIncomingRunEvent([], createEvent(1), createEmptyRunEventState());
+    const duplicate = acceptIncomingRunEvent(first.nextEvents, createEvent(2, {
+      id: "raw-duplicate",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-dup:part-1",
+        itemKind: "text",
+        messageId: "msg-dup",
+        partId: "part-1"
+      }
+    }), first.nextRunEventState);
+
+    expect(duplicate.accepted).toBe(true);
+    const replay = acceptIncomingRunEvent(duplicate.nextEvents, createEvent(3, {
+      id: "raw-duplicate-replay",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-dup:part-1",
+        itemKind: "text",
+        messageId: "msg-dup",
+        partId: "part-1"
+      }
+    }), duplicate.nextRunEventState);
+
+    expect(replay.accepted).toBe(false);
+    expect(replay.diagnostic.priorFrontier).toMatchObject({ lastSequence: 2 });
+    expect(replay.diagnostic.resultingFrontier).toMatchObject({ lastSequence: 2 });
+    expect(replay.nextRunEventState.diagnostics.at(-1)).toMatchObject({
+      decision: "duplicate",
+      priorFrontier: expect.objectContaining({ lastSequence: 2 }),
+      resultingFrontier: expect.objectContaining({ lastSequence: 2 })
+    });
   });
 });
