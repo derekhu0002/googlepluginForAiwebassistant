@@ -84,6 +84,7 @@ function stripDiagnosticMetadata(event: NormalizedRunEvent): NormalizedRunEvent 
 }
 
 // @ArchitectureID: ELM-COMP-EXT-SIDEPANEL
+// @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
 // @ArchitectureID: ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT
 // @ArchitectureID: ELM-APP-EXT-CONVERSATION-SHELL
 // @ArchitectureID: ELM-APP-EXT-CONVERSATION-LIVE-HISTORY-UX

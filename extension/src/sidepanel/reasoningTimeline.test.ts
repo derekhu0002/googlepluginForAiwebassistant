@@ -1046,6 +1046,71 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     });
   });
 
+  it("keeps one stable assistant message per run even when semantic message ids churn", () => {
+    const model = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, {
+            runId: "run-live",
+            type: "thinking",
+            message: "第一段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-1:part-1",
+              itemKind: "text",
+              messageId: "msg-1",
+              partId: "part-1"
+            }
+          }),
+          createEvent(2, {
+            runId: "run-live",
+            type: "tool_call",
+            message: "调用工具",
+            semantic: {
+              channel: "tool",
+              emissionKind: "delta",
+              identity: "tool:msg-2:tool-1",
+              itemKind: "tool",
+              messageId: "msg-2",
+              partId: "tool-1"
+            }
+          }),
+          createEvent(3, {
+            runId: "run-live",
+            type: "result",
+            message: "最终回答",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "final",
+              identity: "assistant_text:msg-3:final",
+              itemKind: "text",
+              messageId: "msg-3",
+              partId: "final"
+            },
+            data: { message_id: "msg-3" }
+          })
+        ],
+        status: "done",
+        runStatus: "done",
+        streamStatus: "done",
+        finalOutput: "最终回答",
+        includeSummary: true,
+        includeToolCallParts: true
+      }
+    });
+
+    expect(model.messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+    expect(model.terminalState).toBe(true);
+    expect(model.activeAssistantMessageId).toBeNull();
+    expect(model.messages.find((message) => message.role === "assistant")?.id).toBe("message:run-live:assistant-run:run-live:assistant");
+    expect(model.processParts.map((part) => part.kind)).toEqual(["tool"]);
+    expect(model.finalAnswerPart?.text).toBe("最终回答");
+  });
+
   it("preserves active assistant identity and sealed history during live tail updates", () => {
     const firstModel = buildStableTranscriptProjection({
       historicalSegments: [{

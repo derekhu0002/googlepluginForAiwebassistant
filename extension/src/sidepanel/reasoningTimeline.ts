@@ -2792,6 +2792,70 @@ function reuseTranscriptPart(nextPart: TranscriptPartModel | null, previousPart?
   return nextPart === previousPart ? previousPart : nextPart;
 }
 
+function getRunScopedAssistantMessageId(runId: string) {
+  return `message:${runId}:assistant-run:${runId}:assistant`;
+}
+
+function getRunScopedAssistantGroupAnchorId(runId: string) {
+  return `assistant-run:${runId}`;
+}
+
+function collapseRunScopedAssistantMessages(
+  messages: TranscriptMessageModel[],
+  previousAssistantMessage?: TranscriptMessageModel | null
+) {
+  const assistantMessages = messages.filter((message) => message.role === "assistant");
+  if (assistantMessages.length <= 1) {
+    return messages;
+  }
+
+  const firstAssistantIndex = messages.findIndex((message) => message.role === "assistant");
+  const firstAssistantMessage = assistantMessages[0];
+  const latestAssistantMessage = assistantMessages[assistantMessages.length - 1];
+  const runId = latestAssistantMessage.runId;
+  const stableGroupAnchorId = getRunScopedAssistantGroupAnchorId(runId);
+  const latestFeedbackState = [...assistantMessages].reverse().map((message) => message.feedbackState).find(Boolean);
+  const latestSourceQuestionPrompt = [...assistantMessages].reverse().map((message) => message.sourceQuestionPrompt).find(Boolean);
+  const latestActionAnchorId = [...assistantMessages].reverse().map((message) => message.actionAnchorId).find(Boolean);
+  const mergedParts = assistantMessages.reduce<TranscriptPartModel[]>((currentParts, message) => mergeTranscriptPartCollections(
+    currentParts,
+    message.parts.map((part) => ({
+      ...part,
+      groupAnchorId: stableGroupAnchorId
+    }))
+  ), []);
+  const mergedAssistantMessage: TranscriptMessageModel = {
+    ...latestAssistantMessage,
+    id: previousAssistantMessage?.runId === runId
+      ? previousAssistantMessage.id
+      : getRunScopedAssistantMessageId(runId),
+    createdAt: firstAssistantMessage.createdAt,
+    updatedAt: latestAssistantMessage.updatedAt,
+    anchorId: previousAssistantMessage?.anchorId ?? latestAssistantMessage.anchorId ?? stableGroupAnchorId,
+    groupAnchorId: stableGroupAnchorId,
+    parts: mergedParts,
+    supportsCopy: assistantMessages.some((message) => message.supportsCopy),
+    supportsRetry: assistantMessages.some((message) => message.supportsRetry),
+    supportsFeedback: assistantMessages.some((message) => message.supportsFeedback),
+    feedbackState: latestFeedbackState ?? latestAssistantMessage.feedbackState,
+    actionAnchorId: latestActionAnchorId ?? latestAssistantMessage.actionAnchorId,
+    sourceQuestionPrompt: latestSourceQuestionPrompt ?? latestAssistantMessage.sourceQuestionPrompt
+  };
+
+  return messages.reduce<TranscriptMessageModel[]>((nextMessages, message, index) => {
+    if (message.role !== "assistant") {
+      nextMessages.push(message);
+      return nextMessages;
+    }
+
+    if (index === firstAssistantIndex) {
+      nextMessages.push(mergedAssistantMessage);
+    }
+
+    return nextMessages;
+  }, []);
+}
+
 function mergeTranscriptMessageCollections(options: {
   historicalMessages: TranscriptMessageModel[];
   historicalParts: TranscriptPartModel[];
@@ -2808,7 +2872,10 @@ function mergeTranscriptMessageCollections(options: {
 }) {
   const previousModel = options.previousModel ?? null;
   const historicalMessages = normalizeTranscriptMessages(options.historicalMessages);
-  const liveMessages = normalizeTranscriptMessages(options.liveMessages);
+  const liveMessages = collapseRunScopedAssistantMessages(
+    normalizeTranscriptMessages(options.liveMessages),
+    previousModel?.activeMessage
+  );
   const rawMessages = normalizeTranscriptMessages(liveMessages.length
     ? [...historicalMessages, ...liveMessages]
     : historicalMessages);

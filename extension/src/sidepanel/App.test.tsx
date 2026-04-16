@@ -2673,12 +2673,13 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     const streamParts = Array.from(container.querySelectorAll(".transcript-part[data-section='part']"));
-    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "tool", "text", "question", "answer", "text", "summary"]);
+    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "answer", "tool", "text", "question", "summary"]);
     expect(container.textContent).toContain("查询历史 SR");
-    expect(streamParts[1]?.textContent ?? "").toContain("查询历史 SR");
-    expect(streamParts[2]?.textContent ?? "").toContain("第一段");
-    expect(streamParts[3]?.textContent ?? "").toContain("请选择处理方式");
-    expect(streamParts[5]?.textContent ?? "").toContain("第二段");
+    expect(streamParts[1]?.textContent ?? "").toContain("继续执行");
+    expect(streamParts[2]?.textContent ?? "").toContain("查询历史 SR");
+    expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
+    expect(streamParts[3]?.textContent ?? "").toContain("第二段");
+    expect(streamParts[4]?.textContent ?? "").toContain("请选择处理方式");
   });
 
   it("keeps newer live assistant body when stale final output exists in active run state", async () => {
@@ -2705,6 +2706,76 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("第一段第二段");
     expect(container.textContent).not.toContain("第一段生成中");
+  });
+
+  it("keeps one assistant article and visible process disclosure when current run message ids churn", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
+      getStateResponse: createAssistantState({
+        currentRun: {
+          ...createCurrentRun(),
+          status: "done",
+          updatedAt: "2026-04-02T00:00:03.000Z",
+          finalOutput: "最终回答"
+        },
+        status: "done",
+        stream: {
+          runId: "run-1",
+          status: "done",
+          pendingQuestionId: null
+        },
+        runEvents: [
+          createRunEvent(1, {
+            type: "thinking",
+            message: "第一段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-1:part-1",
+              itemKind: "text",
+              messageId: "msg-1",
+              partId: "part-1"
+            }
+          }),
+          createRunEvent(2, {
+            type: "tool_call",
+            message: "查询历史 SR",
+            semantic: {
+              channel: "tool",
+              emissionKind: "delta",
+              identity: "tool:msg-2:tool-1",
+              itemKind: "tool",
+              messageId: "msg-2",
+              partId: "tool-1"
+            }
+          }),
+          createRunEvent(3, {
+            type: "result",
+            message: "最终回答",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "final",
+              identity: "assistant_text:msg-3:final",
+              itemKind: "text",
+              messageId: "msg-3",
+              partId: "final"
+            },
+            data: { message_id: "msg-3" }
+          })
+        ]
+      })
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
+    expect(container.querySelector("[data-message-role='assistant']")?.getAttribute("data-message-id")).toBe("sealed-assistant");
+    expect(container.querySelector("[data-component='process-disclosure']")?.textContent).toContain("查看过程");
+    expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("最终回答");
+    expect(container.querySelector("[data-component='process-disclosure'] [data-part-kind='tool']")?.textContent).toContain("查询历史 SR");
   });
 
   it("does not render visible avatar role markers or message-card shells in transcript output", async () => {

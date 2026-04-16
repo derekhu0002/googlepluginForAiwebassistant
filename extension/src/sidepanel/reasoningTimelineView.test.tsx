@@ -1137,6 +1137,82 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(firstAssistantMessage?.getAttribute("data-message-id")).toBe(secondAssistantMessage?.getAttribute("data-message-id"));
   });
 
+  it("renders exactly one assistant article when one run emits multiple semantic message ids", async () => {
+    const transcriptReadModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-current",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, {
+            runId: "run-current",
+            type: "thinking",
+            message: "第一段",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-1:part-1",
+              itemKind: "text",
+              messageId: "msg-1",
+              partId: "part-1"
+            }
+          }),
+          createEvent(2, {
+            runId: "run-current",
+            type: "tool_call",
+            message: "调用工具",
+            semantic: {
+              channel: "tool",
+              emissionKind: "delta",
+              identity: "tool:msg-2:tool-1",
+              itemKind: "tool",
+              messageId: "msg-2",
+              partId: "tool-1"
+            }
+          }),
+          createEvent(3, {
+            runId: "run-current",
+            type: "result",
+            message: "最终回答",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "final",
+              identity: "assistant_text:msg-3:final",
+              itemKind: "text",
+              messageId: "msg-3",
+              partId: "final"
+            },
+            data: { message_id: "msg-3" }
+          })
+        ],
+        status: "done",
+        runStatus: "done",
+        streamStatus: "done",
+        finalOutput: "最终回答",
+        includeSummary: true,
+        includeToolCallParts: true
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={transcriptReadModel}
+          runId="run-current"
+          prompt="当前问题"
+          events={[]}
+          runStatus="done"
+        />
+      );
+    });
+
+    expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
+    expect(transcriptReadModel.messages.find((message) => message.role === "assistant")?.id).toBe("message:run-current:assistant-run:run-current:assistant");
+    expect(container.querySelector("[data-message-role='assistant']")?.getAttribute("data-message-id")).toBe("sealed-assistant");
+    expect(container.querySelector("[data-component='process-disclosure'] [data-part-kind='tool']")?.textContent).toContain("调用工具");
+    expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("最终回答");
+  });
+
   it("marks transcript messages with actions as focusable hover targets for action visibility", async () => {
     await act(async () => {
       root.render(
