@@ -1,59 +1,65 @@
-# Release Summary: ELM-REQ-OPENCODE-UX full-model rework batch
+# Release Summary: ELM-002 end-to-end sidepanel transcript observability
 
 ## Release Status
 
 - Status: completed
 - Date: 2026-04-16
-- Requirement: `ELM-REQ-OPENCODE-UX`
-- Runtime tasks: `TASK-018`, `TASK-022`
-- Implementation commit: `c3c6259351e895bf96a4071bd247c75b2d18d153`
+- Goal: `ELM-002 end-to-end sidepanel transcript observability`
+- Runtime tasks: `TASK-024`, `TASK-025`, `TASK-026`, `TASK-027`, `TASK-028`
+- Resolved issue: `ISSUE-007`
+- Final successful commit: `5c0b3f8`
+- Prior failed implementation commit: `8a37479e7ee3cb2a2ff8326fdde7768f4df3b584`
 - QA status: `passed`
 - Audit status: `passed`
-- Trigger: human-escalated architecture issue on assistant transcript DOM fragmentation and remount churn
 
 ## Release Summary
 
-- Finalized the successful full-model rework batch for the sidepanel conversation viewport under `ELM-REQ-OPENCODE-UX`.
-- `TASK-018` was reverified as already satisfying the single-run assistant aggregation and empty-user suppression contract; no source change was required in `extension/src/sidepanel/reasoningTimeline.ts`.
-- `TASK-022` updated `extension/src/sidepanel/reasoningTimelineView.tsx` to enforce native collapsed-by-default `<details>` for `ProcessDisclosure`, preserve exactly one assistant article boundary, and retain stable assistant article identity during incremental final-text updates.
-- Regression coverage was updated in `extension/src/sidepanel/reasoningTimelineView.test.tsx` and `extension/src/sidepanel/reasoningTimeline.chromeSandbox.test.tsx` for anti-fragmentation and assistant stability assertions.
+- The batch originated from inspecting commit `306737edb25ca2e9ae77bf43714559a4f0cdffd7` and taking the architecture-graph TODO/ISSUE items as the mission scope.
+- The delivered work adds cross-stage transcript observability while preserving visible sidepanel UX semantics.
+- A first implementation commit, `8a37479e7ee3cb2a2ff8326fdde7768f4df3b584`, failed QA/Audit; the scoped rework at `5c0b3f8` fixed App-level regressions and added scanner-verifiable intent tags.
+- Final release scope points to the successful commit `5c0b3f8`.
 
 ## Completed Scope
 
-- `TASK-018`: reverified transcript projection contract compliance without source changes.
-- `TASK-022`: delivered viewport anti-fragmentation and assistant-boundary stability rework plus targeted regression updates.
+- `TASK-024`: implemented shared transport and normalization observability in `extension/src/shared/api.ts` and shared proto flow.
+- `TASK-025`: implemented sidepanel ingestion and acceptance observability in `extension/src/sidepanel/useSidepanelController.ts`.
+- `TASK-026`: implemented transcript projection observability in `extension/src/sidepanel/reasoningTimeline.ts`.
+- `TASK-027`: extended diagnostics export assembly for end-to-end transcript observability in `extension/src/sidepanel/diagnostics.ts`.
+- `TASK-028`: implemented final render analysis observability in `extension/src/sidepanel/reasoningTimelineView.tsx` and `extension/src/sidepanel/components/stage/MainStage.tsx`.
 
 ## Validation Results
 
-- QA: passed — targeted tests passed (`54/54`) and extension typecheck passed.
-- Audit: passed — architecture intent remains aligned with implementation reality for `TASK-018` and `TASK-022` at commit `c3c6259351e895bf96a4071bd247c75b2d18d153`.
-- Sandbox note: direct `run_chrome_sandbox` on the `.tsx` entry was blocked by `ERR_UNKNOWN_FILE_EXTENSION`; equivalent sandbox-capable Vitest/jsdom coverage passed, and QA judged local-only validation sufficient.
+- QA: passed for commit `5c0b3f8`.
+- Audit: passed for commit `5c0b3f8`.
+- Resolution note: `ISSUE-007` was resolved by the successful rework commit after adding scanner-verifiable `@RequirementID` / `@ArchitectureID` intent tags.
 
 ## Commit Traceability
 
-- Release scope commit: `c3c6259351e895bf96a4071bd247c75b2d18d153`
-- Traceability matrix scope: commit `c3c6259351e895bf96a4071bd247c75b2d18d153`
+- Release scope commit: `5c0b3f8`
+- Traceability matrix scope: commit `5c0b3f8`
 
 ## Intent Traceability Matrix
 
 # Traceability Matrix
 
-Scope: commit c3c6259351e895bf96a4071bd247c75b2d18d153
+Scope: commit 5c0b3f8
 
 | Requirement (Intent) | Architecture Component (Design) | Implemented Task | Source Files (Reality) | Verified by Tests? |
 | --- | --- | --- | --- | --- |
-| N/A | ELM-REQ-OPENCODE-UX Sidepanel 会话体验重构：达到 OpenCode Web 级别的丝滑流式交互体验 | TASK-018 收紧 Sidepanel transcript projection 视图契约 (c3c6259351e895bf96a4071bd247c75b2d18d153) | extension/src/sidepanel/reasoningTimeline.ts<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useScrollFollowController.ts | ✅ Yes |
-| N/A | ELM-REQ-OPENCODE-UX Sidepanel 会话体验重构：达到 OpenCode Web 级别的丝滑流式交互体验 | TASK-022 分离 Reasoning/Tool Call/Final Answer 并补足回归验证 (c3c6259351e895bf96a4071bd247c75b2d18d153) | extension/src/sidepanel/reasoningTimeline.ts<br>extension/src/sidepanel/reasoningTimelineView.tsx<br>extension/src/sidepanel/useScrollFollowController.ts | ✅ Yes |
+| N/A | ELM-FUNC-EXT-CAPTURE-TRANSPORT-CANONICAL-TRACE Capture Transport and Canonical Trace | TASK-024 Implement shared transport and normalization observability in extension/src/shared/api.ts and extension/src/shared/proto (5c0b3f8) | extension/src/sidepanel/App.test.tsx | ✅ Yes |
+| N/A | ELM-FUNC-SP-TRACE-STREAM-ACCEPTANCE-FRONTIER Trace Stream Acceptance Frontier | TASK-025 Implement sidepanel ingestion and acceptance observability in extension/src/sidepanel/useSidepanelController.ts and exte (5c0b3f8) | extension/src/sidepanel/App.test.tsx<br>extension/src/sidepanel/useSidepanelController.ts | ✅ Yes |
+| N/A | ELM-FUNC-SP-TRACE-INCREMENTAL-TRANSCRIPT-PROJECTION Trace Incremental Transcript Projection | TASK-026 Implement transcript projection observability in extension/src/sidepanel/reasoningTimeline.ts (5c0b3f8) | extension/src/sidepanel/App.test.tsx<br>extension/src/sidepanel/reasoningTimeline.ts | ✅ Yes |
+| N/A | ELM-FUNC-SP-ASSEMBLE-CORRELATED-TRANSCRIPT-DIAGNOSTICS Assemble Correlated Transcript Diagnostics Snapshot | TASK-027 Extend diagnostics export assembly in extension/src/sidepanel/diagnostics.ts for end-to-end transcript observability (5c0b3f8) | extension/src/sidepanel/App.test.tsx<br>extension/src/sidepanel/diagnostics.ts<br>extension/src/sidepanel/useSidepanelController.ts | ✅ Yes |
+| N/A | ELM-FUNC-SP-ANALYZE-FINAL-TRANSCRIPT-RENDER Analyze Final Transcript Render Consumption | TASK-028 Implement final render analysis observability in extension/src/sidepanel/reasoningTimelineView.tsx and MainStage.tsx (5c0b3f8) | extension/src/sidepanel/App.test.tsx<br>extension/src/sidepanel/components/stage/MainStage.tsx<br>extension/src/sidepanel/reasoningTimelineView.tsx | ✅ Yes |
 
 100% of the intended sprint scope was verified by tests. Every traceability matrix row is marked `✅ Yes`.
 
 ## Release Artifacts
 
 - Release log: `SprintRleaseLog.md`
-- Production files reviewed: `extension/src/sidepanel/reasoningTimeline.ts`, `extension/src/sidepanel/reasoningTimelineView.tsx`
-- Regression evidence: `extension/src/sidepanel/reasoningTimelineView.test.tsx`, `extension/src/sidepanel/reasoningTimeline.chromeSandbox.test.tsx`
-- Validation evidence: targeted tests (`54/54`) and typecheck passed
+- Implementation evidence: `extension/src/shared/api.ts`, `extension/src/sidepanel/useSidepanelController.ts`, `extension/src/sidepanel/reasoningTimeline.ts`, `extension/src/sidepanel/diagnostics.ts`, `extension/src/sidepanel/reasoningTimelineView.tsx`, `extension/src/sidepanel/components/stage/MainStage.tsx`
+- Validation evidence: sidepanel `App.test.tsx`, targeted extension suite, full extension test suite, typecheck, and build as recorded in QA/Audit results for commit `5c0b3f8`
 
 ## Release Conclusion
 
-The `ELM-REQ-OPENCODE-UX` full-model rework batch for `TASK-018` and `TASK-022` is released at commit `c3c6259351e895bf96a4071bd247c75b2d18d153`. The human-escalated transcript fragmentation and remount-churn issue is resolved within the approved sidepanel boundary and verified with passing QA and audit evidence.
+The `ELM-002` full-model batch is released at commit `5c0b3f8`. Cross-stage transcript observability is now delivered end-to-end while preserving visible sidepanel UX semantics, and the earlier failed batch represented by `ISSUE-007` has been resolved by the scoped rework.
