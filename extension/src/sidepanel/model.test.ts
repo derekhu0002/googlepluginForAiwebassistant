@@ -3,7 +3,7 @@ import { createEmptyRunEventState } from "../shared/protocol";
 import type { NormalizedRunEvent } from "../shared/protocol";
 import { acceptIncomingRunEvent } from "./model";
 
-/** @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM */
+// @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
 describe("sidepanel canonical run-event acceptance", () => {
   function createEvent(sequence: number, overrides: Partial<NormalizedRunEvent> = {}): NormalizedRunEvent {
     return {
@@ -17,7 +17,7 @@ describe("sidepanel canonical run-event acceptance", () => {
     };
   }
 
-  /** @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM */
+  // @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
   it("accepts the first canonical event and records accepted frontier diagnostics", () => {
     const result = acceptIncomingRunEvent([], createEvent(1, {
       semantic: {
@@ -43,7 +43,7 @@ describe("sidepanel canonical run-event acceptance", () => {
     ]));
   });
 
-  /** @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM */
+  // @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
   it("rejects duplicate canonical identities even when raw ids differ", () => {
     const initial = acceptIncomingRunEvent([], createEvent(1, {
       id: "raw-a",
@@ -75,7 +75,7 @@ describe("sidepanel canonical run-event acceptance", () => {
     expect(duplicate.diagnostic.canonicalEventKey).toBe("assistant_text:msg-1:part-1");
   });
 
-  /** @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM */
+  // @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
   it("rejects stale replay when the incoming sequence does not advance the contiguous frontier", () => {
     const first = acceptIncomingRunEvent([], createEvent(1), createEmptyRunEventState());
     const second = acceptIncomingRunEvent(first.nextEvents, createEvent(2), first.nextRunEventState);
@@ -96,7 +96,7 @@ describe("sidepanel canonical run-event acceptance", () => {
     expect(staleReplay.diagnostic.priorFrontierSequence).toBe(2);
   });
 
-  /** @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM */
+  // @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
   it("classifies sequence gaps while still accepting monotonic frontier advance", () => {
     const first = acceptIncomingRunEvent([], createEvent(1), createEmptyRunEventState());
     const gap = acceptIncomingRunEvent(first.nextEvents, createEvent(3), first.nextRunEventState);
@@ -107,7 +107,7 @@ describe("sidepanel canonical run-event acceptance", () => {
     expect(gap.nextRunEventState.frontier.lastSequence).toBe(3);
   });
 
-  /** @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM */
+  // @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
   it("classifies out-of-order arrivals without duplicating accepted events", () => {
     const first = acceptIncomingRunEvent([], createEvent(1), createEmptyRunEventState());
     const gap = acceptIncomingRunEvent(first.nextEvents, createEvent(3), first.nextRunEventState);
