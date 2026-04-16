@@ -1,4 +1,4 @@
-{
+﻿{
   "identifier": "ai4pb-shared-knowledge-graph",
   "version": "1.0.0",
   "name": [
@@ -472,27 +472,6 @@
         ]
       },
       {
-        "identifier": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-        "type": "ApplicationFunction",
-        "name": [
-          {
-            "value": "Consume Normalized Run Stream"
-          }
-        ],
-        "documentation": [
-          {
-            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Consume Normalized Run Stream governs sidepanel receipt of normalized run events, canonical acceptance of those events, persistence coordination, and observability for duplicate, missing, and out-of-order stream behavior.\n[Input]: Run id, adapter SSE endpoint, normalized run events, current side-panel state, prior accepted event identities, accepted ordering frontier, and current persistence/synchronization status.\n[Processing]: Open the EventSource stream, validate each incoming payload, derive a canonical event key using semantic identity and stable message metadata before falling back to runId plus sequence or raw id, accept only the first event per canonical key, reject stale or replayed events that do not advance the accepted frontier, log accepted, duplicate, gap, and out-of-order decisions, persist only accepted events, update run lifecycle state from accepted evidence, and synchronize only reconciled accepted state to background.\n[Output]: An updated live conversation state containing accepted ordered run events, accepted-frontier metadata, derived run status, final output snapshots, stream connection state, and structured stream diagnostics.\n[Acceptance Criteria]: Semantically duplicate events are not appended twice even when raw ids differ; accepted events advance in deterministic order or are classified as out-of-order with diagnostics; missing-sequence and replay conditions are logged with run id and canonical key; terminal evidence updates run status only from accepted events; refresh or reconnect does not cause already accepted events to be re-appended."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "system-architect",
-            "layer": "application",
-            "aspect": "behavior"
-          }
-        }
-      },
-      {
         "identifier": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
         "type": "ApplicationFunction",
         "name": [
@@ -528,27 +507,6 @@
         ]
       },
       {
-        "identifier": "ELM-FUNC-EXT-CALL-ADAPTER-API",
-        "type": "ApplicationFunction",
-        "name": [
-          {
-            "value": "Call Adapter API"
-          }
-        ],
-        "documentation": [
-          {
-            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Call Adapter API governs extension-side HTTP and SSE integration contracts and exposes the raw transport metadata needed to diagnose duplicate, missing, or reordered run events.\n[Input]: Prompt payloads, capture payloads, username context, selected agent, optional session id, feedback requests, optional API key configuration, and SSE connection context.\n[Processing]: Build validated HTTP request bodies and headers for run start, answer submission, feedback submission, and SSE stream setup; parse normalized success or failure responses with schema validation; preserve raw event transport identifiers and semantic metadata provided by the adapter; surface connection-open, message, error, and reconnect transitions; and emit transport-level diagnostics needed to distinguish upstream duplication from extension-side replay.\n[Output]: Typed extension-side API results, stream connections aligned to the adapter contract, and transport diagnostics for SSE lifecycle and payload identity.\n[Acceptance Criteria]: Requests include authentication when configured; invalid or failed responses are normalized; stream payload parsing preserves available semantic identity fields; connection and reconnect transitions are observable in diagnostics; transport diagnostics allow the team to determine whether duplication originates before or after sidepanel acceptance."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "system-architect",
-            "layer": "application",
-            "aspect": "behavior"
-          }
-        }
-      },
-      {
         "identifier": "ELM-FUNC-EXT-EVALUATE-RULES",
         "type": "ApplicationFunction",
         "name": [
@@ -563,27 +521,6 @@
         ]
       },
       {
-        "identifier": "ELM-FUNC-EXT-PERSIST-HISTORY",
-        "type": "ApplicationFunction",
-        "name": [
-          {
-            "value": "Persist Run History"
-          }
-        ],
-        "documentation": [
-          {
-            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Persist Run History governs durable storage of canonical run artifacts so refresh, reopen, and replay use accepted event identities rather than reintroducing duplicate or unordered history.\n[Input]: Run records, accepted normalized run events, answer records, session identifiers, canonical event identities, and persistence diagnostics context.\n[Processing]: Persist run artifacts with stable canonical event identity metadata, upsert events idempotently for each run, preserve accepted event order and answer order, expose run detail reload APIs that return deterministic ordered artifacts, and log persistence writes, duplicate-write suppression, and ordering anomalies.\n[Output]: A durable browser-side run history with per-run detail, canonical event identity metadata, answer history, and session navigation views.\n[Acceptance Criteria]: Refresh or reopen replays the same accepted event set without adding duplicates; persisted events remain associated with the correct run and ordered deterministically; duplicate writes are suppressed or surfaced with diagnostics; session grouping remains stable when session ids are present."
-          }
-        ],
-        "extensions": {
-          "ai4pb": {
-            "managedBy": "system-architect",
-            "layer": "application",
-            "aspect": "behavior"
-          }
-        }
-      },
-      {
         "identifier": "ELM-FUNC-PY-START-RUN",
         "type": "ApplicationFunction",
         "name": [
@@ -594,20 +531,6 @@
         "documentation": [
           {
             "value": "[Input]: RunStartRequest containing prompt, selected agent, optional capture payload, optional session id, and extension context metadata.\n[Processing]: Validate the selected main agent, discover the canonical remote agent from /agent, reuse or create an OpenCode session, dispatch prompt_async to the selected session, initialize run state, and record startup diagnostics.\n[Output]: A registered adapter run id with selected agent, optional session id, and initial tool-call events that describe startup progress.\n[Acceptance Criteria]: Only allowed main agents are accepted; remote /agent discovery must precede session bootstrap; reused sessions skip session creation; startup failures are surfaced as normalized analysis or validation errors."
-          }
-        ]
-      },
-      {
-        "identifier": "ELM-FUNC-PY-NORMALIZE-EVENTS",
-        "type": "ApplicationFunction",
-        "name": [
-          {
-            "value": "Normalize OpenCode Events"
-          }
-        ],
-        "documentation": [
-          {
-            "value": "[Input]: Raw OpenCode global SSE events, run session context, buffered part deltas, and canonical remote-agent evidence.\n[Processing]: Filter events by session, enforce primary-agent consistency, transform OpenCode status, text, reasoning, tool, question, idle, and error events into NormalizedRunEvent records, and buffer part deltas until part type is known.\n[Output]: A browser-consumable stream of normalized thinking, tool_call, question, result, or error events.\n[Acceptance Criteria]: Session-unrelated events are ignored; assistant text and reasoning are distinguished semantically; question and tool events are normalized for UI use; agent mismatches produce explicit runtime failure."
           }
         ]
       },
@@ -866,7 +789,8 @@
         ],
         "documentation": [
           {
-            "value": "[Input]: Stable transcript read model, active assistant node identity, structural patch notifications, tail delta payloads, feedback UI state, auto-follow state, and transcript action metadata.\n[Processing]: Render transcript messages from the read-model contract instead of raw SSE events; keep sealed messages referentially stable; accumulate high-frequency assistant text deltas in refs or equivalent buffers; flush tail updates through debounce, requestAnimationFrame, or memoized local patch application; update only the active assistant message tail and defer markdown reparsing to the affected active block; preserve precise DOM bubble counts and action affordances when assistant phases alternate between reasoning, tool, and text.\n[Output]: Incrementally updated transcript DOM with stable historical message subtrees, locally updated active assistant tail, accurate final markdown, and scroll behavior that follows live updates without whole-list rerender churn.\n[Acceptance Criteria]: GIVEN SSE emits single-character tokens at very high frequency such as every 10ms, WHEN React renders the stream, THEN ref buffering plus debounce or memoization keeps the UI smooth and preserves exact markdown output without omissions; each token does not trigger whole transcript rerender or full markdown reparse; DOM never shows more than the intended user and assistant bubbles for a single turn under tool/text alternation."
+            "value": "[Input]: Stable transcript read model, active assistant node identity, structural patch notifications, tail delta payloads, feedback UI state, auto-follow state, and transcript action metadata. [Processing]: Render transcript messages from the read-model contract instead of raw SSE events; keep sealed messages referentially stable; accumulate high-frequency assistant text deltas in refs or equivalent buffers; flush tail updates through debounce, requestAnimationFrame, or memoized local patch application; update only the active assistant message tail and defer markdown reparsing to the affected active block; preserve precise DOM bubble counts and action affordances when assistant phases alternate between reasoning, tool, and text. [Output]: Incrementally updated transcript DOM with stable historical message subtrees, locally updated active assistant tail, accurate final markdown, and scroll behavior that follows live updates without whole-list rerender churn. [Acceptance Criteria]: GIVEN SSE emits single-character tokens at very high frequency such as every 10ms, WHEN React renders the stream, THEN ref buffering plus debounce or memoization keeps the UI smooth and preserves exact markdown output without omissions; each token does not trigger whole transcript rerender or full markdown reparse; DOM never shows more than the intended user and assistant bubbles for a single turn under tool/text alternation.\r\nTODO:记录增量刷新日志，包括时间和内容",
+            "lang": "en"
           }
         ],
         "extensions": {
@@ -925,7 +849,8 @@
         ],
         "documentation": [
           {
-            "value": "扩展会话显示链路使用的浏览器级 SSE 传输能力。证据：extension/src/shared/api.ts:createRunEventStream 通过 new EventSource(`${apiBaseUrl}/api/runs/{runId}/events`) 建立连接，并处理 open/message/error/reconnecting 生命周期。核心能力：建立单向事件流、接收 message 事件、报告 open/error、保留 reconnectCount 诊断。"
+            "value": "扩展会话显示链路使用的浏览器级 SSE 传输能力。证据：extension/src/shared/api.ts:createRunEventStream 通过 new EventSource(`${apiBaseUrl}/api/runs/{runId}/events`) 建立连接，并处理 open/message/error/reconnecting 生命周期。核心能力：建立单向事件流、接收 message 事件、报告 open/error、保留 reconnectCount 诊断。\r\nTODO：增加事件日志，包括时间内容",
+            "lang": "en"
           }
         ]
       },
@@ -1065,7 +990,8 @@
         ],
         "documentation": [
           {
-            "value": "扩展会话显示链路中的标准化运行事件对象。证据：extension/src/shared/protocol.ts:113-140, 247-330；extension/src/shared/api.ts:194-218。\n核心字段：id, runId, type(thinking|tool_call|question|result|error), createdAt, sequence, message, title?, data?, logData?, tool?, question?, semantic{channel, emissionKind, identity, itemKind, messageId?, partId?}, canonical{key, identitySource, orderKey, rawEventId, semantic*}, transport{rawEventId, receivedAt, reconnectCount, streamStatus}。"
+            "value": "扩展会话显示链路中的标准化运行事件对象。证据：extension/src/shared/protocol.ts:113-140, 247-330；extension/src/shared/api.ts:194-218。 核心字段：id, runId, type(thinking|tool_call|question|result|error), createdAt, sequence, message, title?, data?, logData?, tool?, question?, semantic{channel, emissionKind, identity, itemKind, messageId?, partId?}, canonical{key, identitySource, orderKey, rawEventId, semantic*}, transport{rawEventId, receivedAt, reconnectCount, streamStatus}。\r\nTODO：添加这里的事件生成日志，包括时间、内容等；",
+            "lang": "en"
           }
         ]
       },
@@ -1093,7 +1019,8 @@
         ],
         "documentation": [
           {
-            "value": "由历史 run 段与当前 live 段投影出的稳定会话读模型。证据：extension/src/sidepanel/reasoningTimeline.ts:208-231, 2420-2460, 2635-2883；extension/src/sidepanel/useSidepanelController.ts:477-485。\n核心字段：messages, sealedMessages, activeMessage, activeAssistantMessageId, processParts, finalAnswerPart, questionPart, errorPart, summaryPart, tailPatch, terminalState, historicalMessages, liveMessages, historicalSignature, liveSignature, liveProjectionState, liveProjectionDebug, anomalies。"
+            "value": "由历史 run 段与当前 live 段投影出的稳定会话读模型。证据：extension/src/sidepanel/reasoningTimeline.ts:208-231, 2420-2460, 2635-2883；extension/src/sidepanel/useSidepanelController.ts:477-485。 核心字段：messages, sealedMessages, activeMessage, activeAssistantMessageId, processParts, finalAnswerPart, questionPart, errorPart, summaryPart, tailPatch, terminalState, historicalMessages, liveMessages, historicalSignature, liveSignature, liveProjectionState, liveProjectionDebug, anomalies。\r\nTODO:增加事件日志，记录时间和内容",
+            "lang": "en"
           }
         ]
       },
@@ -1121,7 +1048,8 @@
         ],
         "documentation": [
           {
-            "value": "Sidepanel 会话主舞台渲染接口。证据：extension/src/sidepanel/components/stage/MainStage.tsx:116-139；extension/src/sidepanel/reasoningTimelineView.tsx:577-667, 698-938。\n[Input]: transcriptReadModel 派生出的 sealedMessages、processParts、finalAnswerPart、questionPart、errorPart、summaryPart、tailPatch、terminalState，以及 disclosure/scroll/feedback/retry/question-submit 回调。\n[Processing]: 先渲染历史消息列表，再维持单个活动 assistant article；通过 ProcessDisclosure 展示 reasoning/tool，FinalAnswerPanel 展示最终回答，LatestMessageButton 控制脱底后的回到底部。\n[Output]: 稳定的 transcript DOM，关键边界为单个 <article class=\"transcript-message-assistant\"> 活动 assistant 气泡。"
+            "value": "Sidepanel 会话主舞台渲染接口。证据：extension/src/sidepanel/components/stage/MainStage.tsx:116-139；extension/src/sidepanel/reasoningTimelineView.tsx:577-667, 698-938。 [Input]: transcriptReadModel 派生出的 sealedMessages、processParts、finalAnswerPart、questionPart、errorPart、summaryPart、tailPatch、terminalState，以及 disclosure/scroll/feedback/retry/question-submit 回调。[Processing]: 先渲染历史消息列表，再维持单个活动 assistant article；通过 ProcessDisclosure 展示 reasoning/tool，FinalAnswerPanel 展示最终回答，LatestMessageButton 控制脱底后的回到底部。[Output]: 稳定的 transcript DOM，关键边界为单个  活动 assistant 气泡。\r\nTODO:记录日志，我需要端到端分析显示遗漏和重复的原因",
+            "lang": "en"
           }
         ]
       },
@@ -1396,6 +1324,96 @@
             "content": "Release completed for ELM-REQ-OPENCODE-UX full-model rework batch. Scope commit: c3c6259351e895bf96a4071bd247c75b2d18d153. Runtime tasks: TASK-018 and TASK-022. QA passed, audit passed. Release log updated with full intent traceability matrix and 100% verification statement. Trigger addressed: assistant transcript DOM fragmentation and remount churn.",
             "timestamp": "2026-04-16T02:15:02.761Z",
             "path": "SprintRleaseLog.md"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Call Adapter API",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Call Adapter API governs extension-side HTTP and SSE integration contracts and exposes the raw transport metadata needed to diagnose duplicate, missing, or reordered run events.\n[Input]: Prompt payloads, capture payloads, username context, selected agent, optional session id, feedback requests, optional API key configuration, and SSE connection context.\n[Processing]: Build validated HTTP request bodies and headers for run start, answer submission, feedback submission, and SSE stream setup; parse normalized success or failure responses with schema validation; preserve raw event transport identifiers and semantic metadata provided by the adapter; surface connection-open, message, error, and reconnect transitions; and emit transport-level diagnostics needed to distinguish upstream duplication from extension-side replay.\n[Output]: Typed extension-side API results, stream connections aligned to the adapter contract, and transport diagnostics for SSE lifecycle and payload identity.\n[Acceptance Criteria]: Requests include authentication when configured; invalid or failed responses are normalized; stream payload parsing preserves available semantic identity fields; connection and reconnect transitions are observable in diagnostics; transport diagnostics allow the team to determine whether duplication originates before or after sidepanel acceptance.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Consume Normalized Run Stream",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Consume Normalized Run Stream governs sidepanel receipt of normalized run events, canonical acceptance of those events, persistence coordination, and observability for duplicate, missing, and out-of-order stream behavior.\n[Input]: Run id, adapter SSE endpoint, normalized run events, current side-panel state, prior accepted event identities, accepted ordering frontier, and current persistence/synchronization status.\n[Processing]: Open the EventSource stream, validate each incoming payload, derive a canonical event key using semantic identity and stable message metadata before falling back to runId plus sequence or raw id, accept only the first event per canonical key, reject stale or replayed events that do not advance the accepted frontier, log accepted, duplicate, gap, and out-of-order decisions, persist only accepted events, update run lifecycle state from accepted evidence, and synchronize only reconciled accepted state to background.\n[Output]: An updated live conversation state containing accepted ordered run events, accepted-frontier metadata, derived run status, final output snapshots, stream connection state, and structured stream diagnostics.\n[Acceptance Criteria]: Semantically duplicate events are not appended twice even when raw ids differ; accepted events advance in deterministic order or are classified as out-of-order with diagnostics; missing-sequence and replay conditions are logged with run id and canonical key; terminal evidence updates run status only from accepted events; refresh or reconnect does not cause already accepted events to be re-appended.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-FUNC-PY-NORMALIZE-EVENTS",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Normalize OpenCode Events",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "[Input]: Raw OpenCode global SSE events, run session context, buffered part deltas, and canonical remote-agent evidence.\n[Processing]: Filter events by session, enforce primary-agent consistency, transform OpenCode status, text, reasoning, tool, question, idle, and error events into NormalizedRunEvent records, and buffer part deltas until part type is known.\n[Output]: A browser-consumable stream of normalized thinking, tool_call, question, result, or error events.\n[Acceptance Criteria]: Session-unrelated events are ignored; assistant text and reasoning are distinguished semantically; question and tool events are normalized for UI use; agent mismatches produce explicit runtime failure.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "ELM-FUNC-EXT-PERSIST-HISTORY",
+        "type": "ApplicationFunction",
+        "name": [
+          {
+            "value": "Persist Run History",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "An ApplicationFunction represents automated application behavior grouped by required application resources or competencies. In this architecture, Persist Run History governs durable storage of canonical run artifacts so refresh, reopen, and replay use accepted event identities rather than reintroducing duplicate or unordered history.\n[Input]: Run records, accepted normalized run events, answer records, session identifiers, canonical event identities, and persistence diagnostics context.\n[Processing]: Persist run artifacts with stable canonical event identity metadata, upsert events idempotently for each run, preserve accepted event order and answer order, expose run detail reload APIs that return deterministic ordered artifacts, and log persistence writes, duplicate-write suppression, and ordering anomalies.\n[Output]: A durable browser-side run history with per-run detail, canonical event identity metadata, answer history, and session navigation views.\n[Acceptance Criteria]: Refresh or reopen replays the same accepted event set without adding duplicates; persisted events remain associated with the correct run and ordered deterministically; duplicate writes are suppressed or surfaced with diagnostics; session grouping remains stable when session ids are present.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "system-architect",
+            "layer": "application",
+            "aspect": "behavior"
           }
         }
       }
@@ -1764,22 +1782,6 @@
         ]
       },
       {
-        "identifier": "REL-ASSIGN-EXT-SIDEPANEL-CONSUME-STREAM",
-        "type": "Assignment",
-        "name": [
-          {
-            "value": "Side panel consumes run stream"
-          }
-        ],
-        "source": "ELM-COMP-EXT-SIDEPANEL",
-        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-        "documentation": [
-          {
-            "value": "The side-panel experience is responsible for receiving, validating, and projecting the normalized SSE run stream."
-          }
-        ]
-      },
-      {
         "identifier": "REL-ASSIGN-EXT-SIDEPANEL-PROJECT-TRANSCRIPT",
         "type": "Assignment",
         "name": [
@@ -1812,22 +1814,6 @@
         ]
       },
       {
-        "identifier": "REL-ASSIGN-EXT-SHARED-CALL-API",
-        "type": "Assignment",
-        "name": [
-          {
-            "value": "Shared layer calls adapter API"
-          }
-        ],
-        "source": "ELM-COMP-EXT-SHARED",
-        "target": "ELM-FUNC-EXT-CALL-ADAPTER-API",
-        "documentation": [
-          {
-            "value": "The shared extension contract layer constructs and validates adapter HTTP and SSE calls used across the extension."
-          }
-        ]
-      },
-      {
         "identifier": "REL-ASSIGN-EXT-SHARED-EVALUATE-RULES",
         "type": "Assignment",
         "name": [
@@ -1844,22 +1830,6 @@
         ]
       },
       {
-        "identifier": "REL-ASSIGN-EXT-SHARED-PERSIST-HISTORY",
-        "type": "Assignment",
-        "name": [
-          {
-            "value": "Shared layer persists history"
-          }
-        ],
-        "source": "ELM-COMP-EXT-SHARED",
-        "target": "ELM-FUNC-EXT-PERSIST-HISTORY",
-        "documentation": [
-          {
-            "value": "The shared extension contract layer provides run-history persistence and retrieval services for the UI."
-          }
-        ]
-      },
-      {
         "identifier": "REL-ASSIGN-PY-ADAPTER-START-RUN",
         "type": "Assignment",
         "name": [
@@ -1872,22 +1842,6 @@
         "documentation": [
           {
             "value": "The Python OpenCode adapter owns canonical agent discovery, session bootstrap, and run registration."
-          }
-        ]
-      },
-      {
-        "identifier": "REL-ASSIGN-PY-ADAPTER-NORMALIZE-EVENTS",
-        "type": "Assignment",
-        "name": [
-          {
-            "value": "Adapter normalizes events"
-          }
-        ],
-        "source": "ELM-COMP-PY-ADAPTER",
-        "target": "ELM-FUNC-PY-NORMALIZE-EVENTS",
-        "documentation": [
-          {
-            "value": "The Python OpenCode adapter converts raw OpenCode activity into normalized browser-facing events."
           }
         ]
       },
@@ -2132,22 +2086,6 @@
         ]
       },
       {
-        "identifier": "REL-TRIGGER-EXT-CONSUME-STREAM-RECONCILE-STATE",
-        "type": "Triggering",
-        "name": [
-          {
-            "value": "Accepted stream state triggers reconciliation"
-          }
-        ],
-        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-        "target": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
-        "documentation": [
-          {
-            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, accepted sidepanel stream-consumption updates initiate background run-state reconciliation so stale or duplicate snapshots are not rebroadcast."
-          }
-        ]
-      },
-      {
         "identifier": "REL-TRIGGER-RECONCILE-STATE-PROJECT-TRANSCRIPT",
         "type": "Triggering",
         "name": [
@@ -2160,38 +2098,6 @@
         "documentation": [
           {
             "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, reconciled canonical run state provides the stable basis for transcript projection and replay after refresh or reopen."
-          }
-        ]
-      },
-      {
-        "identifier": "REL-TRIGGER-CALL-API-CONSUME-STREAM",
-        "type": "Triggering",
-        "name": [
-          {
-            "value": "Adapter stream setup triggers stream consumption"
-          }
-        ],
-        "source": "ELM-FUNC-EXT-CALL-ADAPTER-API",
-        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-        "documentation": [
-          {
-            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, the shared adapter API contract establishes the SSE connection context that is then consumed by the sidepanel stream-consumption behavior."
-          }
-        ]
-      },
-      {
-        "identifier": "REL-TRIGGER-CONSUME-STREAM-PERSIST-HISTORY",
-        "type": "Triggering",
-        "name": [
-          {
-            "value": "Accepted stream events trigger history persistence"
-          }
-        ],
-        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-        "target": "ELM-FUNC-EXT-PERSIST-HISTORY",
-        "documentation": [
-          {
-            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, only accepted canonical stream events trigger durable run-history persistence so replay after refresh or reopen remains stable."
           }
         ]
       },
@@ -2824,22 +2730,6 @@
         "extensions": {}
       },
       {
-        "identifier": "REL-REALIZE-EXT-SHARED-RUN-EVENT-STREAM-CALL-API",
-        "type": "Realization",
-        "name": [
-          {
-            "value": "Run event stream interface realizes adapter call function"
-          }
-        ],
-        "source": "ELM-INTF-EXT-RUN-EVENT-STREAM",
-        "target": "ELM-FUNC-EXT-CALL-ADAPTER-API",
-        "documentation": [
-          {
-            "value": "Normalized Run Event Stream Interface 是 ELM-FUNC-EXT-CALL-ADAPTER-API 在 SSE 路径上的具体接口实现。"
-          }
-        ]
-      },
-      {
         "identifier": "REL-ACCESS-EXT-PROJECT-TRANSCRIPT-LIVE-PROJECTION-STATE",
         "type": "Access",
         "name": [
@@ -2904,54 +2794,6 @@
         ]
       },
       {
-        "identifier": "REL-TRIGGER-RUN-EVENT-STREAM-CONSUME-STREAM",
-        "type": "Triggering",
-        "name": [
-          {
-            "value": "Run event stream interface triggers stream consumption"
-          }
-        ],
-        "source": "ELM-INTF-EXT-RUN-EVENT-STREAM",
-        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-        "documentation": [
-          {
-            "value": "SSE 接口建立并产生 message/open/error 生命周期后，触发 sidepanel 的流消费函数。"
-          }
-        ]
-      },
-      {
-        "identifier": "REL-ACCESS-EXT-CONSUME-STREAM-NORMALIZED-RUN-EVENT",
-        "type": "Access",
-        "name": [
-          {
-            "value": "Consume stream function accesses normalized run events"
-          }
-        ],
-        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-        "target": "ELM-DO-EXT-NORMALIZED-RUN-EVENT",
-        "documentation": [
-          {
-            "value": "Consume Normalized Run Stream 直接消费带 canonical/transport 元数据的 NormalizedRunEvent。"
-          }
-        ]
-      },
-      {
-        "identifier": "REL-ACCESS-EXT-CONSUME-STREAM-STREAM-CONNECTION-STATE",
-        "type": "Access",
-        "name": [
-          {
-            "value": "Consume stream function accesses stream connection state"
-          }
-        ],
-        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-        "target": "ELM-DO-EXT-STREAM-CONNECTION-STATE",
-        "documentation": [
-          {
-            "value": "Consume Normalized Run Stream 在 connecting/streaming/reconnecting 与 question/terminal 状态间更新 StreamConnectionState。"
-          }
-        ]
-      },
-      {
         "identifier": "REL-REALIZE-EXT-SHARED-RUN-EVENT-STREAM-INTERFACE",
         "type": "Realization",
         "name": [
@@ -3012,22 +2854,6 @@
         "documentation": [
           {
             "value": "浏览器 EventSource SSE 传输能力支撑扩展侧 run event stream interface 的 open/message/error 生命周期。"
-          }
-        ]
-      },
-      {
-        "identifier": "REL-TRIGGER-RUN-EVENT-STREAM-TO-CONSUME-STREAM",
-        "type": "Triggering",
-        "name": [
-          {
-            "value": "Run event stream interface triggers stream consumption"
-          }
-        ],
-        "source": "ELM-INTF-EXT-SHARED-RUN-EVENT-STREAM",
-        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
-        "documentation": [
-          {
-            "value": "SSE message 到达后，经 createRunEventStream 的 handlers.onEvent 触发 sidepanel 的接纳与消费逻辑。"
           }
         ]
       },
@@ -3318,6 +3144,305 @@
           "ai4pb": {
             "managedBy": "opencode-runtime",
             "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-SHARED-CALL-API",
+        "type": "Assignment",
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+        "name": [
+          {
+            "value": "Shared layer calls adapter API",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "The shared extension contract layer constructs and validates adapter HTTP and SSE calls used across the extension.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TRIGGER-CALL-API-CONSUME-STREAM",
+        "type": "Triggering",
+        "source": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "name": [
+          {
+            "value": "Adapter stream setup triggers stream consumption",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, the shared adapter API contract establishes the SSE connection context that is then consumed by the sidepanel stream-consumption behavior.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-SHARED-RUN-EVENT-STREAM-CALL-API",
+        "type": "Realization",
+        "source": "ELM-INTF-EXT-RUN-EVENT-STREAM",
+        "target": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+        "name": [
+          {
+            "value": "Run event stream interface realizes adapter call function",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Normalized Run Event Stream Interface 是 ELM-FUNC-EXT-CALL-ADAPTER-API 在 SSE 路径上的具体接口实现。",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-SIDEPANEL-CONSUME-STREAM",
+        "type": "Assignment",
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "name": [
+          {
+            "value": "Side panel consumes run stream",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "The side-panel experience is responsible for receiving, validating, and projecting the normalized SSE run stream.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TRIGGER-EXT-CONSUME-STREAM-RECONCILE-STATE",
+        "type": "Triggering",
+        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "target": "ELM-FUNC-EXT-RECONCILE-RUN-STATE",
+        "name": [
+          {
+            "value": "Accepted stream state triggers reconciliation",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, accepted sidepanel stream-consumption updates initiate background run-state reconciliation so stale or duplicate snapshots are not rebroadcast.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TRIGGER-CONSUME-STREAM-PERSIST-HISTORY",
+        "type": "Triggering",
+        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "target": "ELM-FUNC-EXT-PERSIST-HISTORY",
+        "name": [
+          {
+            "value": "Accepted stream events trigger history persistence",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Describe the relationship as a triggering: the source behavior causes or precedes the target behavior. In this architecture, only accepted canonical stream events trigger durable run-history persistence so replay after refresh or reopen remains stable.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TRIGGER-RUN-EVENT-STREAM-CONSUME-STREAM",
+        "type": "Triggering",
+        "source": "ELM-INTF-EXT-RUN-EVENT-STREAM",
+        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "name": [
+          {
+            "value": "Run event stream interface triggers stream consumption",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "SSE 接口建立并产生 message/open/error 生命周期后，触发 sidepanel 的流消费函数。",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-CONSUME-STREAM-NORMALIZED-RUN-EVENT",
+        "type": "Access",
+        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "target": "ELM-DO-EXT-NORMALIZED-RUN-EVENT",
+        "name": [
+          {
+            "value": "Consume stream function accesses normalized run events",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Consume Normalized Run Stream 直接消费带 canonical/transport 元数据的 NormalizedRunEvent。",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-CONSUME-STREAM-STREAM-CONNECTION-STATE",
+        "type": "Access",
+        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "target": "ELM-DO-EXT-STREAM-CONNECTION-STATE",
+        "name": [
+          {
+            "value": "Consume stream function accesses stream connection state",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Consume Normalized Run Stream 在 connecting/streaming/reconnecting 与 question/terminal 状态间更新 StreamConnectionState。",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TRIGGER-RUN-EVENT-STREAM-TO-CONSUME-STREAM",
+        "type": "Triggering",
+        "source": "ELM-INTF-EXT-SHARED-RUN-EVENT-STREAM",
+        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "name": [
+          {
+            "value": "Run event stream interface triggers stream consumption",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "SSE message 到达后，经 createRunEventStream 的 handlers.onEvent 触发 sidepanel 的接纳与消费逻辑。",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ASSIGN-PY-ADAPTER-NORMALIZE-EVENTS",
+        "type": "Assignment",
+        "source": "ELM-COMP-PY-ADAPTER",
+        "target": "ELM-FUNC-PY-NORMALIZE-EVENTS",
+        "name": [
+          {
+            "value": "Adapter normalizes events",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "The Python OpenCode adapter converts raw OpenCode activity into normalized browser-facing events.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "{A254BD08-96A6-4baf-B860-9F7461126FFA}",
+        "type": "Access",
+        "source": "ELM-FUNC-PY-NORMALIZE-EVENTS",
+        "target": "ELM-DATA-EXT-NORMALIZED-RUN-EVENT",
+        "name": [
+          {
+            "value": "转化为前端标准武装载荷",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "(no documentation)",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
+          }
+        }
+      },
+      {
+        "identifier": "REL-ASSIGN-EXT-SHARED-PERSIST-HISTORY",
+        "type": "Assignment",
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-FUNC-EXT-PERSIST-HISTORY",
+        "name": [
+          {
+            "value": "Shared layer persists history",
+            "lang": "en"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "The shared extension contract layer provides run-history persistence and retrieval services for the UI.",
+            "lang": "en"
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "human-architect"
           }
         }
       }
