@@ -52,7 +52,7 @@
           "releaseLogPath": "SprintRleaseLog.md",
           "updatedAt": "2026-04-16T02:15:02.761Z"
         },
-        "updatedAt": "2026-04-16T02:12:04.551Z"
+        "updatedAt": "2026-04-16T06:54:37.457Z"
       }
     }
   },
@@ -914,6 +914,216 @@
             ]
           }
         }
+      },
+      {
+        "identifier": "ELM-TECH-EXT-BROWSER-EVENTSOURCE-SSE",
+        "type": "TechnologyService",
+        "name": [
+          {
+            "value": "Browser EventSource SSE Transport"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "扩展会话显示链路使用的浏览器级 SSE 传输能力。证据：extension/src/shared/api.ts:createRunEventStream 通过 new EventSource(`${apiBaseUrl}/api/runs/{runId}/events`) 建立连接，并处理 open/message/error/reconnecting 生命周期。核心能力：建立单向事件流、接收 message 事件、报告 open/error、保留 reconnectCount 诊断。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-INTF-EXT-RUN-EVENT-STREAM",
+        "type": "ApplicationInterface",
+        "name": [
+          {
+            "value": "Normalized Run Event Stream Interface"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "扩展共享契约层暴露的运行事件流接口。证据：extension/src/shared/api.ts:createRunEventStream。请求：GET /api/runs/{runId}/events，SSE，api_key 通过 query 传递。响应载荷：JSON 序列化的 NormalizedRunEvent。接口语义：open -> streaming；message -> 解析/补充 canonical 与 transport 元数据；error -> 连接失败或重连状态。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-DO-EXT-NORMALIZED-RUN-EVENT",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "NormalizedRunEvent"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "侧边栏会话显示链路的标准事件载荷。证据：extension/src/shared/protocol.ts:NormalizedRunEvent、extension/src/shared/api.ts:streamEventSchema/createRunEventStream。核心字段：id, runId, type(thinking|tool_call|question|result|error), createdAt, sequence, message, title?, data?, logData?, tool?, question?, semantic{channel, emissionKind, identity, itemKind, messageId?, partId?}, canonical{key, identitySource, orderKey, rawEventId, semantic*}, transport{rawEventId, receivedAt, reconnectCount, streamStatus}。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-DO-EXT-STREAM-CONNECTION-STATE",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "StreamConnectionState"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "SSE 连接状态对象。证据：extension/src/shared/types.ts:StreamConnectionState、extension/src/sidepanel/useSidepanelController.ts:onStatusChange/onEvent。核心字段：runId, status(idle|connecting|streaming|reconnecting|waiting_for_answer|done|error), pendingQuestionId, reconnectCount。用于将传输层状态映射到 Sidepanel UI。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-DO-EXT-SYNCABLE-ASSISTANT-RUN-STATE",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "SyncableAssistantRunState"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Sidepanel 在接收并接受 SSE 事件后生成的可同步运行快照。证据：extension/src/shared/types.ts:SyncableAssistantRunState、extension/src/sidepanel/useSidepanelController.ts:syncRunStateToBackground。核心字段：status, activeSessionId, capturedFields, runPrompt, runEvents, currentRun, answers, error, errorMessage, matchedRule, lastCapturedUrl, usernameContext, stream, runEventState, syncMetadata。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-DO-EXT-LIVE-TRANSCRIPT-PROJECTION-STATE",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "LiveTranscriptProjectionState"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "直播式消息投影中间态。证据：extension/src/sidepanel/reasoningTimeline.ts:LiveTranscriptProjectionState、processLiveProjectionEvent、buildIncrementalLiveTranscriptSegmentReadModel。核心字段：runId, prompt, eventCount, answerCount, eventIds, answerIds, items, assistantResponse{text, firstResponseAt, lastResponseAt, preferredMessageId, hasResponseEvent}, latestResultText, reasoningOnlyText, assistantGroupIndex, assistantNodeIndex, currentAssistantLogicalMessageId, currentAssistantGroupAnchorId, currentOutputAnchorId, currentOutputItemId, assistantTextSoFar, segmentBaselineText。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-DO-EXT-TRANSCRIPT-READ-MODEL",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "TranscriptReadModel"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "供会话视图消费的稳定转录读模型。证据：extension/src/sidepanel/reasoningTimeline.ts:TranscriptReadModel/buildStableTranscriptProjection、extension/src/sidepanel/useSidepanelController.ts:transcriptReadModel。核心字段：messages, sealedMessages, activeMessage, activeAssistantMessageId, tailPatch, processParts, finalAnswerPart, questionPart, errorPart, terminalState, parts, summaryPart, summaryState, historicalMessages, historicalParts, liveMessages, liveParts, historicalSignature, liveSignature, liveProjectionState, liveProjectionDebug, anomalies。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-DO-EXT-TRANSCRIPT-TAIL-PATCH",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "TranscriptTailPatch"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "当前活动助手消息的增量尾部补丁。证据：extension/src/sidepanel/reasoningTimeline.ts:TranscriptTailPatchModel/mergeTranscriptMessageCollections、extension/src/sidepanel/reasoningTimelineView.tsx:ActiveTailRenderer。核心字段：activeMessageId, anchorId, fullText, deltaText, updatedAt, revision, terminal。用途：只刷新活动 assistant bubble 的末尾文本，而不重渲历史消息树。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-INTF-EXT-REASONING-TIMELINE-RENDER",
+        "type": "ApplicationInterface",
+        "name": [
+          {
+            "value": "Reasoning Timeline Render Interface"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "会话显示组件对上层状态的渲染接口。证据：extension/src/sidepanel/reasoningTimelineView.tsx:ReasoningTimeline、ConversationViewport、ProcessDisclosure、FinalAnswerPanel、ActiveTailRenderer。输入：transcriptReadModel, events, answers, runStatus, streamStatus, finalOutput, errorMessage, updatedAt, pendingQuestionId, onRetry, onQuestionSubmit。输出：历史消息列表、单个活动 assistant article、details 折叠过程区、Final Answer 主展示区、Latest Message 按钮。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-INTF-EXT-SHARED-RUN-EVENT-STREAM",
+        "type": "ApplicationInterface",
+        "name": [
+          {
+            "value": "Normalized Run Event Stream Interface"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "扩展侧 SSE 运行事件接收接口。证据：extension/src/shared/api.ts:createRunEventStream (lines 148-249)。\n[Input]: runId、可选 api_key、handlers(onEvent/onError/onStatusChange/onTransportLog/shouldClose)。\n[Processing]: 构造 /api/runs/{runId}/events URL，建立 EventSource，监听 open/message/error；对 message JSON 进行 zod 校验，补充 canonical 与 transport 元数据，并回调流状态与传输诊断。\n[Output]: 回调投递的 NormalizedRunEvent 流，以及 connecting/streaming/reconnecting 状态变化。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-DATA-EXT-NORMALIZED-RUN-EVENT",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "Normalized Run Event"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "扩展会话显示链路中的标准化运行事件对象。证据：extension/src/shared/protocol.ts:113-140, 247-330；extension/src/shared/api.ts:194-218。\n核心字段：id, runId, type(thinking|tool_call|question|result|error), createdAt, sequence, message, title?, data?, logData?, tool?, question?, semantic{channel, emissionKind, identity, itemKind, messageId?, partId?}, canonical{key, identitySource, orderKey, rawEventId, semantic*}, transport{rawEventId, receivedAt, reconnectCount, streamStatus}。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-DATA-EXT-RUN-EVENT-FRONTIER",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "Run Event Acceptance Frontier"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Sidepanel 对已接收 SSE 事件进行去重、排序、重放抑制后的接收前沿状态。证据：extension/src/sidepanel/model.ts:136-155, 157-261。\n核心字段：frontier{version, acceptedEventCount, lastSequence, contiguousSequence, lastAcceptedCanonicalKey, lastAcceptedRawEventId, lastAcceptedAt}, acceptedCanonicalKeys[], diagnostics[{decision, classification, canonicalEventKey, sequence, semanticIdentity, messageId, partId, channel, emissionKind}]。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-DATA-EXT-TRANSCRIPT-READ-MODEL",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "Transcript Read Model"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "由历史 run 段与当前 live 段投影出的稳定会话读模型。证据：extension/src/sidepanel/reasoningTimeline.ts:208-231, 2420-2460, 2635-2883；extension/src/sidepanel/useSidepanelController.ts:477-485。\n核心字段：messages, sealedMessages, activeMessage, activeAssistantMessageId, processParts, finalAnswerPart, questionPart, errorPart, summaryPart, tailPatch, terminalState, historicalMessages, liveMessages, historicalSignature, liveSignature, liveProjectionState, liveProjectionDebug, anomalies。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-DATA-EXT-TRANSCRIPT-TAIL-PATCH",
+        "type": "DataObject",
+        "name": [
+          {
+            "value": "Transcript Tail Patch"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "当前活动 assistant 消息的局部增量渲染补丁。证据：extension/src/sidepanel/reasoningTimeline.ts:2681-2694；extension/src/sidepanel/reasoningTimelineView.tsx:403-506。\n核心字段：activeMessageId, anchorId, fullText, deltaText, updatedAt, revision, terminal。用于仅刷新 active tail，而不重渲染历史消息列表。"
+          }
+        ]
+      },
+      {
+        "identifier": "ELM-INTF-EXT-SIDEPANEL-CONVERSATION-VIEWPORT",
+        "type": "ApplicationInterface",
+        "name": [
+          {
+            "value": "Conversation Transcript Viewport Interface"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Sidepanel 会话主舞台渲染接口。证据：extension/src/sidepanel/components/stage/MainStage.tsx:116-139；extension/src/sidepanel/reasoningTimelineView.tsx:577-667, 698-938。\n[Input]: transcriptReadModel 派生出的 sealedMessages、processParts、finalAnswerPart、questionPart、errorPart、summaryPart、tailPatch、terminalState，以及 disclosure/scroll/feedback/retry/question-submit 回调。\n[Processing]: 先渲染历史消息列表，再维持单个活动 assistant article；通过 ProcessDisclosure 展示 reasoning/tool，FinalAnswerPanel 展示最终回答，LatestMessageButton 控制脱底后的回到底部。\n[Output]: 稳定的 transcript DOM，关键边界为单个 <article class=\"transcript-message-assistant\"> 活动 assistant 气泡。"
+          }
+        ]
       },
       {
         "identifier": "PROJECT-CURRENT",
@@ -2446,6 +2656,426 @@
         "documentation": [
           {
             "value": "A Triggering relationship represents that one behavior element causes or precedes another behavior element. In this architecture, Project Transcript Read Model emits structural and tail-oriented state changes that drive Render Incremental Transcript Tail without exposing raw SSE volatility to the renderer."
+          }
+        ]
+      },
+      {
+        "identifier": "REL-SERVE-BROWSER-SSE-TO-EXT-SHARED",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Browser SSE serves shared extension contract layer"
+          }
+        ],
+        "source": "ELM-TECH-EXT-BROWSER-EVENTSOURCE-SSE",
+        "target": "ELM-COMP-EXT-SHARED",
+        "documentation": [
+          {
+            "value": "浏览器 EventSource SSE 传输能力为扩展共享契约层提供运行事件流连接能力。证据：extension/src/shared/api.ts:createRunEventStream。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-COMP-EXT-SHARED-RUN-EVENT-STREAM",
+        "type": "Composition",
+        "name": [
+          {
+            "value": "Shared layer exposes normalized run event stream interface"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-INTF-EXT-RUN-EVENT-STREAM",
+        "documentation": [
+          {
+            "value": "扩展共享契约层组合出规范化运行事件流接口，供 sidepanel 使用。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-SHARED-NORMALIZED-RUN-EVENT",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Shared contract layer accesses normalized run events"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-DATA-EXT-NORMALIZED-RUN-EVENT",
+        "documentation": [
+          {
+            "value": "共享契约层负责校验、补全 canonical/transport 元数据并输出 NormalizedRunEvent。"
+          }
+        ],
+        "extensions": {}
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-SIDEPANEL-STREAM-CONNECTION-STATE",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Side panel accesses stream connection state"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-DO-EXT-STREAM-CONNECTION-STATE",
+        "documentation": [
+          {
+            "value": "sidepanel 在连接、流式、重连、等待回答和终态之间维护 StreamConnectionState。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-SIDEPANEL-SYNCABLE-RUN-STATE",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Side panel accesses syncable assistant run state"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-DO-EXT-SYNCABLE-ASSISTANT-RUN-STATE",
+        "documentation": [
+          {
+            "value": "sidepanel 在接受事件后生成可同步快照并回传 background。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-SIDEPANEL-LIVE-PROJECTION-STATE",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Side panel accesses live transcript projection state"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-DO-EXT-LIVE-TRANSCRIPT-PROJECTION-STATE",
+        "documentation": [
+          {
+            "value": "sidepanel 通过 run-scoped live projection state 聚合 reasoning/tool/text/question/error 事件。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-SIDEPANEL-TRANSCRIPT-READ-MODEL",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Side panel accesses transcript read model"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-DATA-EXT-TRANSCRIPT-READ-MODEL",
+        "documentation": [
+          {
+            "value": "useSidepanelController 构建并缓存 TranscriptReadModel，供主舞台渲染使用。"
+          }
+        ],
+        "extensions": {}
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-SIDEPANEL-TRANSCRIPT-TAIL-PATCH",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Side panel accesses transcript tail patch"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-DATA-EXT-TRANSCRIPT-TAIL-PATCH",
+        "documentation": [
+          {
+            "value": "ReasoningTimeline / ActiveTailRenderer 使用 tailPatch 对 active assistant 文本进行局部刷新。"
+          }
+        ],
+        "extensions": {}
+      },
+      {
+        "identifier": "REL-COMP-EXT-SIDEPANEL-REASONING-TIMELINE-RENDER",
+        "type": "Composition",
+        "name": [
+          {
+            "value": "Side panel composes reasoning timeline render interface"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-INTF-EXT-REASONING-TIMELINE-RENDER",
+        "documentation": [
+          {
+            "value": "Extension Side Panel Experience 组合出 ReasoningTimeline 渲染接口。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-SIDEPANEL-NORMALIZED-RUN-EVENT",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Side panel accesses normalized run events"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-DATA-EXT-NORMALIZED-RUN-EVENT",
+        "documentation": [
+          {
+            "value": "useSidepanelController 在 onEvent 回调中接收并消费 NormalizedRunEvent，用于生命周期推进与 transcript 投影。"
+          }
+        ],
+        "extensions": {}
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-SHARED-RUN-EVENT-STREAM-CALL-API",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Run event stream interface realizes adapter call function"
+          }
+        ],
+        "source": "ELM-INTF-EXT-RUN-EVENT-STREAM",
+        "target": "ELM-FUNC-EXT-CALL-ADAPTER-API",
+        "documentation": [
+          {
+            "value": "Normalized Run Event Stream Interface 是 ELM-FUNC-EXT-CALL-ADAPTER-API 在 SSE 路径上的具体接口实现。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-PROJECT-TRANSCRIPT-LIVE-PROJECTION-STATE",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Transcript projection accesses live projection state"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "target": "ELM-DO-EXT-LIVE-TRANSCRIPT-PROJECTION-STATE",
+        "documentation": [
+          {
+            "value": "Project Transcript Read Model 以 LiveTranscriptProjectionState 维护 run-scoped assistant 聚合与增量处理。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-PROJECT-TRANSCRIPT-READ-MODEL",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Transcript projection accesses transcript read model"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "target": "ELM-DO-EXT-TRANSCRIPT-READ-MODEL",
+        "documentation": [
+          {
+            "value": "Project Transcript Read Model 产出并复用 TranscriptReadModel 供渲染层消费。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-RENDER-INCREMENTAL-TAIL-PATCH",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Incremental renderer accesses transcript tail patch"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+        "target": "ELM-DO-EXT-TRANSCRIPT-TAIL-PATCH",
+        "documentation": [
+          {
+            "value": "Render Incremental Transcript Tail 使用 TranscriptTailPatch 驱动 ActiveTailRenderer 的增量 markdown 更新。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-RENDER-INTERFACE-RENDER-FUNC",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Reasoning timeline render interface realizes incremental transcript rendering"
+          }
+        ],
+        "source": "ELM-INTF-EXT-REASONING-TIMELINE-RENDER",
+        "target": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+        "documentation": [
+          {
+            "value": "ReasoningTimeline/ConversationViewport/FinalAnswerPanel/ActiveTailRenderer 构成增量会话渲染行为的具体界面实现。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-TRIGGER-RUN-EVENT-STREAM-CONSUME-STREAM",
+        "type": "Triggering",
+        "name": [
+          {
+            "value": "Run event stream interface triggers stream consumption"
+          }
+        ],
+        "source": "ELM-INTF-EXT-RUN-EVENT-STREAM",
+        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "documentation": [
+          {
+            "value": "SSE 接口建立并产生 message/open/error 生命周期后，触发 sidepanel 的流消费函数。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-CONSUME-STREAM-NORMALIZED-RUN-EVENT",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Consume stream function accesses normalized run events"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "target": "ELM-DO-EXT-NORMALIZED-RUN-EVENT",
+        "documentation": [
+          {
+            "value": "Consume Normalized Run Stream 直接消费带 canonical/transport 元数据的 NormalizedRunEvent。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-CONSUME-STREAM-STREAM-CONNECTION-STATE",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Consume stream function accesses stream connection state"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "target": "ELM-DO-EXT-STREAM-CONNECTION-STATE",
+        "documentation": [
+          {
+            "value": "Consume Normalized Run Stream 在 connecting/streaming/reconnecting 与 question/terminal 状态间更新 StreamConnectionState。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-SHARED-RUN-EVENT-STREAM-INTERFACE",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Shared contract layer realizes run event stream interface"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SHARED",
+        "target": "ELM-INTF-EXT-SHARED-RUN-EVENT-STREAM",
+        "documentation": [
+          {
+            "value": "extension/src/shared/api.ts:createRunEventStream 实现扩展侧 normalized run event SSE 接口。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-EXT-SIDEPANEL-RUN-EVENT-FRONTIER",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Side panel accesses run event acceptance frontier"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-DATA-EXT-RUN-EVENT-FRONTIER",
+        "documentation": [
+          {
+            "value": "sidepanel 在 acceptIncomingRunEvent 中维护 acceptedCanonicalKeys/frontier/diagnostics，确保 SSE 事件去重和顺序接纳。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-EXT-SIDEPANEL-CONVERSATION-VIEWPORT-INTERFACE",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Side panel realizes conversation viewport interface"
+          }
+        ],
+        "source": "ELM-COMP-EXT-SIDEPANEL",
+        "target": "ELM-INTF-EXT-SIDEPANEL-CONVERSATION-VIEWPORT",
+        "documentation": [
+          {
+            "value": "MainStage 与 ReasoningTimelineView 实现会话主舞台接口，负责最终消息渲染显示。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-SERVE-BROWSER-SSE-TO-RUN-EVENT-STREAM-INTERFACE",
+        "type": "Serving",
+        "name": [
+          {
+            "value": "Browser SSE serves run event stream interface"
+          }
+        ],
+        "source": "ELM-TECH-EXT-BROWSER-EVENTSOURCE-SSE",
+        "target": "ELM-INTF-EXT-SHARED-RUN-EVENT-STREAM",
+        "documentation": [
+          {
+            "value": "浏览器 EventSource SSE 传输能力支撑扩展侧 run event stream interface 的 open/message/error 生命周期。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-TRIGGER-RUN-EVENT-STREAM-TO-CONSUME-STREAM",
+        "type": "Triggering",
+        "name": [
+          {
+            "value": "Run event stream interface triggers stream consumption"
+          }
+        ],
+        "source": "ELM-INTF-EXT-SHARED-RUN-EVENT-STREAM",
+        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+        "documentation": [
+          {
+            "value": "SSE message 到达后，经 createRunEventStream 的 handlers.onEvent 触发 sidepanel 的接纳与消费逻辑。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-PROJECT-TRANSCRIPT-READ-MODEL",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Transcript projection accesses transcript read model"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "target": "ELM-DATA-EXT-TRANSCRIPT-READ-MODEL",
+        "documentation": [
+          {
+            "value": "buildStableTranscriptProjection 将 live/historical 段归并为稳定 TranscriptReadModel。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-ACCESS-RENDER-INCREMENTAL-TAIL-PATCH",
+        "type": "Access",
+        "name": [
+          {
+            "value": "Incremental renderer accesses transcript tail patch"
+          }
+        ],
+        "source": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+        "target": "ELM-DATA-EXT-TRANSCRIPT-TAIL-PATCH",
+        "documentation": [
+          {
+            "value": "ReasoningTimelineView 通过 tailPatch 与 ActiveTailRenderer 以 <=30fps 刷新当前 assistant 消息尾部。"
+          }
+        ]
+      },
+      {
+        "identifier": "REL-REALIZE-CONVERSATION-VIEWPORT-RENDERER-SERVICE",
+        "type": "Realization",
+        "name": [
+          {
+            "value": "Conversation viewport interface realizes renderer service"
+          }
+        ],
+        "source": "ELM-INTF-EXT-SIDEPANEL-CONVERSATION-VIEWPORT",
+        "target": "ELM-APP-EXT-CONVERSATION-RENDERER",
+        "documentation": [
+          {
+            "value": "Conversation viewport 接口把稳定 transcript read model 呈现为最终可见会话 DOM。"
           }
         ]
       },
