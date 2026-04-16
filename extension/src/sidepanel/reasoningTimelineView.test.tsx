@@ -442,15 +442,190 @@ describe("ReasoningTimeline transcript rendering", () => {
 
     expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("最终回答");
     expect(container.querySelector("[data-component='process-disclosure']")?.textContent).toContain("查看过程");
+    const details = container.querySelector(".conversation-process-details") as HTMLDetailsElement | null;
+    expect(details?.open).toBe(false);
+    expect(details?.querySelector("summary")?.textContent).toContain("查看过程");
 
-    const toggle = container.querySelector(".conversation-process-toggle") as HTMLButtonElement | null;
+    const toggle = container.querySelector(".conversation-process-toggle") as HTMLElement | null;
     await act(async () => {
-      toggle?.click();
+      toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
+    expect(details?.open).toBe(true);
     expect(container.querySelector("[data-part-kind='reasoning']")?.textContent).toContain("先分析页面上下文");
     expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("调用搜索工具");
     expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("最终回答");
+  });
+
+  it("renders one user article and one assistant article with details-based disclosure for a single run", async () => {
+    const transcriptReadModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-single",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, {
+            runId: "run-single",
+            type: "thinking",
+            message: "先分析",
+            semantic: {
+              channel: "reasoning",
+              emissionKind: "delta",
+              identity: "reasoning:msg-single:1",
+              itemKind: "reasoning",
+              messageId: "msg-single",
+              partId: "reasoning-1"
+            }
+          }),
+          createEvent(2, {
+            runId: "run-single",
+            type: "tool_call",
+            message: "调用工具",
+            semantic: {
+              channel: "tool",
+              emissionKind: "delta",
+              identity: "tool:msg-single:1",
+              itemKind: "tool",
+              messageId: "msg-single",
+              partId: "tool-1"
+            }
+          }),
+          createEvent(3, {
+            runId: "run-single",
+            type: "thinking",
+            message: "A",
+            data: { field: "text", message_id: "msg-single" }
+          })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: true
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={transcriptReadModel}
+          runId="run-single"
+          prompt="当前问题"
+          events={[]}
+          runStatus="streaming"
+        />
+      );
+    });
+
+    const articles = container.querySelectorAll("article.transcript-message");
+    expect(articles).toHaveLength(2);
+    expect(container.querySelectorAll("article.transcript-message-user")).toHaveLength(1);
+    expect(container.querySelectorAll("article.transcript-message-assistant")).toHaveLength(1);
+    expect(container.querySelector("article.transcript-message-assistant article.transcript-message")).toBeNull();
+    const details = container.querySelector(".conversation-process-details") as HTMLDetailsElement | null;
+    expect(details).toBeTruthy();
+    expect(details?.open).toBe(false);
+    expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("A");
+  });
+
+  it("keeps the assistant article stable across streaming growth and terminal finalize", async () => {
+    const raf = createRafController();
+    const performanceSpy = vi.spyOn(performance, "now");
+    let now = 0;
+    performanceSpy.mockImplementation(() => now);
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => raf.request(callback)));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn((id: number) => raf.cancel(id)));
+
+    const firstModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-grow",
+        prompt: "当前问题",
+        events: [createEvent(1, { runId: "run-grow", type: "thinking", message: "A", data: { field: "text", message_id: "msg-grow" } })],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    await act(async () => {
+      root.render(<ReasoningTimeline transcriptReadModel={firstModel} runId="run-grow" prompt="当前问题" events={[]} runStatus="streaming" live />);
+      now = 16;
+      raf.flush(now);
+    });
+
+    const assistantArticleA = container.querySelector("article.transcript-message-assistant");
+    const finalPanelA = container.querySelector("[data-component='final-answer-panel']");
+    const rendererA = container.querySelector("[data-component='active-tail-renderer']");
+
+    const secondModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-grow",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, { runId: "run-grow", type: "thinking", message: "A", data: { field: "text", message_id: "msg-grow" } }),
+          createEvent(2, { runId: "run-grow", type: "thinking", message: "B", data: { field: "text", message_id: "msg-grow" } })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      },
+      previousModel: firstModel
+    });
+
+    await act(async () => {
+      root.render(<ReasoningTimeline transcriptReadModel={secondModel} runId="run-grow" prompt="当前问题" events={[]} runStatus="streaming" live />);
+      now = 20;
+      raf.flush(now);
+      vi.runOnlyPendingTimers();
+      now = 60;
+      raf.flush(now);
+      await Promise.resolve();
+    });
+
+    const assistantArticleB = container.querySelector("article.transcript-message-assistant");
+    const finalPanelB = container.querySelector("[data-component='final-answer-panel']");
+    const rendererB = container.querySelector("[data-component='active-tail-renderer']");
+    expect(assistantArticleA).toBe(assistantArticleB);
+    expect(finalPanelA).toBe(finalPanelB);
+    expect(rendererA).toBe(rendererB);
+
+    const thirdModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-grow",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, { runId: "run-grow", type: "thinking", message: "A", data: { field: "text", message_id: "msg-grow" } }),
+          createEvent(2, { runId: "run-grow", type: "thinking", message: "B", data: { field: "text", message_id: "msg-grow" } }),
+          createEvent(3, { runId: "run-grow", type: "result", message: "ABC", data: { message_id: "msg-grow" } })
+        ],
+        status: "done",
+        runStatus: "done",
+        streamStatus: "done",
+        finalOutput: "ABC",
+        includeSummary: true,
+        includeToolCallParts: false
+      },
+      previousModel: secondModel
+    });
+
+    await act(async () => {
+      root.render(<ReasoningTimeline transcriptReadModel={thirdModel} runId="run-grow" prompt="当前问题" events={[]} runStatus="done" live />);
+      await Promise.resolve();
+    });
+
+    const assistantArticleC = container.querySelector("article.transcript-message-assistant");
+    const finalPanelC = container.querySelector("[data-component='final-answer-panel']");
+    expect(assistantArticleA).toBe(assistantArticleC);
+    expect(finalPanelA).toBe(finalPanelC);
+    expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("ABC");
+    performanceSpy.mockRestore();
   });
 
   it("does not rerender historical list during active tail updates", async () => {

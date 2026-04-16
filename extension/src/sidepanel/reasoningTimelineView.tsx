@@ -363,7 +363,7 @@ function ProcessDisclosure({
 }: {
   parts: TranscriptPartModel[];
   open: boolean;
-  onToggle: () => void;
+  onToggle: (open: boolean) => void;
   onCopy: (part: TranscriptPartModel) => void | Promise<void>;
   onRetry?: (part: TranscriptPartModel) => void | Promise<void>;
   onFeedback?: (part: TranscriptPartModel, feedback: MessageFeedbackValue) => void | Promise<void>;
@@ -376,10 +376,12 @@ function ProcessDisclosure({
 
   return (
     <section className="conversation-process-disclosure" data-component="process-disclosure">
-      <button type="button" className="secondary conversation-process-toggle" onClick={onToggle} aria-expanded={open}>
-        {open ? "隐藏过程" : "查看过程"}
-      </button>
-      {open ? (
+      <details
+        className="conversation-process-details"
+        open={open}
+        onToggle={(event) => onToggle(event.currentTarget.open)}
+      >
+        <summary className="secondary conversation-process-toggle">查看过程</summary>
         <div className="conversation-process-list">
           {parts.map((part) => (
             <MemoTranscriptPartBlock
@@ -393,7 +395,7 @@ function ProcessDisclosure({
             />
           ))}
         </div>
-      ) : null}
+      </details>
     </section>
   );
 }
@@ -599,7 +601,7 @@ function ConversationViewport({
   tailPatch: TranscriptTailPatchModel | null;
   terminalState: boolean;
   disclosureOpen: boolean;
-  onToggleDisclosure: () => void;
+  onToggleDisclosure: (open: boolean) => void;
   onTailFrameRendered: (revision: string) => void;
   onCopy: (part: TranscriptPartModel) => void | Promise<void>;
   onRetry?: (part: TranscriptPartModel) => void | Promise<void>;
@@ -798,7 +800,7 @@ export function ReasoningTimeline({
     setDisclosurePreference(null);
   }, [runId]);
 
-  const disclosureOpen = disclosurePreference ?? Boolean(projectedTranscript?.tailPatch);
+  const disclosureOpen = disclosurePreference ?? false;
 
   const contentRevision = projectedTranscript?.contentRevision
     ?? fallbackParts.map((part) => `${part.id}:${part.text.length}:${part.updatedAt}`).join("|");
@@ -917,7 +919,7 @@ export function ReasoningTimeline({
                   tailPatch={projectedTranscript.tailPatch}
                   terminalState={projectedTranscript.terminalState || presentationState.hasTerminalEvidence}
                   disclosureOpen={disclosureOpen}
-                  onToggleDisclosure={() => setDisclosurePreference((current) => !(current ?? Boolean(projectedTranscript?.tailPatch)))}
+                  onToggleDisclosure={setDisclosurePreference}
                   onTailFrameRendered={setTailRenderRevision}
                   onCopy={handleCopy}
                   onFeedback={handleFeedback}
