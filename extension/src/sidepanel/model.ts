@@ -271,8 +271,15 @@ export function acceptIncomingRunEvent(
           ? "missing canonical identity"
           : undefined
   };
+  const shouldReplaceSameSequenceReplay = accepted === false
+    && decision === "duplicate"
+    && sequence !== null
+    && normalizedCurrentEvents.some((existingEvent) => existingEvent.sequence === sequence && existingEvent.type === event.type);
+  const effectiveNextEvents = shouldReplaceSameSequenceReplay
+    ? mergeRunEvent(normalizedCurrentEvents, tracedEvent)
+    : tracedNextEvents;
   const nextRunEventState: RunEventState = {
-    ...normalizeRunEventState(tracedNextEvents, currentState),
+    ...normalizeRunEventState(effectiveNextEvents, currentState),
     diagnostics: appendRunEventDiagnostic(currentState.diagnostics, diagnostic),
     transportTraces: transportAndAcceptanceTraces.reduce(
       (traces, trace) => appendTranscriptTraceRecord(traces, trace),
@@ -300,7 +307,7 @@ export function acceptIncomingRunEvent(
     accepted,
     decision,
     event: tracedEvent,
-    nextEvents: tracedNextEvents,
+    nextEvents: effectiveNextEvents,
     nextRunEventState,
     diagnostic
   };

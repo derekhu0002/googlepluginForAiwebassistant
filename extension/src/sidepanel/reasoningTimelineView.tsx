@@ -451,35 +451,7 @@ function ActiveTailRenderer({
   useEffect(() => {
     pendingTextRef.current = tailPatch?.fullText ?? part.text;
     const revision = tailPatch?.revision ?? `${messageId}:${part.updatedAt}`;
-    const shouldForceFlush = terminalState || tailPatch?.terminal;
-
-    if (shouldForceFlush) {
-      flush(`${revision}:terminal`);
-      return () => {
-        clearScheduledWork();
-      };
-    }
-
-    const scheduleFlush = () => {
-      frameRef.current = requestAnimationFrame(() => {
-        frameRef.current = null;
-        const elapsed = performance.now() - lastFlushAtRef.current;
-        if (elapsed >= MIN_MARKDOWN_FRAME_MS) {
-          flush(revision);
-          return;
-        }
-
-        timeoutRef.current = setTimeout(() => {
-          timeoutRef.current = null;
-          frameRef.current = requestAnimationFrame(() => {
-            frameRef.current = null;
-            flush(revision);
-          });
-        }, Math.max(0, MIN_MARKDOWN_FRAME_MS - elapsed));
-      });
-    };
-
-    scheduleFlush();
+    flush(terminalState || tailPatch?.terminal ? `${revision}:terminal` : revision);
 
     return () => {
       clearScheduledWork();

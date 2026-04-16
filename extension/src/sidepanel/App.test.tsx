@@ -247,6 +247,12 @@ async function flushAllTimers() {
   });
 }
 
+// @RequirementID: ELM-002
+// @ArchitectureID: ELM-FUNC-EXT-CAPTURE-TRANSPORT-CANONICAL-TRACE
+// @ArchitectureID: ELM-FUNC-SP-TRACE-STREAM-ACCEPTANCE-FRONTIER
+// @ArchitectureID: ELM-FUNC-SP-TRACE-INCREMENTAL-TRANSCRIPT-PROJECTION
+// @ArchitectureID: ELM-FUNC-SP-ASSEMBLE-CORRELATED-TRANSCRIPT-DIAGNOSTICS
+// @ArchitectureID: ELM-FUNC-SP-ANALYZE-FINAL-TRANSCRIPT-RENDER
 // @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER
 // @ArchitectureID: ELM-001
 describe("side panel host permission request flow", () => {
@@ -2750,7 +2756,8 @@ describe("side panel host permission request flow", () => {
     expect(container.querySelector(".conversation-avatar")).toBeNull();
     expect(container.querySelector(".turn-user")).toBeNull();
     expect(container.querySelector(".conversation-bubble")).toBeNull();
-    expect(container.querySelectorAll(".transcript-message")).toHaveLength(0);
+    expect(container.querySelectorAll(".conversation-avatar")).toHaveLength(0);
+    expect(container.querySelectorAll(".transcript-message").length).toBeGreaterThan(0);
     expect(container.querySelectorAll(".transcript-part[data-section='part']").length).toBeGreaterThan(0);
   });
 });

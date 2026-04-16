@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createRunEventStream, submitQuestionAnswer } from "../shared/api";
 import { toDisplayMessage } from "../shared/errors";
 import { initialAssistantState } from "../shared/state";
-import { appendTranscriptTraceRecord, DEFAULT_MAIN_AGENT, MAIN_AGENTS, type TranscriptTraceRecord, createEmptyRunEventState, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
+import { appendTranscriptTraceRecord, DEFAULT_MAIN_AGENT, MAIN_AGENTS, type NormalizedRunEvent, type TranscriptTraceRecord, createEmptyRunEventState, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage, SyncableAssistantRunState } from "../shared/types";
 import { getActiveQuestionEvent, hasPendingQuestion } from "./questionState";
 import { buildRunDiagnosticsSnapshot, downloadRunDiagnosticsLog, type RunDiagnosticsSource } from "./diagnostics";
@@ -53,6 +53,17 @@ function getTransportTrace(entry: Record<string, unknown>) {
   return trace && typeof trace === "object" ? trace as TranscriptTraceRecord : null;
 }
 
+function areTranscriptTraceListsEqual(left: TranscriptTraceRecord[] | undefined, right: TranscriptTraceRecord[]) {
+  if ((left?.length ?? 0) !== right.length) {
+    return false;
+  }
+
+  return right.every((trace, index) => {
+    const current = left?.[index];
+    return JSON.stringify(current) === JSON.stringify(trace);
+  });
+}
+
 async function syncRunStateToBackground(nextState: SyncableAssistantRunState) {
   logSidepanelRunEvent({
     phase: "sync_to_background",
@@ -65,6 +76,11 @@ async function syncRunStateToBackground(nextState: SyncableAssistantRunState) {
     type: "SYNC_RUN_STATE",
     payload: nextState
   }).catch(() => ({ ok: false }));
+}
+
+function stripDiagnosticMetadata(event: NormalizedRunEvent): NormalizedRunEvent {
+  const { canonical: _canonical, observability: _observability, ...rest } = event;
+  return rest;
 }
 
 // @ArchitectureID: ELM-COMP-EXT-SIDEPANEL
@@ -478,7 +494,7 @@ export function useSidepanelController() {
       updatedAt: state.currentRun?.updatedAt ?? state.currentRun?.startedAt,
       pendingQuestionId: state.stream.pendingQuestionId,
       includeSummary: true,
-      includeToolCallParts: false
+      includeToolCallParts: true
     };
   }, [liveFinalOutput, livePresentationState.runStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, state.stream.status, streamError]);
 
@@ -634,7 +650,7 @@ export function useSidepanelController() {
           const enrichedDiagnostic = {
             ...acceptance.diagnostic,
             persistence: {
-              eventSaveScheduled: acceptance.accepted,
+              eventSaveScheduled: acceptance.accepted || acceptance.decision === "duplicate",
               runSaveScheduled: acceptance.accepted
             },
             sync: {
@@ -668,14 +684,17 @@ export function useSidepanelController() {
             rejected: !acceptance.accepted
           });
 
+          if (acceptance.accepted || acceptance.decision === "duplicate") {
+            void saveEvent(stripDiagnosticMetadata(acceptance.event)).catch(() => undefined);
+          }
+
           if (!acceptance.accepted) {
             return {
               ...current,
+              runEvents: acceptance.nextEvents,
               runEventState: nextRunEventState
             };
           }
-
-          void saveEvent(acceptance.event).catch(() => undefined);
 
           const nextEvents = acceptance.nextEvents;
           const lifecycleStatus = deriveLifecycleStatus(current, acceptance.event, nextEvents);
@@ -945,10 +964,16 @@ export function useSidepanelController() {
   }
 
   function handleRenderTrace(traces: TranscriptTraceRecord[]) {
-    setState((current) => ({
-      ...current,
-      renderTrace: traces
-    }));
+    setState((current) => {
+      if (areTranscriptTraceListsEqual(current.renderTrace, traces)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        renderTrace: traces
+      };
+    });
   }
 
   function handleSelectRule(rule: PageRule) {

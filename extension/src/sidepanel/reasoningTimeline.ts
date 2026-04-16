@@ -151,6 +151,7 @@ export interface ChatStreamItemModel {
   supportsRetry: boolean;
   supportsFeedback: boolean;
   feedbackState?: MessageFeedbackUiState;
+  actionAnchorId?: string;
 }
 
 export type TranscriptMessageRole = "user" | "assistant";
@@ -405,6 +406,16 @@ function getAssistantStableMessageId(event: Pick<NormalizedRunEvent, "data" | "s
     || null;
 }
 
+function getEventToolMessageId(event: Pick<NormalizedRunEvent, "semantic" | "data" | "type">) {
+  if (event.type !== "tool_call") {
+    return null;
+  }
+
+  return event.semantic?.messageId?.trim()
+    || getEventDataValue(event, "message_id")
+    || null;
+}
+
 function createProvisionalAssistantMessageId(runId: string, assistantNodeIndex: number) {
   return `assistant-provisional:${runId}:${assistantNodeIndex}`;
 }
@@ -444,6 +455,10 @@ function getTimelineCardSemanticChannel(item: Pick<TimelineCardModel, "entries">
 
 function getAssistantResponseMessageId(event: Pick<NormalizedRunEvent, "runId" | "data" | "semantic">) {
   return getAssistantLogicalMessageId(event);
+}
+
+function getAssistantActionAnchorId(event: Pick<NormalizedRunEvent, "id" | "data" | "semantic">) {
+  return getAssistantStableMessageId(event) || event.id;
 }
 
 export function isAssistantResponseDeltaEvent(event: NormalizedRunEvent) {
@@ -1359,6 +1374,7 @@ function createBaseItem(options: {
   supportsRetry?: boolean;
   supportsFeedback?: boolean;
   feedbackState?: MessageFeedbackUiState;
+  actionAnchorId?: string;
 }): ChatStreamItemModel {
   return {
     id: options.id,
@@ -1380,7 +1396,8 @@ function createBaseItem(options: {
     supportsCopy: options.supportsCopy ?? false,
     supportsRetry: options.supportsRetry ?? false,
     supportsFeedback: options.supportsFeedback ?? false,
-    feedbackState: options.feedbackState
+    feedbackState: options.feedbackState,
+    actionAnchorId: options.actionAnchorId
   };
 }
 
@@ -1407,7 +1424,7 @@ function getReasoningOnlyText(events: NormalizedRunEvent[]) {
 
 function getOutputAnchorId(options: { runId: string; assistantResponse: AssistantResponseAggregation; firstOutputEvent?: NormalizedRunEvent; }) {
   return options.assistantResponse.preferredMessageId
-    || (options.firstOutputEvent ? getAssistantResponseMessageId(options.firstOutputEvent) : undefined)
+    || (options.firstOutputEvent ? getAssistantActionAnchorId(options.firstOutputEvent) : undefined)
     || `assistant-output:${options.runId}:active`;
 }
 
@@ -1432,6 +1449,13 @@ function normalizeProcessFragment(item: ChatStreamItemModel, assistantDisplayTex
 
   if (!sanitized) {
     return null;
+  }
+
+  if (item.primaryType === "tool_call") {
+    return {
+      ...item,
+      summary: sanitized
+    };
   }
 
   return {
@@ -1521,6 +1545,9 @@ function getTranscriptPartKind(item: ChatStreamItemModel): TranscriptPartKind {
 }
 
 function createTranscriptPart(item: ChatStreamItemModel): TranscriptPartModel {
+  const actionAnchorId = item.actionAnchorId
+    ?? (item.supportsCopy || item.supportsRetry || item.supportsFeedback ? item.anchorId : undefined);
+
   return {
     id: item.id,
     kind: getTranscriptPartKind(item),
@@ -1541,7 +1568,7 @@ function createTranscriptPart(item: ChatStreamItemModel): TranscriptPartModel {
     supportsRetry: item.supportsRetry,
     supportsFeedback: item.supportsFeedback,
     feedbackState: item.feedbackState,
-    actionAnchorId: item.supportsCopy || item.supportsRetry || item.supportsFeedback ? item.anchorId : undefined
+    actionAnchorId
   };
 }
 
@@ -1858,6 +1885,8 @@ function canMergeTranscriptMessage(current: TranscriptMessageModel | null, item:
 }
 
 function createTranscriptMessage(item: ChatStreamItemModel): TranscriptMessageModel {
+  const part = createTranscriptPart(item);
+
   return {
     id: `message:${item.runId}:${item.groupAnchorId}:${getTranscriptRole(item)}`,
     runId: item.runId,
@@ -1866,13 +1895,13 @@ function createTranscriptMessage(item: ChatStreamItemModel): TranscriptMessageMo
     updatedAt: item.updatedAt,
     anchorId: item.anchorId,
     groupAnchorId: item.groupAnchorId,
-    parts: [createTranscriptPart(item)],
+    parts: [part],
     sourceQuestionPrompt: item.sourceQuestionPrompt,
     supportsCopy: item.supportsCopy,
     supportsRetry: item.supportsRetry,
     supportsFeedback: item.supportsFeedback,
     feedbackState: item.feedbackState,
-    actionAnchorId: item.supportsCopy || item.supportsRetry || item.supportsFeedback ? item.anchorId : undefined
+    actionAnchorId: part.actionAnchorId
   };
 }
 
@@ -1888,7 +1917,7 @@ function mergeTranscriptMessage(current: TranscriptMessageModel, item: ChatStrea
     supportsRetry: current.supportsRetry || item.supportsRetry,
     supportsFeedback: current.supportsFeedback || item.supportsFeedback,
     feedbackState: item.feedbackState ?? current.feedbackState,
-    actionAnchorId: item.supportsCopy || item.supportsRetry || item.supportsFeedback ? item.anchorId : current.actionAnchorId
+    actionAnchorId: nextPart.actionAnchorId ?? current.actionAnchorId
   };
 
   return next;
@@ -2044,6 +2073,7 @@ function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, optio
           summary: resolvedSegmentText,
           updatedAt: state.assistantResponse.lastResponseAt ?? fallbackTimestamp,
           primaryType: presentationState.runStatus === "done" ? "result" : items[currentOutputIndex].primaryType,
+          actionAnchorId: items[currentOutputIndex].actionAnchorId ?? options.events.at(-1)?.id,
           originEventTypes: [...new Set([...items[currentOutputIndex].originEventTypes, presentationState.runStatus === "done" ? "result" : "thinking"])] as NormalizedEventType[]
         };
       } else {
@@ -2073,7 +2103,8 @@ function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, optio
           sourceQuestionPrompt: state.prompt,
           supportsCopy: false,
           supportsRetry: false,
-          supportsFeedback: false
+          supportsFeedback: false,
+          actionAnchorId: options.events.at(-1)?.id
         }));
         state.currentOutputItemId = id;
         state.currentOutputAnchorId = anchorId;
@@ -2252,6 +2283,9 @@ function upsertAssistantOutputSegmentInState(state: LiveTranscriptProjectionStat
       summary: normalizedText,
       updatedAt: event.createdAt,
       primaryType: event.type === "result" ? "result" : state.items[existingOutputIndex].primaryType,
+      actionAnchorId: event.type === "result"
+        ? event.id
+        : state.items[existingOutputIndex].actionAnchorId ?? event.id,
       originEventTypes: [...new Set([...state.items[existingOutputIndex].originEventTypes, event.type])]
     };
     state.currentOutputItemId = state.items[existingOutputIndex].id;
@@ -2275,7 +2309,8 @@ function upsertAssistantOutputSegmentInState(state: LiveTranscriptProjectionStat
     sourceQuestionPrompt: state.prompt,
     supportsCopy: false,
     supportsRetry: false,
-    supportsFeedback: false
+    supportsFeedback: false,
+    actionAnchorId: event.id
   }));
   state.currentOutputItemId = id;
   state.currentOutputAnchorId = anchorId;
@@ -2401,19 +2436,20 @@ function processLiveProjectionEvent(
       state.reasoningOnlyText = joinUniqueParagraphs([state.reasoningOnlyText, event.message]);
     }
 
-      if (event.type === "tool_call") {
-        closeCurrentOutputSegmentInState(state);
-      }
+    if (event.type === "tool_call") {
+      closeCurrentOutputSegmentInState(state);
+    }
 
-      const processMessageId = resolveAssistantEventMessageId(state, event);
-      state.currentAssistantLogicalMessageId = processMessageId;
-      state.currentAssistantGroupAnchorId = getAssistantGroupAnchorId(state.runId, processMessageId);
+    const processMessageId = resolveAssistantEventMessageId(state, event);
+    const toolMessageId = getEventToolMessageId(event);
+    state.currentAssistantLogicalMessageId = processMessageId ?? toolMessageId ?? state.currentAssistantLogicalMessageId;
+    state.currentAssistantGroupAnchorId = getAssistantGroupAnchorId(state.runId, state.currentAssistantLogicalMessageId);
 
-      state.items.push(createBaseItem({
-        id: `process:${state.runId}:${event.id}`,
-        anchorId: getEventSemanticIdentity(event) || event.id,
-        groupAnchorId: state.currentAssistantGroupAnchorId,
-        runId: state.runId,
+    state.items.push(createBaseItem({
+      id: `process:${state.runId}:${event.id}`,
+      anchorId: getEventSemanticIdentity(event) || event.id,
+      groupAnchorId: state.currentAssistantGroupAnchorId,
+      runId: state.runId,
       kind: "assistant_process",
       title: getEventTitle(event),
       summary: event.message.trim(),
@@ -2423,7 +2459,8 @@ function processLiveProjectionEvent(
       badges: getProcessBadge(event.type),
       originEventTypes: [event.type],
       sourceQuestionPrompt: state.prompt,
-      supportsCopy: true
+      supportsCopy: true,
+      actionAnchorId: event.type === "tool_call" ? event.id : undefined
     }));
   }
 }
@@ -3134,6 +3171,9 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
         summary: normalizedText,
         updatedAt: event.createdAt,
         primaryType: event.type === "result" ? "result" : items[existingOutputIndex].primaryType,
+        actionAnchorId: event.type === "result"
+          ? event.id
+          : items[existingOutputIndex].actionAnchorId ?? event.id,
         originEventTypes: [...new Set([...items[existingOutputIndex].originEventTypes, event.type])]
       };
       currentOutputIndex = existingOutputIndex;
@@ -3156,7 +3196,8 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
       sourceQuestionPrompt: prompt,
       supportsCopy: false,
       supportsRetry: false,
-      supportsFeedback: false
+      supportsFeedback: false,
+      actionAnchorId: event.id
     }));
     currentOutputIndex = items.length - 1;
     currentOutputAnchorId = anchorId;
@@ -3275,7 +3316,8 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
       }
 
       const stableMessageId = getAssistantStableMessageId(event);
-      currentAssistantMessageId = stableMessageId ?? currentAssistantMessageId;
+      const toolMessageId = getEventToolMessageId(event);
+      currentAssistantMessageId = stableMessageId ?? toolMessageId ?? currentAssistantMessageId;
       currentAssistantGroupAnchorId = getAssistantGroupAnchorId(runId, currentAssistantMessageId);
 
       items.push(createBaseItem({
@@ -3292,7 +3334,8 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
         badges: getProcessBadge(event.type),
         originEventTypes: [event.type],
         sourceQuestionPrompt: prompt,
-        supportsCopy: true
+        supportsCopy: true,
+        actionAnchorId: event.type === "tool_call" ? event.id : undefined
       }));
     }
   }
