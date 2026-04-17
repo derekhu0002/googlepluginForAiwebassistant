@@ -115,9 +115,8 @@ describe("ReasoningTimeline chrome sandbox transcript boundary", () => {
     expect(container.querySelectorAll("[data-part-kind='answer']")).toHaveLength(0);
     expect(container.querySelectorAll("[data-part-kind='text']")).toHaveLength(1);
     expect(container.querySelector("[data-part-kind='text']")?.textContent).toContain("第一段第二段");
-    const details = container.querySelector(".conversation-process-details") as HTMLDetailsElement | null;
-    expect(details).toBeTruthy();
-    expect(details?.open).toBe(false);
+    expect(container.querySelector("[data-component='process-stream']")).toBeTruthy();
+    expect(container.querySelector("[data-component='process-stream'] [data-part-kind='tool']")?.textContent).toContain("调用工具");
     expect(container.querySelectorAll("article.transcript-message")).toHaveLength(2);
   });
 

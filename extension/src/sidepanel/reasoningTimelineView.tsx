@@ -209,12 +209,6 @@ function TranscriptPartBlock({
     "markdown-body",
     part.kind === "reasoning" ? "transcript-part-muted" : ""
   ].filter(Boolean).join(" ");
-  const label = part.kind === "reasoning"
-    ? "分析"
-    : part.kind === "tool"
-      ? "工具调用"
-      : null;
-
   return (
     <section
       className={`transcript-part transcript-part-${part.kind} ${isUser ? "transcript-part-user" : "transcript-part-assistant"} ${hasMessageActions ? "transcript-part-has-actions" : ""}`}
@@ -235,7 +229,6 @@ function TranscriptPartBlock({
           </>
         ) : (
           <>
-            {label ? <span className="transcript-part-label">{label}</span> : null}
             {part.text ? (
               isUser
                 ? <p className="transcript-part-copy transcript-part-copy-user">{part.text}</p>
@@ -352,10 +345,8 @@ function HistoricalTranscriptList({
 
 const MemoHistoricalTranscriptList = memo(HistoricalTranscriptList, (previous, next) => previous.messages === next.messages && previous.questionSubmitDisabled === next.questionSubmitDisabled);
 
-function ProcessDisclosure({
+function ProcessStream({
   parts,
-  open,
-  onToggle,
   onCopy,
   onRetry,
   onFeedback,
@@ -363,8 +354,6 @@ function ProcessDisclosure({
   questionSubmitDisabled
 }: {
   parts: TranscriptPartModel[];
-  open: boolean;
-  onToggle: (open: boolean) => void;
   onCopy: (part: TranscriptPartModel) => void | Promise<void>;
   onRetry?: (part: TranscriptPartModel) => void | Promise<void>;
   onFeedback?: (part: TranscriptPartModel, feedback: MessageFeedbackValue) => void | Promise<void>;
@@ -376,27 +365,20 @@ function ProcessDisclosure({
   }
 
   return (
-    <section className="conversation-process-disclosure" data-component="process-disclosure">
-      <details
-        className="conversation-process-details"
-        open={open}
-        onToggle={(event) => onToggle(event.currentTarget.open)}
-      >
-        <summary className="secondary conversation-process-toggle">查看过程</summary>
-        <div className="conversation-process-list">
-          {parts.map((part) => (
-            <MemoTranscriptPartBlock
-              key={part.id}
-              part={part}
-              onCopy={onCopy}
-              onRetry={onRetry}
-              onFeedback={onFeedback}
-              onQuestionSubmit={onQuestionSubmit}
-              questionSubmitDisabled={questionSubmitDisabled}
-            />
-          ))}
-        </div>
-      </details>
+    <section className="conversation-process-stream" data-component="process-stream">
+      <div className="conversation-process-list">
+        {parts.map((part) => (
+          <MemoTranscriptPartBlock
+            key={part.id}
+            part={part}
+            onCopy={onCopy}
+            onRetry={onRetry}
+            onFeedback={onFeedback}
+            onQuestionSubmit={onQuestionSubmit}
+            questionSubmitDisabled={questionSubmitDisabled}
+          />
+        ))}
+      </div>
     </section>
   );
 }
@@ -507,7 +489,6 @@ function FinalAnswerPanel({
 
   return (
     <section className="conversation-final-answer-panel" data-component="final-answer-panel">
-      <span className="transcript-part-label">Final Answer</span>
       {tailPatch && activeMessageId ? (
         <ActiveTailRenderer
           messageId={activeMessageId}
@@ -648,6 +629,7 @@ function buildRenderTrace(details: {
 }
 
 function ConversationViewport({
+  activeParts,
   activeMessageId,
   processParts,
   finalAnswerPart,
@@ -656,8 +638,6 @@ function ConversationViewport({
   summaryPart,
   tailPatch,
   terminalState,
-  disclosureOpen,
-  onToggleDisclosure,
   onTailFrameRendered,
   onCopy,
   onRetry,
@@ -665,6 +645,7 @@ function ConversationViewport({
   onQuestionSubmit,
   questionSubmitDisabled
 }: {
+  activeParts: TranscriptPartModel[];
   activeMessageId: string | null;
   processParts: TranscriptPartModel[];
   finalAnswerPart: TranscriptPartModel | null;
@@ -673,8 +654,6 @@ function ConversationViewport({
   summaryPart: TranscriptPartModel | null;
   tailPatch: TranscriptTailPatchModel | null;
   terminalState: boolean;
-  disclosureOpen: boolean;
-  onToggleDisclosure: (open: boolean) => void;
   onTailFrameRendered: (revision: string) => void;
   onCopy: (part: TranscriptPartModel) => void | Promise<void>;
   onRetry?: (part: TranscriptPartModel) => void | Promise<void>;
@@ -682,12 +661,24 @@ function ConversationViewport({
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
 }) {
+  const orderedActiveParts = useMemo(
+    () => activeParts.filter((part) => part.kind !== "summary"),
+    [activeParts]
+  );
+  const finalAnswerIndex = finalAnswerPart
+    ? orderedActiveParts.findIndex((part) => part.id === finalAnswerPart.id)
+    : -1;
+  const leadingParts = finalAnswerIndex >= 0
+    ? orderedActiveParts.slice(0, finalAnswerIndex)
+    : orderedActiveParts;
+  const trailingParts = finalAnswerIndex >= 0
+    ? orderedActiveParts.slice(finalAnswerIndex + 1)
+    : [];
+
   return (
     <div className="conversation-viewport" data-component="conversation-viewport">
-      <ProcessDisclosure
-        parts={processParts}
-        open={disclosureOpen}
-        onToggle={onToggleDisclosure}
+      <ProcessStream
+        parts={leadingParts.length ? leadingParts : processParts}
         onCopy={onCopy}
         onRetry={onRetry}
         onFeedback={onFeedback}
@@ -706,7 +697,18 @@ function ConversationViewport({
         onQuestionSubmit={onQuestionSubmit}
         questionSubmitDisabled={questionSubmitDisabled}
       />
-      {questionPart ? (
+      {trailingParts.map((part) => (
+        <MemoTranscriptPartBlock
+          key={part.id}
+          part={part}
+          onCopy={onCopy}
+          onRetry={onRetry}
+          onFeedback={onFeedback}
+          onQuestionSubmit={onQuestionSubmit}
+          questionSubmitDisabled={questionSubmitDisabled}
+        />
+      ))}
+      {!leadingParts.length && !trailingParts.length && questionPart ? (
         <MemoTranscriptPartBlock
           part={questionPart}
           onCopy={onCopy}
@@ -716,7 +718,7 @@ function ConversationViewport({
           questionSubmitDisabled={questionSubmitDisabled}
         />
       ) : null}
-      {errorPart ? (
+      {!leadingParts.length && !trailingParts.length && errorPart ? (
         <MemoTranscriptPartBlock
           part={errorPart}
           onCopy={onCopy}
@@ -791,8 +793,8 @@ export function ReasoningTimeline({
   onRenderTrace
 }: ChatStreamViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const activeMessageRef = useRef<HTMLElement | null>(null);
   const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, MessageFeedbackUiState>>({});
-  const [disclosurePreference, setDisclosurePreference] = useState<boolean | null>(null);
   const [tailRenderRevision, setTailRenderRevision] = useState("");
 
   const presentationState = useMemo(() => resolveTimelinePresentationState({
@@ -846,6 +848,7 @@ export function ReasoningTimeline({
     }
 
     const sealedMessages = applyFeedbackStateToMessages(transcriptReadModel.sealedMessages, feedbackByMessageId);
+    const activeParts = transcriptReadModel.activeMessage?.parts.map((part) => applyFeedbackStateToPart(part, feedbackByMessageId)) ?? [];
     const processParts = transcriptReadModel.processParts.map((part) => applyFeedbackStateToPart(part, feedbackByMessageId));
     const finalAnswerPart = transcriptReadModel.finalAnswerPart ? applyFeedbackStateToPart(transcriptReadModel.finalAnswerPart, feedbackByMessageId) : null;
     const questionPart = transcriptReadModel.questionPart ? applyFeedbackStateToPart(transcriptReadModel.questionPart, feedbackByMessageId) : null;
@@ -853,6 +856,7 @@ export function ReasoningTimeline({
 
     return {
       sealedMessages,
+      activeParts,
       activeMessageId: transcriptReadModel.activeAssistantMessageId,
       processParts,
       finalAnswerPart,
@@ -865,18 +869,14 @@ export function ReasoningTimeline({
         transcriptReadModel.historicalSignature,
         transcriptReadModel.tailPatch?.revision ?? "sealed",
         transcriptReadModel.summaryPart?.id ?? "no-summary",
-        tailRenderRevision,
-        (disclosurePreference ?? Boolean(transcriptReadModel.tailPatch)) ? "open" : "closed"
+        tailRenderRevision
       ].join("::")
     };
-  }, [disclosurePreference, feedbackByMessageId, tailRenderRevision, transcriptReadModel]);
+  }, [feedbackByMessageId, tailRenderRevision, transcriptReadModel]);
 
   useEffect(() => {
     setFeedbackByMessageId({});
-    setDisclosurePreference(null);
   }, [runId]);
-
-  const disclosureOpen = disclosurePreference ?? false;
 
   const contentRevision = projectedTranscript?.contentRevision
     ?? fallbackParts.map((part) => `${part.id}:${part.text.length}:${part.updatedAt}`).join("|");
@@ -895,8 +895,10 @@ export function ReasoningTimeline({
 
   const scrollFollow = useScrollFollowController({
     containerRef,
+    activeMessageRef,
     live,
-    contentRevision
+    contentRevision,
+    activeMessageId: projectedTranscript?.activeMessageId ?? null
   });
 
   const handleCopy = useCallback(async (part: TranscriptPartModel) => {
@@ -996,8 +998,10 @@ export function ReasoningTimeline({
                 data-message-id={projectedTranscript.activeMessageId ?? "sealed-assistant"}
                 data-message-role="assistant"
                 data-active-message={projectedTranscript.tailPatch ? "true" : undefined}
+                ref={activeMessageRef}
               >
                 <ConversationViewport
+                  activeParts={projectedTranscript.activeParts}
                   activeMessageId={projectedTranscript.activeMessageId}
                   processParts={projectedTranscript.processParts}
                   finalAnswerPart={projectedTranscript.finalAnswerPart}
@@ -1006,8 +1010,6 @@ export function ReasoningTimeline({
                   summaryPart={projectedTranscript.summaryPart}
                   tailPatch={projectedTranscript.tailPatch}
                   terminalState={projectedTranscript.terminalState || presentationState.hasTerminalEvidence}
-                  disclosureOpen={disclosureOpen}
-                  onToggleDisclosure={setDisclosurePreference}
                   onTailFrameRendered={setTailRenderRevision}
                   onCopy={handleCopy}
                   onFeedback={handleFeedback}

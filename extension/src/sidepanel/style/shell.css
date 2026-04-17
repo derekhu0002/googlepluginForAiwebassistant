@@ -5,8 +5,8 @@
   height: 100dvh;
   padding: 16px;
   background:
-    radial-gradient(circle at top, rgba(91, 140, 255, 0.16), transparent 24%),
-    linear-gradient(180deg, rgba(8, 10, 16, 0.98) 0%, rgba(7, 9, 13, 1) 100%);
+    radial-gradient(circle at top, rgba(210, 225, 253, 0.9), transparent 24%),
+    linear-gradient(180deg, rgba(248, 248, 248, 0.98) 0%, rgba(243, 243, 243, 1) 100%);
 }
 
 .opencode-layout {

@@ -506,7 +506,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("Run：run-2");
+    expect(container.textContent).toContain("Run run-2");
   });
 
   it("keeps earlier same-session turns visible after a follow-up run starts", async () => {
@@ -1138,9 +1138,9 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).not.toContain("You");
     expect(container.textContent).not.toContain("Assistant");
     expect(container.textContent).toContain("最终结论");
-    expect(container.textContent).toContain("读取页面上下文");
     expect(container.textContent).toContain("查询历史 SR");
-    expect(container.querySelector("[data-part-kind='reasoning']")?.textContent).toContain("读取页面上下文");
+    expect(container.textContent).not.toContain("读取页面上下文");
+    expect(container.querySelector("[data-part-kind='reasoning']")).toBeNull();
     expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("查询历史 SR");
   });
 
@@ -1174,7 +1174,7 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain("来自持久化状态的回复");
     expect(container.textContent).toContain("查询历史 SR");
-    expect(container.textContent).toContain("读取页面上下文");
+    expect(container.textContent).not.toContain("读取页面上下文");
   });
 
   it("renders complete assistant text when same run emits delayed response after result", async () => {
@@ -1420,7 +1420,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("我先整理页面关键信息，再给出最终建议。");
   });
 
-  it("shows aggregated orchestration thinking events in the transcript", async () => {
+  it("suppresses aggregated orchestration thinking events in the transcript", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1436,8 +1436,8 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("读取页面上下文");
-    expect(container.textContent).toContain("整理可用字段");
+    expect(container.textContent).not.toContain("读取页面上下文");
+    expect(container.textContent).not.toContain("整理可用字段");
   });
 
   it("shows final answer in history detail with projected reasoning steps", async () => {
@@ -1471,7 +1471,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("历史思考 2");
   });
 
-  it("shows history detail meaningful thinking together with session progress copy", async () => {
+  it("hides session progress copy while keeping meaningful history thinking", async () => {
     mockRunHistoryState.selectedHistoryDetail = {
       run: {
         ...createCurrentRun(),
@@ -1497,7 +1497,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("历史结论");
-    expect(container.textContent).toContain("已连接主分析代理");
+    expect(container.textContent).not.toContain("已连接主分析代理");
     expect(container.textContent).toContain("我先对比历史差异，再汇总结论。");
   });
 
@@ -1573,7 +1573,7 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("Transcript");
+    expect(container.textContent).not.toContain("Transcript");
     expect(container.querySelector("button[aria-label='会话']")).not.toBeNull();
     expect(container.textContent).toContain("个会话簇");
   });
@@ -2673,13 +2673,14 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     const streamParts = Array.from(container.querySelectorAll(".transcript-part[data-section='part']"));
-    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "answer", "tool", "text", "question", "summary"]);
+    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "answer", "tool", "text", "question", "text", "summary"]);
     expect(container.textContent).toContain("查询历史 SR");
     expect(streamParts[1]?.textContent ?? "").toContain("继续执行");
     expect(streamParts[2]?.textContent ?? "").toContain("查询历史 SR");
     expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
-    expect(streamParts[3]?.textContent ?? "").toContain("第二段");
+    expect(streamParts[3]?.textContent ?? "").toContain("第一段");
     expect(streamParts[4]?.textContent ?? "").toContain("请选择处理方式");
+    expect(streamParts[5]?.textContent ?? "").toContain("第二段");
   });
 
   it("keeps newer live assistant body when stale final output exists in active run state", async () => {
@@ -2708,7 +2709,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).not.toContain("第一段生成中");
   });
 
-  it("keeps one assistant article and visible process disclosure when current run message ids churn", async () => {
+  it("keeps one assistant article and visible inline process stream when current run message ids churn", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -2773,9 +2774,9 @@ describe("side panel host permission request flow", () => {
 
     expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
     expect(container.querySelector("[data-message-role='assistant']")?.getAttribute("data-message-id")).toBe("sealed-assistant");
-    expect(container.querySelector("[data-component='process-disclosure']")?.textContent).toContain("查看过程");
+    expect(container.querySelector("[data-component='process-stream']")?.textContent).toContain("查询历史 SR");
     expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("最终回答");
-    expect(container.querySelector("[data-component='process-disclosure'] [data-part-kind='tool']")?.textContent).toContain("查询历史 SR");
+    expect(container.querySelector("[data-component='process-stream'] [data-part-kind='tool']")?.textContent).toContain("查询历史 SR");
   });
 
   it("does not render visible avatar role markers or message-card shells in transcript output", async () => {

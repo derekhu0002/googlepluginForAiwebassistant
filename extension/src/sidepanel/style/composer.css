@@ -4,7 +4,7 @@
   margin-top: auto;
   padding: 16px 18px 18px;
   border-top: 1px solid var(--copilot-border);
-  background: linear-gradient(180deg, rgba(10, 12, 18, 0.32) 0%, rgba(16, 20, 29, 0.98) 22%);
+  background: linear-gradient(180deg, rgba(248, 248, 248, 0.72) 0%, rgba(248, 248, 248, 0.98) 22%);
   backdrop-filter: blur(12px);
 }
 
@@ -17,8 +17,8 @@
   border-radius: 18px;
   padding: 16px 60px 16px 16px;
   border-color: var(--copilot-border);
-  background: linear-gradient(180deg, rgba(19, 24, 34, 1) 0%, rgba(13, 17, 25, 1) 100%);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(248, 248, 248, 1) 100%);
+  box-shadow: inset 0 1px 2px rgba(23, 23, 23, 0.06), 0 10px 28px rgba(23, 23, 23, 0.05);
 }
 
 .send-button {
@@ -32,8 +32,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, var(--cockpit-accent) 0%, var(--cockpit-accent-2) 100%);
-  box-shadow: 0 12px 24px rgba(91, 140, 255, 0.28);
+  background: linear-gradient(180deg, var(--copilot-accent) 0%, var(--copilot-accent-strong) 100%);
+  box-shadow: 0 12px 24px rgba(4, 69, 230, 0.18);
 }
 
 .send-icon {
@@ -94,14 +94,14 @@
   height: 34px;
   padding: 6px 12px;
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.82);
   border: 1px solid var(--copilot-border);
   color: var(--copilot-text);
   text-align: left;
 }
 
 .main-agent-trigger.active {
-  background: rgba(14, 99, 156, 0.18);
+  background: rgba(210, 225, 253, 0.9);
 }
 
 .main-agent-menu {
@@ -115,7 +115,7 @@
   border-radius: 12px;
   border: 1px solid var(--copilot-border);
   background: var(--cockpit-surface-2);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 12px 28px rgba(23, 23, 23, 0.1);
   z-index: 1;
   pointer-events: auto;
 }
@@ -133,7 +133,7 @@
 
 .main-agent-option.selected {
   border-color: var(--cockpit-border-strong);
-  background: rgba(91, 140, 255, 0.12);
+  background: rgba(210, 225, 253, 0.72);
 }
 
 .main-agent-option small {
@@ -171,7 +171,7 @@
   padding: 0 12px;
   gap: 8px;
   border: 1px solid var(--copilot-border);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.82);
   color: var(--copilot-text);
   white-space: nowrap;
 }
@@ -203,18 +203,18 @@
 .utility-icon-button:hover,
 .utility-icon-button:focus-visible {
   color: var(--copilot-text);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(23, 23, 23, 0.04);
   outline: none;
 }
 
 .utility-icon-button.active,
 .utility-icon-button.pending {
-  background: rgba(14, 99, 156, 0.18);
-  color: #9cdcfe;
+  background: rgba(210, 225, 253, 0.9);
+  color: var(--copilot-accent);
 }
 
 .utility-icon-button-labeled.pending {
-  border-color: rgba(156, 220, 254, 0.4);
+  border-color: rgba(4, 69, 230, 0.22);
 }
 
 .utility-icon-button-muted {

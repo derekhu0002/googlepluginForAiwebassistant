@@ -221,6 +221,87 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     ]);
   });
 
+  it("hides orchestration-only thinking and tool chatter from the visible transcript", () => {
+    const parts = buildTranscriptPartStream({
+      runId: "run-1",
+      prompt: "继续分析",
+      events: [
+        createEvent(1, { type: "thinking", message: "读取页面上下文" }),
+        createEvent(2, { type: "thinking", message: "整理可用字段" }),
+        createEvent(3, { type: "tool_call", message: "opencode session 状态更新：busy" }),
+        createEvent(4, { type: "result", message: "最终结论", data: { message_id: "msg-1" } })
+      ],
+      status: "done",
+      finalOutput: "最终结论",
+      includeToolCallParts: true
+    });
+
+    expect(parts.map((part) => ({ kind: part.kind, text: part.text }))).toEqual([
+      { kind: "prompt", text: "继续分析" },
+      { kind: "text", text: "最终结论" },
+      { kind: "summary", text: "已完成" }
+    ]);
+  });
+
+  it("falls back to a meaningful tool title when the tool message is orchestration noise", () => {
+    const parts = buildTranscriptPartStream({
+      runId: "run-1",
+      prompt: "请回答",
+      events: [
+        createEvent(1, {
+          type: "tool_call",
+          title: "threat-intel-risk-assessment",
+          message: "正在处理当前分析步骤。"
+        }),
+        createEvent(2, { type: "result", message: "最终回答", data: { message_id: "msg-1" } })
+      ],
+      status: "done",
+      finalOutput: "最终回答",
+      includeToolCallParts: true
+    });
+
+    expect(parts.map((part) => ({ kind: part.kind, text: part.text }))).toEqual([
+      { kind: "prompt", text: "请回答" },
+      { kind: "tool", text: "threat-intel-risk-assessment" },
+      { kind: "text", text: "最终回答" },
+      { kind: "summary", text: "已完成" }
+    ]);
+  });
+
+  it("suppresses internal Chinese session status fragments and fallback titles", () => {
+    const parts = buildTranscriptPartStream({
+      runId: "run-1",
+      prompt: "请回答",
+      events: [
+        createEvent(1, {
+          type: "tool_call",
+          title: "会话已创建",
+          message: "已创建 opencode session ses_123"
+        }),
+        createEvent(2, {
+          type: "tool_call",
+          title: "会话状态",
+          message: "opencode session 状态更新：busy"
+        }),
+        createEvent(3, {
+          type: "tool_call",
+          title: "处理中",
+          message: "正在读取所需内容。"
+        }),
+        createEvent(4, { type: "result", message: "最终回答", data: { message_id: "msg-1" } })
+      ],
+      status: "done",
+      finalOutput: "最终回答",
+      includeToolCallParts: true
+    });
+
+    expect(parts.map((part) => ({ kind: part.kind, text: part.text }))).toEqual([
+      { kind: "prompt", text: "请回答" },
+      { kind: "text", text: "最终回答" },
+      { kind: "summary", text: "已完成" }
+    ]);
+  });
+
   it("merges assistant text chunks by semantic message identity instead of raw adjacency", () => {
     const messages = buildTranscriptMessages({
       runId: "run-1",
@@ -549,6 +630,100 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     });
 
     expect(parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(["第一段结论，正在补充完整说明。"]);
+  });
+
+  it("keeps one merged final answer when assistant message ids churn mid-run", () => {
+    const model = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-churn",
+        prompt: "继续分析",
+        events: [
+          createEvent(1, {
+            runId: "run-churn",
+            type: "thinking",
+            message: "我将使用威胁情报风险评估技能来帮助总结当前SR的风险和建议下一步动作。",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "snapshot",
+              identity: "assistant_text:unknown-message:part-1",
+              itemKind: "text",
+              partId: "part-1"
+            },
+            data: { field: "text" }
+          }),
+          createEvent(2, {
+            runId: "run-churn",
+            type: "tool_call",
+            message: "当前步骤已完成，正在进入下一步。",
+            semantic: {
+              channel: "tool",
+              emissionKind: "delta",
+              identity: "tool:msg-a:tool-1",
+              itemKind: "tool",
+              messageId: "msg-a",
+              partId: "tool-1"
+            }
+          }),
+          createEvent(3, {
+            runId: "run-churn",
+            type: "thinking",
+            message: "Threat-Intel-Risk-Assessment\n\n根据技能要求，我需要基于事件上下文和已审查的STIX证据来评估威胁风险。",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "snapshot",
+              identity: "assistant_text:msg-b:part-2",
+              itemKind: "text",
+              messageId: "msg-b",
+              partId: "part-2"
+            },
+            data: { field: "text", message_id: "msg-b" }
+          })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: true
+      }
+    });
+
+    expect(model.messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+    expect(model.finalAnswerPart?.text).toBe(
+      "我将使用威胁情报风险评估技能来帮助总结当前SR的风险和建议下一步动作。\n\nThreat-Intel-Risk-Assessment\n\n根据技能要求，我需要基于事件上下文和已审查的STIX证据来评估威胁风险。"
+    );
+  });
+
+  it("preserves opencode-like bilingual markdown output without stripping headings", () => {
+    const finalOutput = [
+      "我将使用威胁情报风险评估技能来帮助总结您当前安全事件的风险和建议下一步动作。",
+      "",
+      "Threat-Intel-Risk-Assessment",
+      "",
+      "根据技能要求，我需要基于事件上下文和已审查的STIX证据来评估威胁风险。",
+      "",
+      "1. 事件摘要：简要描述安全事件",
+      "2. 已发现的IoC（威胁指标）：如IP地址、域名、文件哈希等"
+    ].join("\n");
+
+    const result = collectRunAssistantResponseText([
+      createEvent(1, {
+        runId: "run-bilingual",
+        type: "thinking",
+        message: finalOutput,
+        semantic: {
+          channel: "assistant_text",
+          emissionKind: "snapshot",
+          identity: "assistant_text:msg-bilingual:part-1",
+          itemKind: "text",
+          messageId: "msg-bilingual",
+          partId: "part-1"
+        },
+        data: { field: "text", message_id: "msg-bilingual" }
+      })
+    ], finalOutput);
+
+    expect(result).toBe(finalOutput);
   });
 
   it("dedupes reasoning parts when the same anchor drifts between assistant-message and fragment-group containers", () => {

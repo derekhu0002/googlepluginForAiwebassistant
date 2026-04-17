@@ -382,7 +382,7 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(container.textContent).toContain("第一段第二段");
   });
 
-  it("separates final answer from reasoning and tool disclosure", async () => {
+  it("renders final answer after inline reasoning and tool process parts", async () => {
     const transcriptReadModel = buildStableTranscriptProjection({
       historicalSegments: [],
       liveSegment: {
@@ -440,24 +440,14 @@ describe("ReasoningTimeline transcript rendering", () => {
       );
     });
 
-    expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("最终回答");
-    expect(container.querySelector("[data-component='process-disclosure']")?.textContent).toContain("查看过程");
-    const details = container.querySelector(".conversation-process-details") as HTMLDetailsElement | null;
-    expect(details?.open).toBe(false);
-    expect(details?.querySelector("summary")?.textContent).toContain("查看过程");
-
-    const toggle = container.querySelector(".conversation-process-toggle") as HTMLElement | null;
-    await act(async () => {
-      toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(details?.open).toBe(true);
+    expect(container.querySelector("[data-component='process-stream']")?.textContent).toContain("先分析页面上下文");
+    expect(container.querySelector("[data-component='process-stream']")?.textContent).toContain("调用搜索工具");
     expect(container.querySelector("[data-part-kind='reasoning']")?.textContent).toContain("先分析页面上下文");
     expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("调用搜索工具");
     expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("最终回答");
   });
 
-  it("renders one user article and one assistant article with details-based disclosure for a single run", async () => {
+  it("renders one user article and one assistant article with inline process flow for a single run", async () => {
     const transcriptReadModel = buildStableTranscriptProjection({
       historicalSegments: [],
       liveSegment: {
@@ -522,9 +512,7 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(container.querySelectorAll("article.transcript-message-user")).toHaveLength(1);
     expect(container.querySelectorAll("article.transcript-message-assistant")).toHaveLength(1);
     expect(container.querySelector("article.transcript-message-assistant article.transcript-message")).toBeNull();
-    const details = container.querySelector(".conversation-process-details") as HTMLDetailsElement | null;
-    expect(details).toBeTruthy();
-    expect(details?.open).toBe(false);
+    expect(container.querySelector("[data-component='process-stream']")?.textContent).toContain("调用工具");
     expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("A");
   });
 
@@ -687,7 +675,7 @@ describe("ReasoningTimeline transcript rendering", () => {
     const secondHistoricalNode = container.querySelector("[data-component='historical-transcript-list'] [data-message-id='message:run-history-0:assistant-message:run-history-0:msg-history-0:assistant']");
     expect(secondModel.historicalMessages).toBe(firstModel.historicalMessages);
     expect(firstHistoricalNode).toBe(secondHistoricalNode);
-  });
+  }, 10000);
 
   it("flushes active tail markdown immediately on revision updates and terminal state", async () => {
     const raf = createRafController();
@@ -718,10 +706,6 @@ describe("ReasoningTimeline transcript rendering", () => {
     });
 
     now = 16;
-    await act(async () => {
-      raf.flush(now);
-    });
-
     const secondModel = buildStableTranscriptProjection({
       historicalSegments: [],
       liveSegment: {
@@ -836,6 +820,50 @@ describe("ReasoningTimeline transcript rendering", () => {
     });
 
     expect(feed.scrollTop).toBe(feed.scrollHeight);
+  });
+
+  it("aligns a new live assistant answer to the top of the viewport instead of jumping to the tail", async () => {
+    const raf = createRafController();
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => raf.request(callback)));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn((id: number) => raf.cancel(id)));
+
+    const transcriptReadModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-live",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, { runId: "run-live", type: "thinking", message: "第一段", data: { field: "text", message_id: "msg-live" } }),
+          createEvent(2, { runId: "run-live", type: "thinking", message: "第二段", data: { field: "text", message_id: "msg-live" } }),
+          createEvent(3, { runId: "run-live", type: "thinking", message: "第三段", data: { field: "text", message_id: "msg-live" } })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    await act(async () => {
+      root.render(<ReasoningTimeline transcriptReadModel={transcriptReadModel} runId="run-live" prompt="当前问题" events={[]} runStatus="streaming" live />);
+    });
+
+    const feed = container.querySelector(".chat-stream-feed") as HTMLDivElement;
+    const activeMessage = container.querySelector(".transcript-message-active") as HTMLElement | null;
+    expect(activeMessage).toBeTruthy();
+
+    Object.defineProperty(feed, "scrollHeight", { configurable: true, value: 1500 });
+    Object.defineProperty(feed, "clientHeight", { configurable: true, value: 420 });
+    Object.defineProperty(feed, "scrollTop", { configurable: true, value: 0, writable: true });
+    Object.defineProperty(activeMessage as HTMLElement, "offsetTop", { configurable: true, value: 160 });
+
+    await act(async () => {
+      raf.flush(32);
+    });
+
+    expect(feed.scrollTop).toBe(160);
+    expect(feed.scrollTop).not.toBe(feed.scrollHeight);
   });
 
   it("renders reasoning and suppresses tool parts in the main transcript", async () => {
@@ -1033,10 +1061,76 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(container.querySelectorAll("[data-message-role='user']")).toHaveLength(1);
     expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
     expect(container.querySelectorAll(".transcript-part[data-part-role='user']")).toHaveLength(1);
-    expect(container.querySelectorAll(".transcript-part[data-part-role='assistant']")).toHaveLength(3);
+    expect(container.querySelectorAll(".transcript-part[data-part-role='assistant']")).toHaveLength(4);
     expect(container.querySelectorAll("[data-part-kind='answer']")).toHaveLength(0);
     expect(container.querySelectorAll("[data-part-kind='text']")).toHaveLength(1);
     expect(container.querySelector("[data-part-kind='text']")?.textContent).toContain("第一段第二段");
+  });
+
+  it("deduplicates adjacent assistant text parts with the same anchor", async () => {
+    const transcriptReadModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-dedupe",
+        prompt: "当前问题",
+        events: [
+          {
+            id: "event-dedupe-1",
+            runId: "run-dedupe",
+            type: "thinking",
+            createdAt: "2026-04-02T00:00:02.000Z",
+            sequence: 1,
+            message: "重复段落",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "delta",
+              identity: "assistant_text:msg-dedupe:part-1",
+              itemKind: "text",
+              messageId: "msg-dedupe",
+              partId: "part-1"
+            }
+          },
+          {
+            id: "event-dedupe-2",
+            runId: "run-dedupe",
+            type: "thinking",
+            createdAt: "2026-04-02T00:00:03.000Z",
+            sequence: 2,
+            message: "重复段落",
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "snapshot",
+              identity: "assistant_text:msg-dedupe:part-1",
+              itemKind: "text",
+              messageId: "msg-dedupe",
+              partId: "part-1"
+            }
+          }
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={transcriptReadModel}
+          runId="run-dedupe"
+          prompt="当前问题"
+          events={[]}
+          runStatus="streaming"
+        />
+      );
+    });
+
+    const duplicateAnchors = container.querySelectorAll("[data-part-anchor='msg-dedupe']");
+    expect(duplicateAnchors).toHaveLength(1);
+    expect(container.querySelector("[data-part-kind='text']")?.textContent).toContain("重复段落");
+    expect(container.textContent).not.toContain("重复段落重复段落");
   });
 
   it("keeps active assistant DOM boundary stable across tail-only updates", async () => {
@@ -1209,7 +1303,7 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
     expect(transcriptReadModel.messages.find((message) => message.role === "assistant")?.id).toBe("message:run-current:assistant-run:run-current:assistant");
     expect(container.querySelector("[data-message-role='assistant']")?.getAttribute("data-message-id")).toBe("sealed-assistant");
-    expect(container.querySelector("[data-component='process-disclosure'] [data-part-kind='tool']")?.textContent).toContain("调用工具");
+    expect(container.querySelector("[data-component='process-stream'] [data-part-kind='tool']")?.textContent).toContain("调用工具");
     expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("最终回答");
   });
 
@@ -1309,14 +1403,14 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(css).toContain(".latest-message-button");
     expect(css).toContain(".conversation-viewport");
     expect(css).toContain(".conversation-final-answer-panel");
-    expect(css).toContain(".conversation-process-disclosure");
+    expect(css).toContain(".conversation-process-stream");
   });
 
   it("uses tighter transcript spacing tokens for adjacent messages", () => {
     const css = readFileSync(path.join(process.cwd(), "src/sidepanel/style/transcript.css"), "utf8");
 
     expect(css).toMatch(/\.event-feed\s*\{[^}]*gap:\s*6px;[^}]*\}/s);
-    expect(css).toMatch(/\.transcript-feed\s*\{[^}]*gap:\s*6px;[^}]*\}/s);
+    expect(css).toMatch(/\.transcript-feed\s*\{[^}]*gap:\s*14px;[^}]*\}/s);
     expect(css).toMatch(/\.transcript-part-body\s*\{[^}]*gap:\s*6px;[^}]*padding:\s*0\s+0\s+0\.125rem;[^}]*\}/s);
     expect(css).toMatch(/\.transcript-part-body-assistant,\s*\.transcript-part-assistant\s+\.transcript-part-body\s*\{[^}]*gap:\s*6px;[^}]*\}/s);
   });

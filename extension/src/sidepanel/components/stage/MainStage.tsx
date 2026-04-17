@@ -71,7 +71,7 @@ export function MainStage({
   );
 
   return (
-    <section className="panel-block chat-primary-panel opencode-stage-panel">
+    <section className="chat-primary-panel opencode-stage-panel">
       {shouldShowPermissionCallout ? (
         <section className="panel-block host-permission-callout" aria-label="当前域名授权提示">
           <div>
@@ -93,13 +93,12 @@ export function MainStage({
         </section>
       ) : null}
 
-      <div className="chat-primary-header section-header compact" data-component="header">
-        <div>
-          <h2>Transcript</h2>
-          <small>{selectedSessionItem ? deriveRunTitle(selectedSessionItem.latestRun) : (activeContext?.hostname ?? "当前对话")}</small>
+      <div className="chat-primary-header document-stage-header" data-component="header">
+        <div className="document-stage-heading">
+          <p className="document-stage-title">{selectedSessionItem ? deriveRunTitle(selectedSessionItem.latestRun) : (activeContext?.hostname ?? "当前对话")}</p>
+          {selectedThreadRun?.runId ? <small className="detail-muted">Run {selectedThreadRun.runId}</small> : null}
         </div>
-        <div className="chat-primary-meta">
-          {selectedThreadRun?.runId ? <small className="detail-muted">Run：{selectedThreadRun.runId}</small> : null}
+        <div className="chat-primary-meta document-stage-actions">
           <button className="secondary" disabled={!selectedThreadRun?.runId || exportingDiagnostics} onClick={() => onExportDiagnostics()}>
             {exportingDiagnostics ? "导出中..." : "导出诊断日志"}
           </button>
@@ -143,13 +142,9 @@ export function MainStage({
           />
         ) : (
           <section className="transcript-part transcript-part-summary transcript-empty-state empty-state" data-section="part" data-part-kind="summary" data-part-type="summary" data-part-role="assistant">
-            <div className="transcript-part-decoration" data-section="decoration" aria-hidden="true">
-              <span className="transcript-part-anchor" data-tone="neutral" />
-              <span className="transcript-part-rail" />
-            </div>
             <div className="transcript-part-body" data-section="content">
               <strong>开始一段新的会话</strong>
-              <p>发送 prompt 后，这里会切换成基于 messages[] -&gt; parts[] 的 transcript 主舞台。</p>
+              <p>发送 prompt 后，这里会按照 opencode web 的正文流直接渲染消息与工具轨迹。</p>
             </div>
           </section>
         )}

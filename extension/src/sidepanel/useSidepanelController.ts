@@ -704,7 +704,7 @@ export function useSidepanelController() {
                 ...current.currentRun,
                 status: lifecycleStatus.runStatus,
                 updatedAt: acceptance.event.createdAt,
-                finalOutput: deriveRunFinalOutput(current.currentRun.finalOutput, acceptance.event),
+                finalOutput: deriveRunFinalOutput(current.currentRun.finalOutput, acceptance.event, nextEvents, lifecycleStatus.runStatus),
                 errorMessage: acceptance.event.type === "error" ? acceptance.event.message : current.currentRun.errorMessage
               }
             : current.currentRun;

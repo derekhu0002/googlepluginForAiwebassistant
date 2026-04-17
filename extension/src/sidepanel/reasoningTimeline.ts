@@ -23,14 +23,17 @@ const DEFAULT_EVENT_TITLES: Record<NormalizedEventType, string> = {
 const SMALL_EVENT_MESSAGE_LIMIT = 140;
 const AGGREGATED_EVENT_TYPES = new Set<NormalizedEventType>(["thinking", "tool_call"]);
 const ORCHESTRATION_NOISE_PATTERNS = [
+  /^正在执行远端\s+\/agent\s+capability\s+discovery/iu,
+  /^已通过远端\s+\/agent\s+探测并选定/iu,
+  /^会话已创建/iu,
+  /^会话状态/iu,
   /^已创建\s+opencode\s+session/iu,
   /^已连接主分析代理/iu,
   /opencode\s+session\s+状态更新/iu,
   /^opencode\s+session/iu,
   /^正在处理当前分析步骤/iu,
   /^当前步骤已完成，正在进入下一步/iu,
-  /^正在整理上下文并准备分析/iu,
-  /^正在检索相关信息/iu,
+  /^正在读取所需内容[。.]?$/iu,
   /^读取页面上下文/iu,
   /^整理可用字段/iu,
   /^逐步展示文本/iu,
@@ -441,6 +444,27 @@ function isProvisionalAssistantMessageId(logicalMessageId: string | null | undef
   return Boolean(logicalMessageId?.startsWith("assistant-provisional:"));
 }
 
+function resolveRunScopedAssistantLogicalMessageId(
+  runId: string,
+  currentLogicalMessageId: string | null | undefined,
+  incomingLogicalMessageId: string | null | undefined,
+  assistantNodeIndex = 0
+) {
+  if (currentLogicalMessageId && !isProvisionalAssistantMessageId(currentLogicalMessageId)) {
+    return currentLogicalMessageId;
+  }
+
+  if (incomingLogicalMessageId?.trim()) {
+    return incomingLogicalMessageId;
+  }
+
+  if (currentLogicalMessageId?.trim()) {
+    return currentLogicalMessageId;
+  }
+
+  return createProvisionalAssistantMessageId(runId, assistantNodeIndex);
+}
+
 function isMeaningfulAnswerRecord(answer: AnswerRecord) {
   return Boolean(answer.answer.trim());
 }
@@ -806,8 +830,13 @@ function resolveAssistantDisplayText(
   finalOutput?: string | null,
   status?: RunRecord["status"]
 ) {
-  const sanitizedFinalOutput = sanitizeAssistantDisplayText(trimTerminalText(finalOutput));
+  const exactFinalOutput = trimTerminalText(finalOutput);
+  const sanitizedFinalOutput = sanitizeAssistantDisplayText(exactFinalOutput);
   const sanitizedAggregatedText = sanitizeAssistantDisplayText(aggregatedText);
+
+  if (status === "done" && exactFinalOutput) {
+    return exactFinalOutput;
+  }
 
   if (!sanitizedFinalOutput) {
     return sanitizedAggregatedText;
@@ -1440,6 +1469,23 @@ function shouldDisplayThinkingFragment(summary: string, assistantDisplayText: st
   return true;
 }
 
+function resolveMeaningfulToolProcessSummary(item: ChatStreamItemModel, summary: string) {
+  const title = normalizeMarkdownStructure(item.title).trim();
+  if (!title) {
+    return "";
+  }
+
+  if (title === DEFAULT_EVENT_TITLES.tool_call || title === summary) {
+    return "";
+  }
+
+  if (isLikelyOrchestrationNoiseLine(title)) {
+    return "";
+  }
+
+  return title;
+}
+
 function normalizeProcessFragment(item: ChatStreamItemModel, assistantDisplayText: string, status?: RunRecord["status"], hasResultEvent?: boolean) {
   if (item.kind !== "assistant_process") {
     return item;
@@ -1452,15 +1498,32 @@ function normalizeProcessFragment(item: ChatStreamItemModel, assistantDisplayTex
   }
 
   if (item.primaryType === "tool_call") {
+    if (isLikelyOrchestrationNoiseLine(sanitized)) {
+      const titleSummary = resolveMeaningfulToolProcessSummary(item, sanitized);
+      if (!titleSummary) {
+        return null;
+      }
+
+      return {
+        ...item,
+        summary: titleSummary
+      };
+    }
+
     return {
       ...item,
       summary: sanitized
     };
   }
 
+  const sanitizedThinking = sanitizeAssistantThinkingText(sanitized, assistantDisplayText);
+  if (!sanitizedThinking) {
+    return null;
+  }
+
   return {
     ...item,
-    summary: sanitized
+    summary: sanitizedThinking
   };
 }
 
@@ -1614,6 +1677,56 @@ function getTranscriptPartIdentity(part: TranscriptPartModel) {
   return [part.runId, part.role, part.kind, part.groupAnchorId, part.anchorId].join(":");
 }
 
+function shouldDeduplicateOrderedTranscriptPart(current: TranscriptPartModel, incoming: TranscriptPartModel) {
+  if (current.runId !== incoming.runId || current.role !== incoming.role || current.kind !== incoming.kind) {
+    return false;
+  }
+
+  if (current.anchorId !== incoming.anchorId) {
+    return false;
+  }
+
+  if (!(current.groupAnchorId === incoming.groupAnchorId || hasAssistantGroupAnchorDrift(current.groupAnchorId, incoming.groupAnchorId))) {
+    return false;
+  }
+
+  return getComparableBlockKey(current.text) === getComparableBlockKey(incoming.text);
+}
+
+function mergeOrderedTranscriptPart(current: TranscriptPartModel, incoming: TranscriptPartModel): TranscriptPartModel {
+  return {
+    ...current,
+    ...incoming,
+    createdAt: current.createdAt,
+    anchorId: current.anchorId,
+    groupAnchorId: getPreferredTranscriptGroupAnchorId(current.groupAnchorId, incoming.groupAnchorId),
+    originEventTypes: [...new Set([...current.originEventTypes, ...incoming.originEventTypes])],
+    badges: incoming.badges.length ? incoming.badges : current.badges,
+    actionAnchorId: incoming.actionAnchorId ?? current.actionAnchorId,
+    sourceQuestionPrompt: incoming.sourceQuestionPrompt ?? current.sourceQuestionPrompt
+  };
+}
+
+function dedupeOrderedTranscriptParts(parts: TranscriptPartModel[]) {
+  if (parts.length <= 1) {
+    return parts;
+  }
+
+  const deduped: TranscriptPartModel[] = [];
+
+  for (const part of parts) {
+    const previous = deduped[deduped.length - 1];
+    if (previous && shouldDeduplicateOrderedTranscriptPart(previous, part)) {
+      deduped[deduped.length - 1] = mergeOrderedTranscriptPart(previous, part);
+      continue;
+    }
+
+    deduped.push(part);
+  }
+
+  return deduped;
+}
+
 function mergeTranscriptPartCollections(currentParts: TranscriptPartModel[], incomingParts: TranscriptPartModel[]) {
   if (!incomingParts.length) {
     return currentParts;
@@ -1670,7 +1783,7 @@ function mergeTranscriptPartCollections(currentParts: TranscriptPartModel[], inc
     nextParts[existingIndex] = mergedPart;
   }
 
-  return nextParts;
+  return dedupeOrderedTranscriptParts(nextParts);
 }
 
 function mergeTranscriptMessageModels(current: TranscriptMessageModel, incoming: TranscriptMessageModel): TranscriptMessageModel {
@@ -1749,7 +1862,7 @@ function mergeAssistantTranscriptTurn(messages: TranscriptMessageModel[]) {
   }
 
   const baseMessage = messages[latestTextMessageIndex];
-  const parts = messages.flatMap((message, messageIndex) => message.parts.filter((part) => part.kind !== "text" || messageIndex === latestTextMessageIndex));
+  const parts = messages.reduce<TranscriptPartModel[]>((currentParts, message) => mergeTranscriptPartCollections(currentParts, message.parts), []);
   const createdAt = messages[0]?.createdAt ?? baseMessage.createdAt;
   const updatedAt = messages[messages.length - 1]?.updatedAt ?? baseMessage.updatedAt;
   const latestFeedbackState = [...messages].reverse().map((message) => message.feedbackState).find(Boolean);
@@ -1761,7 +1874,7 @@ function mergeAssistantTranscriptTurn(messages: TranscriptMessageModel[]) {
       ...baseMessage,
       createdAt,
       updatedAt,
-      parts,
+      parts: dedupeOrderedTranscriptParts(parts),
       sourceQuestionPrompt: latestSourceQuestionPrompt ?? baseMessage.sourceQuestionPrompt,
       supportsCopy: messages.some((message) => message.supportsCopy),
       supportsRetry: messages.some((message) => message.supportsRetry),
@@ -2020,18 +2133,17 @@ function buildLiveProjectionDebug(reusedPreviousStore: boolean, appliedDeltaEven
 }
 
 function resolveAssistantEventMessageId(state: LiveTranscriptProjectionState, event: NormalizedRunEvent) {
-  return getAssistantStableMessageId(event)
-    || state.currentAssistantLogicalMessageId
-    || createProvisionalAssistantMessageId(state.runId, state.assistantNodeIndex);
+  return resolveRunScopedAssistantLogicalMessageId(
+    state.runId,
+    state.currentAssistantLogicalMessageId,
+    getAssistantStableMessageId(event),
+    state.assistantNodeIndex
+  );
 }
 
 function shouldOpenNextAssistantNode(state: LiveTranscriptProjectionState, event: NormalizedRunEvent) {
   const stableMessageId = getAssistantStableMessageId(event);
-  if (!state.currentAssistantLogicalMessageId) {
-    return false;
-  }
-
-  if (!stableMessageId) {
+  if (!state.currentAssistantLogicalMessageId || !stableMessageId) {
     return false;
   }
 
@@ -2039,7 +2151,17 @@ function shouldOpenNextAssistantNode(state: LiveTranscriptProjectionState, event
     return false;
   }
 
-  return !isProvisionalAssistantMessageId(stableMessageId);
+  if (isProvisionalAssistantMessageId(state.currentAssistantLogicalMessageId)) {
+    return false;
+  }
+
+  const currentText = sanitizeAssistantDisplayText(state.assistantTextSoFar);
+  const incomingText = sanitizeAssistantDisplayText(event.message);
+  if (!currentText || !incomingText) {
+    return true;
+  }
+
+  return !shouldTreatComparableTextsAsDuplicate(currentText, incomingText);
 }
 
 function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, options: BuildTranscriptSegmentReadModelOptions) {
@@ -2353,6 +2475,7 @@ function processLiveProjectionEvent(
       state.assistantResponse = createEmptyAssistantResponseAggregation();
       state.latestResultText = "";
     }
+
     const logicalMessageId = resolveAssistantEventMessageId(state, event);
     state.currentAssistantLogicalMessageId = logicalMessageId;
     state.currentAssistantGroupAnchorId = getAssistantGroupAnchorId(state.runId, logicalMessageId);
@@ -2440,9 +2563,15 @@ function processLiveProjectionEvent(
       closeCurrentOutputSegmentInState(state);
     }
 
-    const processMessageId = resolveAssistantEventMessageId(state, event);
-    const toolMessageId = getEventToolMessageId(event);
-    state.currentAssistantLogicalMessageId = processMessageId ?? toolMessageId ?? state.currentAssistantLogicalMessageId;
+    const processMessageId = event.type === "thinking"
+      ? resolveAssistantEventMessageId(state, event)
+      : state.currentAssistantLogicalMessageId;
+    state.currentAssistantLogicalMessageId = resolveRunScopedAssistantLogicalMessageId(
+      state.runId,
+      state.currentAssistantLogicalMessageId,
+      processMessageId,
+      state.assistantNodeIndex
+    );
     state.currentAssistantGroupAnchorId = getAssistantGroupAnchorId(state.runId, state.currentAssistantLogicalMessageId);
 
     state.items.push(createBaseItem({
@@ -2743,13 +2872,17 @@ function getFinalAnswerTranscriptPart(message: TranscriptMessageModel | null) {
     return null;
   }
 
-  for (let index = message.parts.length - 1; index >= 0; index -= 1) {
-    if (message.parts[index]?.kind === "text") {
-      return message.parts[index];
-    }
+  const textParts = message.parts.filter((part) => part.kind === "text");
+  if (!textParts.length) {
+    return null;
   }
 
-  return null;
+  const resultTextParts = textParts.filter((part) => part.originEventTypes.includes("result"));
+  if (resultTextParts.length) {
+    return resultTextParts[resultTextParts.length - 1];
+  }
+
+  return textParts[textParts.length - 1] ?? null;
 }
 
 function getTranscriptPartByKind(message: TranscriptMessageModel | null, kind: TranscriptPartKind) {
@@ -2802,10 +2935,15 @@ function getRunScopedAssistantGroupAnchorId(runId: string) {
 
 function collapseRunScopedAssistantMessages(
   messages: TranscriptMessageModel[],
-  previousAssistantMessage?: TranscriptMessageModel | null
+  previousAssistantMessage?: TranscriptMessageModel | null,
+  forceStableRunScopedId = false
 ) {
   const assistantMessages = messages.filter((message) => message.role === "assistant");
-  if (assistantMessages.length <= 1) {
+  if (!assistantMessages.length) {
+    return messages;
+  }
+
+  if (assistantMessages.length === 1 && !forceStableRunScopedId) {
     return messages;
   }
 
@@ -2874,7 +3012,8 @@ function mergeTranscriptMessageCollections(options: {
   const historicalMessages = normalizeTranscriptMessages(options.historicalMessages);
   const liveMessages = collapseRunScopedAssistantMessages(
     normalizeTranscriptMessages(options.liveMessages),
-    previousModel?.activeMessage
+    previousModel?.activeMessage,
+    Boolean(options.sealActiveMessage)
   );
   const rawMessages = normalizeTranscriptMessages(liveMessages.length
     ? [...historicalMessages, ...liveMessages]

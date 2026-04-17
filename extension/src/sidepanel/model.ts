@@ -313,16 +313,43 @@ export function acceptIncomingRunEvent(
   };
 }
 
-export function deriveRunFinalOutput(currentFinalOutput: string, event: NormalizedRunEvent) {
-  if (event.type === "result") {
-    return event.message;
-  }
-
+export function deriveRunFinalOutput(
+  currentFinalOutput: string,
+  event: NormalizedRunEvent,
+  nextEvents: NormalizedRunEvent[],
+  nextRunStatus?: RunRecord["status"]
+) {
   if (event.type === "error") {
     return currentFinalOutput;
   }
 
-  return currentFinalOutput;
+  const aggregatedAssistantText = collectRunAssistantResponseText(nextEvents, "").trim();
+  const existingFinalOutput = currentFinalOutput.trim();
+  const directResultText = event.type === "result" ? event.message.trim() : "";
+
+  if (nextRunStatus === "done") {
+    if (aggregatedAssistantText && !existingFinalOutput) {
+      return aggregatedAssistantText;
+    }
+
+    if (aggregatedAssistantText && existingFinalOutput) {
+      if (aggregatedAssistantText.includes(existingFinalOutput)) {
+        return aggregatedAssistantText;
+      }
+
+      if (existingFinalOutput.includes(aggregatedAssistantText)) {
+        return existingFinalOutput;
+      }
+
+      return aggregatedAssistantText.length >= existingFinalOutput.length ? aggregatedAssistantText : existingFinalOutput;
+    }
+
+    if (directResultText) {
+      return directResultText;
+    }
+  }
+
+  return aggregatedAssistantText || existingFinalOutput;
 }
 
 export function deriveLifecycleStatus(current: AssistantState, event: NormalizedRunEvent, nextEvents: NormalizedRunEvent[]) {

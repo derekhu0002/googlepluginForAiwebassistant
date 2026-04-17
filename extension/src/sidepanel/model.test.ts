@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyRunEventState } from "../shared/protocol";
 import type { NormalizedRunEvent } from "../shared/protocol";
-import { acceptIncomingRunEvent } from "./model";
+import { acceptIncomingRunEvent, deriveRunFinalOutput } from "./model";
 
 // @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
 describe("sidepanel canonical run-event acceptance", () => {
@@ -154,5 +154,68 @@ describe("sidepanel canonical run-event acceptance", () => {
       priorFrontier: expect.objectContaining({ lastSequence: 2 }),
       resultingFrontier: expect.objectContaining({ lastSequence: 2 })
     });
+  });
+
+  it("derives streaming final output from accepted assistant text events instead of stale persisted text", () => {
+    const nextEvents = [
+      createEvent(1, {
+        type: "thinking",
+        message: "第一段",
+        semantic: {
+          channel: "assistant_text",
+          emissionKind: "delta",
+          identity: "assistant_text:msg-1:part-1",
+          itemKind: "text",
+          messageId: "msg-1",
+          partId: "part-1"
+        }
+      }),
+      createEvent(2, {
+        type: "thinking",
+        message: "第二段",
+        semantic: {
+          channel: "assistant_text",
+          emissionKind: "delta",
+          identity: "assistant_text:msg-1:part-2",
+          itemKind: "text",
+          messageId: "msg-1",
+          partId: "part-2"
+        }
+      })
+    ];
+
+    expect(deriveRunFinalOutput("第一段", nextEvents[1], nextEvents, "streaming")).toBe("第一段第二段");
+  });
+
+  it("keeps the longer assistant text when delayed same-run text arrives after a result event", () => {
+    const nextEvents = [
+      createEvent(1, {
+        type: "thinking",
+        message: "第一段",
+        semantic: {
+          channel: "assistant_text",
+          emissionKind: "delta",
+          identity: "assistant_text:msg-1:part-1",
+          itemKind: "text",
+          messageId: "msg-1",
+          partId: "part-1"
+        }
+      }),
+      createEvent(2, { type: "result", message: "第一段" }),
+      createEvent(3, {
+        type: "thinking",
+        message: "第二段",
+        semantic: {
+          channel: "assistant_text",
+          emissionKind: "delta",
+          identity: "assistant_text:msg-1:part-2",
+          itemKind: "text",
+          messageId: "msg-1",
+          partId: "part-2"
+        }
+      })
+    ];
+
+    expect(deriveRunFinalOutput("第一段", nextEvents[2], nextEvents, "done")).toBe("第一段第二段");
   });
 });
