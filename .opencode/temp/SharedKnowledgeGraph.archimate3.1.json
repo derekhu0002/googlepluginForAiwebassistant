@@ -1,4 +1,4 @@
-﻿{
+{
   "identifier": "ai4pb-shared-knowledge-graph",
   "version": "1.0.0",
   "name": [
@@ -8,7 +8,7 @@
   ],
   "documentation": [
     {
-      "value": "ArchiMate 3.1 design for ELM-002 adds a cross-stage Transcript Pipeline Observability Service over the existing extension brownfield seams. The design extends existing shared transport/normalization, sidepanel ingestion/acceptance, transcript projection, diagnostics export, and render analysis modules rather than introducing a new standalone subsystem. New software units are modeled for shared stream contract tracing, sidepanel stream acceptance tracing, transcript projection tracing, diagnostics export assembly, and final render analysis. The design preserves the current sidepanel UX contract by keeping observability evidence passive to rendering semantics and exporting correlated time- and content-oriented trace evidence that allows engineers to identify the earliest stage where transcript content becomes missing, duplicated, replayed, or out of order."
+      "value": "ArchiMate 3.1 issue-driven redesign approved for sidepanel transcript fragmentation and semantic confusion. The fix extends existing brownfield software units SU-SP-TRANSCRIPT-PROJECTION, SU-SP-CONVERSATION-VIEWPORT, and SU-SP-RUN-STREAM-CONTROLLER under the mandatory human-authored TODO contracts on ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and ELM-REQ-OPENCODE-UX. Design decision: no new software unit is introduced. The projection layer must aggregate assistant content by stable run-level conversation ownership rather than by changing SSE messageId values, must not synthesize ghost user nodes from tool/status/text transitions or out-of-order payloads, and must emit one renderer-ready assistant message node per runId. The render layer must hard-guarantee one assistant article per runId, place reasoning and tool-call parts only inside ProcessDisclosure native details markup, place only final result content inside FinalAnswerPanel, and preserve React node identity during high-frequency tail deltas so the assistant article and disclosure subtree do not remount."
     }
   ],
   "metadata": {
@@ -21,28 +21,31 @@
       "counters": {
         "ELM": 2
       },
-      "designSummary": "ArchiMate 3.1 design for ELM-002 adds a cross-stage Transcript Pipeline Observability Service over the existing extension brownfield seams. The design extends existing shared transport/normalization, sidepanel ingestion/acceptance, transcript projection, diagnostics export, and render analysis modules rather than introducing a new standalone subsystem. New software units are modeled for shared stream contract tracing, sidepanel stream acceptance tracing, transcript projection tracing, diagnostics export assembly, and final render analysis. The design preserves the current sidepanel UX contract by keeping observability evidence passive to rendering semantics and exporting correlated time- and content-oriented trace evidence that allows engineers to identify the earliest stage where transcript content becomes missing, duplicated, replayed, or out of order.",
+      "designSummary": "ArchiMate 3.1 issue-driven redesign approved for sidepanel transcript fragmentation and semantic confusion. The fix extends existing brownfield software units SU-SP-TRANSCRIPT-PROJECTION, SU-SP-CONVERSATION-VIEWPORT, and SU-SP-RUN-STREAM-CONTROLLER under the mandatory human-authored TODO contracts on ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and ELM-REQ-OPENCODE-UX. Design decision: no new software unit is introduced. The projection layer must aggregate assistant content by stable run-level conversation ownership rather than by changing SSE messageId values, must not synthesize ghost user nodes from tool/status/text transitions or out-of-order payloads, and must emit one renderer-ready assistant message node per runId. The render layer must hard-guarantee one assistant article per runId, place reasoning and tool-call parts only inside ProcessDisclosure native details markup, place only final result content inside FinalAnswerPanel, and preserve React node identity during high-frequency tail deltas so the assistant article and disclosure subtree do not remount.",
       "designDecisions": [
         "ADR-1 Brownfield fit decision: extend existing modules extension/src/shared/api.ts, extension/src/shared/protocol.ts, extension/src/sidepanel/useSidepanelController.ts, extension/src/sidepanel/model.ts, extension/src/sidepanel/reasoningTimeline.ts, extension/src/sidepanel/diagnostics.ts, extension/src/sidepanel/reasoningTimelineView.tsx, and extension/src/sidepanel/components/stage/MainStage.tsx. Rejected creating a new standalone observability subsystem because the required ownership seams already exist and a new subsystem would increase coupling and UX regression risk.",
         "ADR-2 Observability contract decision: introduce a Transcript Pipeline Observability Service and Transcript Trace Evidence data object so the same logical transcript-bearing item can be correlated across transport receipt, event generation, normalization, sidepanel acceptance, transcript projection, diagnostics export, and final render analysis.",
-        "ADR-3 UX preservation decision: diagnostics remain passive to the user experience. Instrumentation may add trace metadata, console/export evidence, and render-path analysis, but must not change normal sidepanel transcript content, transcript ordering semantics, or visible interaction behavior."
+        "ADR-3 UX preservation decision: diagnostics remain passive to the user experience. Instrumentation may add trace metadata, console/export evidence, and render-path analysis, but must not change normal sidepanel transcript content, transcript ordering semantics, or visible interaction behavior.",
+        "ADR: Brownfield fit for transcript anti-fragmentation fix. Selected modules are extension/src/sidepanel/reasoningTimeline.ts, extension/src/sidepanel/reasoningTimelineView.tsx, extension/src/sidepanel/components/stage/MainStage.tsx, and extension/src/sidepanel/useSidepanelController.ts. Rejected introducing a new transcript semantic normalizer software unit because the existing controller -> projection -> viewport seam already matches the required ownership boundaries and allows the mandatory TODO contracts to be implemented without adding coupling.",
+        "ADR: Transcript ownership model for AC11-AC13. Within a single runId, assistant DOM ownership is run-scoped and must remain singular even when SSE emits multiple semantic.messageId or data.message_id values. Semantic routing is strict: thinking renders only as reasoning parts, tool_call/tool_result render only as tool parts inside the process disclosure tree, and result/final answer content renders only inside FinalAnswerPanel. Renderer topology is stable: tail updates may mutate active assistant content but must not create, remount, or fragment assistant articles.",
+        "Audit follow-up for commit ab39981 scoped to TASK-031: no architecture model change is required. Existing ApplicationFunction ELM-FUNC-EXT-CONSUME-RUN-STREAM and software unit SU-SP-RUN-STREAM-CONTROLLER remain correct. Required action is tightly scoped implementation rework only: fix automated test intent tags so the scanner resolves the exact ArchitectureID ELM-FUNC-EXT-CONSUME-RUN-STREAM (current block-comment form in extension/src/sidepanel/model.test.ts yields malformed trailing '*/'), while preserving already-passing AC11-AC13 transcript behavior and assertions."
       ],
       "runtime": {
         "activeGoal": "Add end-to-end observability across the sidepanel SSE/transcript pipeline to diagnose missing, duplicate, replayed, or o",
         "validations": {
           "qa": {
             "status": "passed",
-            "summary": "QA passed for commit 5c0b3f8 (Requirement ELM-002). 跳过了真实环境验证 because live_environment_ready=false and local-only validation was approved. Commit scope verified via git diff-tree: extension/src/sidepanel/App.test.tsx, model.ts, reasoningTimeline.ts, reasoningTimelineView.test.tsx, reasoningTimelineView.tsx, useSidepanelController.ts. Local validation passed: targeted ELM-002 extension suite passed (7 files / 151 tests, including App.test.tsx 66 tests), extension test suite passed, extension typecheck passed, extension build passed. Scanner-verifiable executed intent coverage now includes Requirement ELM-002 and Architecture IDs ELM-FUNC-EXT-CAPTURE-TRANSPORT-CANONICAL-TRACE, ELM-FUNC-SP-TRACE-STREAM-ACCEPTANCE-FRONTIER, ELM-FUNC-SP-TRACE-INCREMENTAL-TRANSCRIPT-PROJECTION, ELM-FUNC-SP-ASSEMBLE-CORRELATED-TRANSCRIPT-DIAGNOSTICS, and ELM-FUNC-SP-ANALYZE-FINAL-TRANSCRIPT-RENDER. Previous App.test.tsx regressions are no longer reproducing in local validation.",
-            "details": "QA passed for commit 5c0b3f8 (Requirement ELM-002). 跳过了真实环境验证 because live_environment_ready=false and local-only validation was approved. Commit scope verified via git diff-tree: extension/src/sidepanel/App.test.tsx, model.ts, reasoningTimeline.ts, reasoningTimelineView.test.tsx, reasoningTimelineView.tsx, useSidepanelController.ts. Local validation passed: targeted ELM-002 extension suite passed (7 files / 151 tests, including App.test.tsx 66 tests), extension test suite passed, extension typecheck passed, extension build passed. Scanner-verifiable executed intent coverage now includes Requirement ELM-002 and Architecture IDs ELM-FUNC-EXT-CAPTURE-TRANSPORT-CANONICAL-TRACE, ELM-FUNC-SP-TRACE-STREAM-ACCEPTANCE-FRONTIER, ELM-FUNC-SP-TRACE-INCREMENTAL-TRANSCRIPT-PROJECTION, ELM-FUNC-SP-ASSEMBLE-CORRELATED-TRANSCRIPT-DIAGNOSTICS, and ELM-FUNC-SP-ANALYZE-FINAL-TRANSCRIPT-RENDER. Previous App.test.tsx regressions are no longer reproducing in local validation.",
-            "commitId": "5c0b3f8",
-            "updatedAt": "2026-04-16T12:35:09.804Z"
+            "summary": "QA passed for commit 886f3a2 scoped to TASK-031. 跳过了真实环境验证 because live_environment_ready=false and local-only validation was approved. Reviewed commit scope is limited to extension/src/sidepanel/model.test.ts intent tag formatting for ELM-FUNC-EXT-CONSUME-RUN-STREAM; git diff versus ab39981 shows only scanner-safe comment conversion with no behavioral code changes. run_reality_scanner verifiedIntentIds includes exact intended IDs ELM-FUNC-EXT-CONSUME-RUN-STREAM and ELM-REQ-OPENCODE-UX. Local validation passed in detached worktree at commit 886f3a2: targeted extension tests for src/sidepanel/model.test.ts, reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and App.test.tsx, plus extension typecheck and extension build. Evidence supports no regression of previously passed AC11-AC13 behavior while restoring scanner-verifiable traceability for TASK-031.",
+            "details": "QA passed for commit 886f3a2 scoped to TASK-031. 跳过了真实环境验证 because live_environment_ready=false and local-only validation was approved. Reviewed commit scope is limited to extension/src/sidepanel/model.test.ts intent tag formatting for ELM-FUNC-EXT-CONSUME-RUN-STREAM; git diff versus ab39981 shows only scanner-safe comment conversion with no behavioral code changes. run_reality_scanner verifiedIntentIds includes exact intended IDs ELM-FUNC-EXT-CONSUME-RUN-STREAM and ELM-REQ-OPENCODE-UX. Local validation passed in detached worktree at commit 886f3a2: targeted extension tests for src/sidepanel/model.test.ts, reasoningTimeline.test.ts, reasoningTimelineView.test.tsx, and App.test.tsx, plus extension typecheck and extension build. Evidence supports no regression of previously passed AC11-AC13 behavior while restoring scanner-verifiable traceability for TASK-031.",
+            "commitId": "886f3a2",
+            "updatedAt": "2026-04-16T17:13:28.942Z"
           },
           "audit": {
             "status": "passed",
-            "summary": "Audit passed for commit 5c0b3f8 (ELM-002 rework batch covering TASK-024, TASK-025, TASK-026, TASK-027, TASK-028). The intent baseline is sufficient and complete across core layers. Implementation reality exposes explicit ArchitectureID evidence for ELM-FUNC-EXT-CAPTURE-TRANSPORT-CANONICAL-TRACE in extension/src/shared/api.ts, ELM-FUNC-SP-TRACE-STREAM-ACCEPTANCE-FRONTIER and ELM-FUNC-SP-ASSEMBLE-CORRELATED-TRANSCRIPT-DIAGNOSTICS in extension/src/sidepanel/useSidepanelController.ts, ELM-FUNC-SP-TRACE-INCREMENTAL-TRANSCRIPT-PROJECTION in extension/src/sidepanel/reasoningTimeline.ts, and ELM-FUNC-SP-ANALYZE-FINAL-TRANSCRIPT-RENDER in extension/src/sidepanel/reasoningTimelineView.tsx and MainStage.tsx. The strict tagged intent-verification gate now passes because verifiedIntentIds includes Requirement ELM-002 and all required architecture IDs. Sidepanel automated tests also preserve passive observability and visible UX semantics through transcript continuity, debounced history behavior, chat-first shell cues, and unified transcript stream rendering checks.",
-            "details": "Audit passed for commit 5c0b3f8 (ELM-002 rework batch covering TASK-024, TASK-025, TASK-026, TASK-027, TASK-028). The intent baseline is sufficient and complete across core layers. Implementation reality exposes explicit ArchitectureID evidence for ELM-FUNC-EXT-CAPTURE-TRANSPORT-CANONICAL-TRACE in extension/src/shared/api.ts, ELM-FUNC-SP-TRACE-STREAM-ACCEPTANCE-FRONTIER and ELM-FUNC-SP-ASSEMBLE-CORRELATED-TRANSCRIPT-DIAGNOSTICS in extension/src/sidepanel/useSidepanelController.ts, ELM-FUNC-SP-TRACE-INCREMENTAL-TRANSCRIPT-PROJECTION in extension/src/sidepanel/reasoningTimeline.ts, and ELM-FUNC-SP-ANALYZE-FINAL-TRANSCRIPT-RENDER in extension/src/sidepanel/reasoningTimelineView.tsx and MainStage.tsx. The strict tagged intent-verification gate now passes because verifiedIntentIds includes Requirement ELM-002 and all required architecture IDs. Sidepanel automated tests also preserve passive observability and visible UX semantics through transcript continuity, debounced history behavior, chat-first shell cues, and unified transcript stream rendering checks.",
-            "commitId": "5c0b3f8",
-            "updatedAt": "2026-04-16T12:30:23.249Z"
+            "summary": "Audit passed for commit 886f3a2 scoped to TASK-031. Intent baseline remains sufficient with no missing core layers. Strict intent-verification gate now passes because run_reality_scanner verifiedIntentIds includes exact intended IDs ELM-REQ-OPENCODE-UX, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and ELM-FUNC-EXT-CONSUME-RUN-STREAM. Reviewed commit only converts model.test.ts intent annotations from block comments to scanner-safe line comments, so approved AC11-AC13 transcript anti-fragmentation and semantic-layering behavior remains intact with no implementation regression indicated.",
+            "details": "Audit passed for commit 886f3a2 scoped to TASK-031. Intent baseline remains sufficient with no missing core layers. Strict intent-verification gate now passes because run_reality_scanner verifiedIntentIds includes exact intended IDs ELM-REQ-OPENCODE-UX, ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and ELM-FUNC-EXT-CONSUME-RUN-STREAM. Reviewed commit only converts model.test.ts intent annotations from block comments to scanner-safe line comments, so approved AC11-AC13 transcript anti-fragmentation and semantic-layering behavior remains intact with no implementation regression indicated.",
+            "commitId": "886f3a2",
+            "updatedAt": "2026-04-16T16:28:00.348Z"
           }
         },
         "release": {
@@ -51,7 +54,7 @@
           "releaseLogPath": "SprintRleaseLog.md",
           "updatedAt": "2026-04-16T12:41:12.333Z"
         },
-        "updatedAt": "2026-04-16T12:36:31.674Z"
+        "updatedAt": "2026-04-16T17:13:28.944Z"
       }
     }
   },
@@ -1420,7 +1423,7 @@
         ],
         "documentation": [
           {
-            "value": "ArchiMate 3.1 design for ELM-002 adds a cross-stage Transcript Pipeline Observability Service over the existing extension brownfield seams. The design extends existing shared transport/normalization, sidepanel ingestion/acceptance, transcript projection, diagnostics export, and render analysis modules rather than introducing a new standalone subsystem. New software units are modeled for shared stream contract tracing, sidepanel stream acceptance tracing, transcript projection tracing, diagnostics export assembly, and final render analysis. The design preserves the current sidepanel UX contract by keeping observability evidence passive to rendering semantics and exporting correlated time- and content-oriented trace evidence that allows engineers to identify the earliest stage where transcript content becomes missing, duplicated, replayed, or out of order."
+            "value": "ArchiMate 3.1 issue-driven redesign approved for sidepanel transcript fragmentation and semantic confusion. The fix extends existing brownfield software units SU-SP-TRANSCRIPT-PROJECTION, SU-SP-CONVERSATION-VIEWPORT, and SU-SP-RUN-STREAM-CONTROLLER under the mandatory human-authored TODO contracts on ELM-FUNC-EXT-PROJECT-TRANSCRIPT, ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT, and ELM-REQ-OPENCODE-UX. Design decision: no new software unit is introduced. The projection layer must aggregate assistant content by stable run-level conversation ownership rather than by changing SSE messageId values, must not synthesize ghost user nodes from tool/status/text transitions or out-of-order payloads, and must emit one renderer-ready assistant message node per runId. The render layer must hard-guarantee one assistant article per runId, place reasoning and tool-call parts only inside ProcessDisclosure native details markup, place only final result content inside FinalAnswerPanel, and preserve React node identity during high-frequency tail deltas so the assistant article and disclosure subtree do not remount."
           }
         ],
         "extensions": {
@@ -1613,6 +1616,96 @@
         }
       },
       {
+        "identifier": "TASK-029",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Implement runId-stable transcript projection in extension/src/sidepanel/reasoningTimeline.ts to eliminate assistant frag"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Implemented runId-stable transcript projection collapse for live assistant messages, added adversarial projection regression coverage for semantic message-id churn, and validated targeted transcript tests, typecheck, and build."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 0,
+            "assignee": "Implementation",
+            "summary": "Implemented runId-stable transcript projection collapse for live assistant messages, added adversarial projection regression coverage for semantic message-id churn, and validated targeted transcript tests, typecheck, and build.",
+            "commitId": "ab39981",
+            "softwareUnitId": "SU-SP-TRANSCRIPT-PROJECTION",
+            "softwareUnitTitle": "Sidepanel Transcript Projection Engine",
+            "architectureElementId": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+            "updatedAt": "2026-04-16T15:51:52.110Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-030",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Implement single-article semantic transcript rendering in extension/src/sidepanel/reasoningTimelineView.tsx and extensio"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Completed single-article transcript rendering handoff with renderer-focused adversarial coverage for one assistant article per run, process disclosure visibility, and final-answer-only panel behavior; validated targeted transcript tests, typecheck, and build."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 0,
+            "assignee": "Implementation",
+            "summary": "Completed single-article transcript rendering handoff with renderer-focused adversarial coverage for one assistant article per run, process disclosure visibility, and final-answer-only panel behavior; validated targeted transcript tests, typecheck, and build.",
+            "commitId": "ab39981",
+            "softwareUnitId": "SU-SP-CONVERSATION-VIEWPORT",
+            "softwareUnitTitle": "Sidepanel Conversation Viewport",
+            "architectureElementId": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+            "updatedAt": "2026-04-16T15:51:52.293Z"
+          }
+        }
+      },
+      {
+        "identifier": "TASK-031",
+        "type": "WorkPackage",
+        "name": [
+          {
+            "value": "Align sidepanel live transcript orchestration and regression tests for AC11-AC13 in extension/src/sidepanel/useSidepanel"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Scoped audit rework completed for exact scanner-verifiable ArchitectureID ELM-FUNC-EXT-CONSUME-RUN-STREAM by converting model.test.ts intent annotations to scanner-safe line comments. Targeted model acceptance tests passed and reality scanner now reports verifiedIntentIds containing the exact ArchitectureID while preserving existing AC11-AC13 coverage and behavior."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Task",
+            "taskKind": "implementation",
+            "status": "Done",
+            "retryCount": 1,
+            "assignee": "Implementation",
+            "summary": "Scoped audit rework completed for exact scanner-verifiable ArchitectureID ELM-FUNC-EXT-CONSUME-RUN-STREAM by converting model.test.ts intent annotations to scanner-safe line comments. Targeted model acceptance tests passed and reality scanner now reports verifiedIntentIds containing the exact ArchitectureID while preserving existing AC11-AC13 coverage and behavior.",
+            "commitId": "886f3a2",
+            "softwareUnitId": "SU-SP-RUN-STREAM-CONTROLLER",
+            "softwareUnitTitle": "Sidepanel Run Stream Controller",
+            "architectureElementId": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
+            "updatedAt": "2026-04-16T16:25:08.996Z"
+          }
+        }
+      },
+      {
         "identifier": "ISSUE-007",
         "type": "BusinessObject",
         "name": [
@@ -1623,6 +1716,30 @@
         "documentation": [
           {
             "value": "Resolved by successful rework commit 5c0b3f8 after adding scanner-verifiable @RequirementID/@ArchitectureID tags for ELM-002 and restoring App-level transcript behavior regressions; QA and Audit both passed for TASK-024,TASK-025,TASK-026,TASK-027,TASK-028."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "Issue",
+            "issueType": "ArchGap",
+            "status": "Resolved",
+            "reporter": "OpenCode",
+            "category": "ArchitectureGap"
+          }
+        }
+      },
+      {
+        "identifier": "ISSUE-008",
+        "type": "BusinessObject",
+        "name": [
+          {
+            "value": "IntentNotVerified for commit ab39981 transcript anti-fragmentation batch [Resolved]"
+          }
+        ],
+        "documentation": [
+          {
+            "value": "Resolved by successful TASK-031 audit rework commit 886f3a2. Exact scanner-verifiable ArchitectureID ELM-FUNC-EXT-CONSUME-RUN-STREAM is now present in verifiedIntentIds; QA and Audit both passed while preserving AC11-AC13 behavior."
           }
         ],
         "extensions": {
@@ -3949,6 +4066,138 @@
         ],
         "source": "TASK-028",
         "target": "ELM-FUNC-SP-ANALYZE-FINAL-TRANSCRIPT-RENDER",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-029",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-029"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-029",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-029-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-029 traces to ELM-FUNC-EXT-PROJECT-TRANSCRIPT"
+          }
+        ],
+        "source": "TASK-029",
+        "target": "ELM-FUNC-EXT-PROJECT-TRANSCRIPT",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-030",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-030"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-030",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-030-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-030 traces to ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT"
+          }
+        ],
+        "source": "TASK-030",
+        "target": "ELM-FUNC-EXT-RENDER-INCREMENTAL-TRANSCRIPT",
+        "documentation": [
+          {
+            "value": "Runtime task traceability relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "TaskArchitectureTrace"
+          }
+        }
+      },
+      {
+        "identifier": "REL-PROJECT-TASK-031",
+        "type": "Aggregation",
+        "name": [
+          {
+            "value": "Project aggregates TASK-031"
+          }
+        ],
+        "source": "PROJECT-CURRENT",
+        "target": "TASK-031",
+        "documentation": [
+          {
+            "value": "Runtime task relationship managed by OpenCode runtime."
+          }
+        ],
+        "extensions": {
+          "ai4pb": {
+            "managedBy": "opencode-runtime",
+            "kind": "ProjectTaskLink"
+          }
+        }
+      },
+      {
+        "identifier": "REL-TASK-031-ARCH",
+        "type": "Association",
+        "name": [
+          {
+            "value": "TASK-031 traces to ELM-FUNC-EXT-CONSUME-RUN-STREAM"
+          }
+        ],
+        "source": "TASK-031",
+        "target": "ELM-FUNC-EXT-CONSUME-RUN-STREAM",
         "documentation": [
           {
             "value": "Runtime task traceability relationship managed by OpenCode runtime."
