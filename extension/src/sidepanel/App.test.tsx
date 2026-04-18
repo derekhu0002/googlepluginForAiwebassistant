@@ -1106,7 +1106,7 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
-  it("renders transcript process parts alongside the final assistant answer", async () => {
+  it("keeps the final assistant answer focused without surfacing tool transcript parts", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1138,13 +1138,13 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).not.toContain("You");
     expect(container.textContent).not.toContain("Assistant");
     expect(container.textContent).toContain("最终结论");
-    expect(container.textContent).toContain("查询历史 SR");
+    expect(container.textContent).not.toContain("查询历史 SR");
     expect(container.textContent).not.toContain("读取页面上下文");
     expect(container.querySelector("[data-part-kind='reasoning']")).toBeNull();
-    expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("查询历史 SR");
+    expect(container.querySelector("[data-part-kind='tool']")).toBeNull();
   });
 
-  it("shows persisted final output while keeping projected tool content visible", async () => {
+  it("shows persisted final output without surfacing projected tool content", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1173,8 +1173,9 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.textContent).toContain("来自持久化状态的回复");
-    expect(container.textContent).toContain("查询历史 SR");
+    expect(container.textContent).not.toContain("查询历史 SR");
     expect(container.textContent).not.toContain("读取页面上下文");
+    expect(container.querySelector("[data-part-kind='tool']")).toBeNull();
   });
 
   it("renders complete assistant text when same run emits delayed response after result", async () => {
@@ -1364,7 +1365,7 @@ describe("side panel host permission request flow", () => {
     expect(runtimeSendMessage.mock.calls.filter(([message]) => message.type === "GET_STATE")).toHaveLength(1);
   });
 
-  it("shows tool-call-only transcript blocks while still hiding raw payloads", async () => {
+  it("does not show tool-call-only transcript blocks in the session UI", async () => {
     setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1382,12 +1383,47 @@ describe("side panel host permission request flow", () => {
     });
     await flushUi();
 
-    expect(container.textContent).toContain("正在整理上下文并准备分析。");
+    expect(container.textContent).not.toContain("正在整理上下文并准备分析。");
     expect(container.textContent).not.toContain("prepare_context");
     expect(container.textContent).not.toContain("secret");
     expect(container.querySelector("pre")).toBeNull();
-    expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("正在整理上下文并准备分析。");
+    expect(container.querySelector("[data-part-kind='tool']")).toBeNull();
     expect(container.querySelector("[data-part-kind='text']")).toBeNull();
+    expect(container.querySelector(".transcript-part[data-part-kind='summary']")?.textContent).toContain("进行中");
+  });
+
+  it("shows completed summary after terminal result evidence even if the raw stream status flips back to streaming", async () => {
+    setupChromeStub({
+      contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })]
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushUi();
+
+    const startButton = container.querySelector("button[aria-label='发送消息']") as HTMLButtonElement | null;
+    await act(async () => {
+      startButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushUi();
+
+    const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
+    const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void>; onStatusChange?: (status: "connecting" | "streaming" | "reconnecting") => void };
+
+    await act(async () => {
+      await handlers.onEvent?.(createRunEvent(1, { type: "result", message: "最终回答" }));
+    });
+    await flushUi();
+
+    await act(async () => {
+      handlers.onStatusChange?.("streaming");
+    });
+    await flushUi();
+
+    expect(container.querySelector(".transcript-part[data-part-kind='summary']")?.textContent).toContain("已完成");
+    expect(container.querySelector(".transcript-part[data-part-kind='summary']")?.textContent).not.toContain("进行中");
+    expect(container.textContent).toContain("最终回答");
   });
 
   it("shows user-meaningful thinking inline while streaming", async () => {

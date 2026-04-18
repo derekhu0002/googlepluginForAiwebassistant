@@ -21,6 +21,7 @@ describe("opencode raw event projector", () => {
               sessionID: "ses-1",
               messageID: "msg-1",
               partID: "part-1",
+              field: "text",
               delta: "partial result"
             }
           }
@@ -194,6 +195,71 @@ describe("opencode raw event projector", () => {
       type: "tool_call",
       title: "原始事件 session.custom",
       message: "custom upstream message"
+    });
+  });
+
+  it("promotes session idle to a terminal result when assistant text has already arrived", () => {
+    const projector = createOpencodeRawEventProjector("run-5");
+
+    const snapshotEvents = projector.project({
+      id: "run-5-raw-1",
+      runId: "run-5",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      source: "opencode",
+      eventType: "message.part.updated",
+      payload: {
+        event: {
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              sessionID: "ses-1",
+              messageID: "msg-5",
+              part: {
+                id: "part-5",
+                type: "text",
+                text: "最终文本"
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(snapshotEvents).toHaveLength(1);
+    expect(snapshotEvents[0]).toMatchObject({
+      type: "thinking",
+      message: "最终文本"
+    });
+
+    const idleEvents = projector.project({
+      id: "run-5-raw-2",
+      runId: "run-5",
+      createdAt: "2026-04-01T00:00:01.000Z",
+      sequence: 2,
+      source: "opencode",
+      eventType: "session.idle",
+      payload: {
+        event: {
+          payload: {
+            type: "session.idle",
+            properties: {
+              sessionID: "ses-1"
+            }
+          }
+        }
+      }
+    });
+
+    expect(idleEvents).toHaveLength(1);
+    expect(idleEvents[0]).toMatchObject({
+      type: "result",
+      message: "最终文本",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "final",
+        messageId: "msg-5"
+      }
     });
   });
 

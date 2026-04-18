@@ -1261,13 +1261,17 @@ export function hasTerminalErrorEvidence(options: { events: NormalizedRunEvent[]
 function resolveTerminalStatus<TStatus extends TimelineRunStatus | TimelineStreamStatus | undefined>(
   status: TStatus,
   options: { hasResultEvidence: boolean; hasErrorEvidence: boolean; }
-): TStatus | "streaming" {
-  if (status === "done") {
-    return options.hasResultEvidence ? status : "streaming";
+): TStatus | "done" | "error" | "streaming" {
+  if (options.hasErrorEvidence) {
+    return status === "waiting_for_answer" ? status : "error";
   }
 
-  if (status === "error") {
-    return options.hasErrorEvidence ? status : "streaming";
+  if (options.hasResultEvidence) {
+    return status === "waiting_for_answer" ? status : "done";
+  }
+
+  if (status === "done" || status === "error") {
+    return "streaming";
   }
 
   return status;
@@ -3151,11 +3155,7 @@ function mergeTranscriptMessageCollections(options: {
 }) {
   const previousModel = options.previousModel ?? null;
   const historicalMessages = normalizeTranscriptMessages(options.historicalMessages);
-  const liveMessages = collapseRunScopedAssistantMessages(
-    normalizeTranscriptMessages(options.liveMessages),
-    previousModel?.activeMessage,
-    Boolean(options.sealActiveMessage)
-  );
+  const liveMessages = normalizeTranscriptMessages(options.liveMessages);
   const rawMessages = normalizeTranscriptMessages(liveMessages.length
     ? [...historicalMessages, ...liveMessages]
     : historicalMessages);

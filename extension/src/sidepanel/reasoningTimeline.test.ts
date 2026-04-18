@@ -1515,6 +1515,17 @@ describe("reasoning timeline share-aligned transcript contract", () => {
       hasTerminalEvidence: false
     });
 
+    expect(resolveTimelinePresentationState({
+      events: [createEvent(2, { type: "result", message: "最终完成" })],
+      runStatus: "streaming",
+      streamStatus: "streaming",
+      finalOutput: ""
+    })).toMatchObject({
+      runStatus: "done",
+      streamStatus: "done",
+      hasTerminalEvidence: true
+    });
+
     expect(resolveCockpitStatusModel({
       events: [createEvent(2, { type: "result", message: "最终完成" })],
       assistantStatus: "done",

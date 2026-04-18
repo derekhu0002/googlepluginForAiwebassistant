@@ -275,6 +275,18 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
     })];
   };
 
+  const buildResultFromBufferedOutput = (raw: RawRunEventEnvelope) => {
+    if (state.resultEmitted || !state.lastOutputText.trim()) {
+      return [] as NormalizedRunEvent[];
+    }
+
+    state.resultEmitted = true;
+    return [nextEvent(raw, "result", state.lastOutputText.trim(), {
+      data: responseTextData(state.assistantMessageId),
+      semantic: assistantTextSemantic(state.assistantMessageId, "final")
+    })];
+  };
+
   const projectOpencodeEvent = (raw: RawRunEventEnvelope) => {
     const globalEvent = asRecord(raw.payload.event);
     const payload = asRecord(globalEvent.payload);
@@ -292,6 +304,11 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
     }
 
     if (eventType === "session.idle") {
+      const terminalResult = buildResultFromBufferedOutput(raw);
+      if (terminalResult.length) {
+        return terminalResult;
+      }
+
       return [createRawVisibleEvent(raw, eventType, "opencode session 已进入 idle，准备同步最终消息。", {
         title: "会话空闲",
         data: properties

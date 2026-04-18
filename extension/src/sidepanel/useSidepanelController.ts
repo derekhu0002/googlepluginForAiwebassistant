@@ -486,7 +486,7 @@ export function useSidepanelController() {
       status: selectedHistoryFallbackDetail.run.status,
       updatedAt: selectedHistoryFallbackDetail.run.updatedAt ?? selectedHistoryFallbackDetail.run.startedAt,
       pendingQuestionId: null,
-      includeToolCallParts: true
+      includeToolCallParts: false
     }];
     }
 
@@ -500,7 +500,7 @@ export function useSidepanelController() {
       status: detail.run.status,
       updatedAt: detail.run.updatedAt ?? detail.run.startedAt,
       pendingQuestionId: null,
-      includeToolCallParts: true
+      includeToolCallParts: false
     }));
   }, [activeSessionRunDetails, frozenSessionRunDetails, selectedHistoryFallbackDetail, selectedSessionIsCurrent]);
 
@@ -523,13 +523,13 @@ export function useSidepanelController() {
       errorMessage: state.currentRun?.errorMessage ?? state.errorMessage ?? streamError,
       status: livePresentationState.runStatus,
       runStatus: livePresentationState.runStatus,
-      streamStatus: state.stream.status,
+      streamStatus: livePresentationState.streamStatus,
       updatedAt: state.currentRun?.updatedAt ?? state.currentRun?.startedAt,
       pendingQuestionId: state.stream.pendingQuestionId,
       includeSummary: true,
-      includeToolCallParts: true
+      includeToolCallParts: false
     };
-  }, [liveFinalOutput, livePresentationState.runStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, state.stream.status, streamError]);
+  }, [liveFinalOutput, livePresentationState.runStatus, livePresentationState.streamStatus, livePrompt, selectedSessionIsCurrent, state.answers, state.currentRun, state.errorMessage, state.runEvents, state.stream.pendingQuestionId, state.stream.runId, state.stream.status, streamError]);
 
   const transcriptReadModel = useMemo(() => {
     const nextModel = buildStableTranscriptProjection({
