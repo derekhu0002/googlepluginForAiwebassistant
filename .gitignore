@@ -11,3 +11,4 @@ __pycache__/
 .opencode/.obsidian
 .obsidian
 python_adapter/app/opencode_adapter.log
+/temp
