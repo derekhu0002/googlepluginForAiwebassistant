@@ -20,6 +20,7 @@ It reflects current code behavior only; it does not propose architectural change
 | --- | --- | --- | --- |
 | Start run | `POST` | `/api/runs` | `extension/src/shared/api.ts:startRun`, `python_adapter/app/main.py:start_run` |
 | Stream normalized events | `GET` (SSE) | `/api/runs/{runId}/events` | `extension/src/shared/api.ts:createRunEventStream`, `python_adapter/app/main.py:stream_run_events` |
+| Stream raw opencode events | `GET` (SSE) | `/api/runs/{runId}/events/raw` | `extension/src/shared/api.ts:createRawRunEventStream`, `python_adapter/app/main.py:stream_raw_run_events` |
 | Submit question answer | `POST` | `/api/runs/{runId}/answers` | `extension/src/shared/api.ts:submitQuestionAnswer`, `python_adapter/app/main.py:answer_question` |
 | Submit message feedback | `POST` | `/api/message-feedback` | `extension/src/shared/api.ts:submitMessageFeedback`, `python_adapter/app/main.py:submit_message_feedback` |
 | Adapter health/debug | `GET` | `/health` | `python_adapter/app/main.py:health` |
@@ -69,6 +70,15 @@ The extension subscribes with `EventSource` in `createRunEventStream`.
 - Validation: parsed with Zod in `extension/src/shared/api.ts:streamEventSchema`
 - Connection states surfaced to UI: `connecting` → `streaming` → `reconnecting`
 - Important lifecycle rule: `RUN_STREAM_LIFECYCLE.terminalEventsDoNotGuaranteeStreamEnd === true` (`extension/src/shared/protocol.ts`). The UI treats `result`/`error` as terminal state evidence, but not as a guarantee that the socket has already closed.
+
+### Raw SSE behavior
+
+The extension now prefers the raw SSE endpoint and projects OpenCode payloads into renderable conversation events on the frontend.
+
+- URL: `/api/runs/{runId}/events/raw`
+- Transport: SSE `message` events carrying JSON-serialized `RawRunEventEnvelope`
+- Adapter responsibility: session filtering, auth, lifecycle proxying, final `/session/{sessionId}/message` snapshot proxying
+- Frontend responsibility: mapping raw OpenCode events into assistant output, reasoning, tool-call, question, and final result render state
 
 Normalized event shape (`extension/src/shared/protocol.ts`, `python_adapter/app/models.py`):
 

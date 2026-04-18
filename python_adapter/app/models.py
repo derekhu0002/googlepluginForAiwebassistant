@@ -12,6 +12,7 @@ NormalizedEventType = Literal["thinking", "tool_call", "question", "result", "er
 NormalizedEventChannel = Literal["reasoning", "assistant_text", "tool"]
 NormalizedEventEmissionKind = Literal["delta", "snapshot", "final"]
 NormalizedEventItemKind = Literal["reasoning", "text", "tool"]
+RawRunEventSource = Literal["opencode", "adapter"]
 
 
 class NormalizedRunEventTool(BaseModel):
@@ -90,6 +91,16 @@ class NormalizedRunEvent(BaseModel):
     tool: NormalizedRunEventTool | None = None
     question: QuestionPayload | None = None
     semantic: NormalizedRunEventSemantic | None = None
+
+
+class RawRunEventEnvelope(BaseModel):
+    id: str
+    runId: str
+    createdAt: str
+    sequence: int
+    source: RawRunEventSource
+    eventType: str
+    payload: dict[str, Any]
 
 
 class RunStartResult(BaseModel):

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createRunEventStream, submitQuestionAnswer } from "../shared/api";
+import { createRawRunEventStream, submitQuestionAnswer } from "../shared/api";
 import { toDisplayMessage } from "../shared/errors";
 import { initialAssistantState } from "../shared/state";
 import { appendTranscriptTraceRecord, DEFAULT_MAIN_AGENT, MAIN_AGENTS, withCanonicalEventMetadata, type NormalizedRunEvent, type TranscriptTraceRecord, createEmptyRunEventState, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
@@ -28,6 +28,7 @@ import {
 } from "./model";
 import { useRunHistory } from "./useRunHistory";
 import { appendSidepanelDebugLog, clearSidepanelDebugLogs } from "./debugLogStore";
+import { createOpencodeRawEventProjector, type OpencodeRawEventProjector } from "./opencodeRawEventProjector";
 
 export type DrawerKey = "sessions" | "context" | "rules" | "run";
 
@@ -157,6 +158,7 @@ export function useSidepanelController() {
   const selectedHistoryDetailRef = useRef(selectedHistoryDetail);
   const refreshHistoryRef = useRef(refresh);
   const transcriptReadModelRef = useRef<TranscriptReadModel | null>(null);
+  const rawProjectorRef = useRef<OpencodeRawEventProjector | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isBusy = state.status === "collecting" || state.status === "streaming";
@@ -660,7 +662,115 @@ export function useSidepanelController() {
     await saveRun(responseData.currentRun, { refresh: false });
     setSelectedSessionKey(deriveSessionKey(responseData.currentRun));
 
-    eventSourceRef.current = createRunEventStream(responseData.runId, {
+    const processNormalizedEvent = (event: NormalizedRunEvent) => {
+      const normalizedEvent = withCanonicalEventMetadata(event);
+      logSidepanelRunEvent({
+        phase: "stream_event_received",
+        ...summarizeSidepanelEvent(normalizedEvent)
+      });
+      setState((current) => {
+        const acceptance = acceptIncomingRunEvent(current.runEvents, normalizedEvent, current.runEventState);
+        const nextSyncMetadata = createRunStateSyncMetadata("sidepanel", acceptance.nextRunEventState);
+        const enrichedDiagnostic = {
+          ...acceptance.diagnostic,
+          persistence: {
+            eventSaveScheduled: acceptance.accepted || acceptance.decision === "duplicate",
+            runSaveScheduled: acceptance.accepted
+          },
+          sync: {
+            origin: nextSyncMetadata.origin,
+            snapshotVersion: nextSyncMetadata.snapshotVersion,
+            generatedAt: nextSyncMetadata.generatedAt,
+            lastAcceptedCanonicalKey: nextSyncMetadata.lastAcceptedCanonicalKey
+          }
+        };
+        const nextRunEventState = {
+          ...acceptance.nextRunEventState,
+          diagnostics: [
+            ...acceptance.nextRunEventState.diagnostics.slice(0, -1),
+            enrichedDiagnostic
+          ]
+        };
+        logSidepanelRunEvent({
+          phase: "accept_event",
+          ...summarizeSidepanelEvent(acceptance.event),
+          decision: acceptance.decision,
+          priorFrontierSequence: current.runEventState.frontier.lastSequence,
+          resultingFrontierSequence: nextRunEventState.frontier.lastSequence,
+          priorFrontier: acceptance.diagnostic.priorFrontier,
+          resultingFrontier: acceptance.diagnostic.resultingFrontier,
+          rejected: !acceptance.accepted
+        });
+
+        if (acceptance.accepted || acceptance.decision === "duplicate") {
+          void saveEvent(stripDiagnosticMetadata(acceptance.event)).catch(() => undefined);
+        }
+
+        if (!acceptance.accepted) {
+          return {
+            ...current,
+            runEvents: acceptance.nextEvents,
+            runEventState: nextRunEventState
+          };
+        }
+
+        const nextEvents = acceptance.nextEvents;
+        const lifecycleStatus = deriveLifecycleStatus(current, acceptance.event, nextEvents);
+        const nextRun = current.currentRun && current.currentRun.runId === event.runId
+          ? {
+              ...current.currentRun,
+              status: lifecycleStatus.runStatus,
+              updatedAt: acceptance.event.createdAt,
+              finalOutput: deriveRunFinalOutput(current.currentRun.finalOutput, acceptance.event, nextEvents, lifecycleStatus.runStatus),
+              errorMessage: acceptance.event.type === "error" ? acceptance.event.message : current.currentRun.errorMessage
+            }
+          : current.currentRun;
+
+        const nextState: AssistantState = {
+          ...current,
+          runEvents: nextEvents,
+          runEventState: nextRunEventState,
+          currentRun: nextRun,
+          status: lifecycleStatus.assistantStatus,
+          errorMessage: acceptance.event.type === "error" ? acceptance.event.message : current.errorMessage,
+          syncMetadata: nextSyncMetadata,
+          stream: {
+            runId: acceptance.event.runId,
+            status: lifecycleStatus.streamStatus,
+            pendingQuestionId: lifecycleStatus.pendingQuestionId,
+            reconnectCount: current.stream.reconnectCount ?? 0
+          }
+        };
+
+        if (nextRun) {
+          saveRun(nextRun, { refresh: false }).catch(() => undefined);
+        }
+
+        syncRunStateToBackground({
+          status: nextState.status,
+          activeSessionId: nextState.activeSessionId,
+          capturedFields: nextState.capturedFields,
+          runPrompt: nextState.runPrompt,
+          runEvents: nextState.runEvents,
+          currentRun: nextState.currentRun,
+          answers: nextState.answers,
+          error: nextState.error,
+          errorMessage: nextState.errorMessage,
+          matchedRule: nextState.matchedRule,
+          lastCapturedUrl: nextState.lastCapturedUrl,
+          usernameContext: nextState.usernameContext,
+          stream: nextState.stream,
+          runEventState: nextState.runEventState,
+          syncMetadata: nextState.syncMetadata
+        }).catch(() => undefined);
+
+        return nextState;
+      });
+    };
+
+    rawProjectorRef.current = createOpencodeRawEventProjector(responseData.runId);
+
+    eventSourceRef.current = createRawRunEventStream(responseData.runId, {
       onTransportLog: (entry) => {
         logSidepanelRunEvent(entry);
         const trace = getTransportTrace(entry);
@@ -675,110 +785,11 @@ export function useSidepanelController() {
           }
         }));
       },
-      onEvent: async (event) => {
-        const normalizedEvent = withCanonicalEventMetadata(event);
-        logSidepanelRunEvent({
-          phase: "stream_event_received",
-          ...summarizeSidepanelEvent(normalizedEvent)
-        });
-        setState((current) => {
-          const acceptance = acceptIncomingRunEvent(current.runEvents, normalizedEvent, current.runEventState);
-          const nextSyncMetadata = createRunStateSyncMetadata("sidepanel", acceptance.nextRunEventState);
-          const enrichedDiagnostic = {
-            ...acceptance.diagnostic,
-            persistence: {
-              eventSaveScheduled: acceptance.accepted || acceptance.decision === "duplicate",
-              runSaveScheduled: acceptance.accepted
-            },
-            sync: {
-              origin: nextSyncMetadata.origin,
-              snapshotVersion: nextSyncMetadata.snapshotVersion,
-              generatedAt: nextSyncMetadata.generatedAt,
-              lastAcceptedCanonicalKey: nextSyncMetadata.lastAcceptedCanonicalKey
-            }
-          };
-          const nextRunEventState = {
-            ...acceptance.nextRunEventState,
-            diagnostics: [
-              ...acceptance.nextRunEventState.diagnostics.slice(0, -1),
-              enrichedDiagnostic
-            ]
-          };
-          logSidepanelRunEvent({
-            phase: "accept_event",
-            ...summarizeSidepanelEvent(acceptance.event),
-            decision: acceptance.decision,
-            priorFrontierSequence: current.runEventState.frontier.lastSequence,
-            resultingFrontierSequence: nextRunEventState.frontier.lastSequence,
-            priorFrontier: acceptance.diagnostic.priorFrontier,
-            resultingFrontier: acceptance.diagnostic.resultingFrontier,
-            rejected: !acceptance.accepted
-          });
-
-          if (acceptance.accepted || acceptance.decision === "duplicate") {
-            void saveEvent(stripDiagnosticMetadata(acceptance.event)).catch(() => undefined);
-          }
-
-          if (!acceptance.accepted) {
-            return {
-              ...current,
-              runEvents: acceptance.nextEvents,
-              runEventState: nextRunEventState
-            };
-          }
-
-          const nextEvents = acceptance.nextEvents;
-          const lifecycleStatus = deriveLifecycleStatus(current, acceptance.event, nextEvents);
-          const nextRun = current.currentRun && current.currentRun.runId === event.runId
-            ? {
-                ...current.currentRun,
-                status: lifecycleStatus.runStatus,
-                updatedAt: acceptance.event.createdAt,
-                finalOutput: deriveRunFinalOutput(current.currentRun.finalOutput, acceptance.event, nextEvents, lifecycleStatus.runStatus),
-                errorMessage: acceptance.event.type === "error" ? acceptance.event.message : current.currentRun.errorMessage
-              }
-            : current.currentRun;
-
-          const nextState: AssistantState = {
-            ...current,
-            runEvents: nextEvents,
-            runEventState: nextRunEventState,
-            currentRun: nextRun,
-            status: lifecycleStatus.assistantStatus,
-            errorMessage: acceptance.event.type === "error" ? acceptance.event.message : current.errorMessage,
-            syncMetadata: nextSyncMetadata,
-            stream: {
-              runId: acceptance.event.runId,
-              status: lifecycleStatus.streamStatus,
-              pendingQuestionId: lifecycleStatus.pendingQuestionId,
-              reconnectCount: current.stream.reconnectCount ?? 0
-            }
-          };
-
-          if (nextRun) {
-            saveRun(nextRun, { refresh: false }).catch(() => undefined);
-          }
-
-          syncRunStateToBackground({
-            status: nextState.status,
-            activeSessionId: nextState.activeSessionId,
-            capturedFields: nextState.capturedFields,
-            runPrompt: nextState.runPrompt,
-            runEvents: nextState.runEvents,
-            currentRun: nextState.currentRun,
-            answers: nextState.answers,
-            error: nextState.error,
-            errorMessage: nextState.errorMessage,
-            matchedRule: nextState.matchedRule,
-            lastCapturedUrl: nextState.lastCapturedUrl,
-            usernameContext: nextState.usernameContext,
-            stream: nextState.stream,
-            runEventState: nextState.runEventState,
-            syncMetadata: nextState.syncMetadata
-          }).catch(() => undefined);
-
-          return nextState;
-        });
+      onEvent: async (rawEvent) => {
+        const projectedEvents = rawProjectorRef.current?.project(rawEvent) ?? [];
+        for (const projectedEvent of projectedEvents) {
+          processNormalizedEvent(projectedEvent);
+        }
 
         if (refreshTimerRef.current) {
           clearTimeout(refreshTimerRef.current);

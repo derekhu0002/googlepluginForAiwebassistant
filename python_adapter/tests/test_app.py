@@ -1,10 +1,11 @@
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock
 import httpx
+import anyio
 
 from python_adapter.app import main
 from python_adapter.app.config import Settings
-from python_adapter.app.models import NormalizedRunEvent
+from python_adapter.app.models import NormalizedRunEvent, RawRunEventEnvelope
 
 from python_adapter.app.main import app
 
@@ -105,6 +106,37 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
     submit_answer.assert_awaited_once()
 
 
+def test_raw_stream_endpoint_emits_raw_envelopes(monkeypatch) -> None:
+    async def fake_stream_raw_events(_run_id: str):
+        yield RawRunEventEnvelope(
+            id="run-1-raw-1",
+            runId="run-1",
+            createdAt="2026-04-01T00:00:00.000Z",
+            sequence=1,
+            source="opencode",
+            eventType="message.part.delta",
+            payload={
+                "event": {
+                    "payload": {
+                        "type": "message.part.delta"
+                    }
+                }
+            },
+        )
+
+    monkeypatch.setattr(main.adapter, "stream_raw_events", fake_stream_raw_events)
+    monkeypatch.setattr(main.adapter, "require_run", lambda _run_id: {"run_id": "run-1"})
+
+    async def scenario() -> None:
+        response = await main.stream_raw_run_events("run-1")
+        payloads = [item async for item in response.body_iterator]
+        assert payloads[0]["event"] == "message"
+        assert "message.part.delta" in payloads[0]["data"]
+        assert "run-1-raw-1" in payloads[0]["data"]
+
+    anyio.run(scenario)
+
+
 def test_start_run_returns_active_session_id(monkeypatch) -> None:
     async def fake_start_run(request):
         main.adapter._runs["run-1"] = {"session_id": request.sessionId, "selected_agent": request.selectedAgent}
@@ -180,7 +212,7 @@ def test_health_exposes_runtime_defaults(monkeypatch) -> None:
     assert payload["opencode_agent_list_endpoint"] == "/agent"
     assert isinstance(payload["use_mock_opencode"], bool)
     assert isinstance(payload["allow_mock_fallback"], bool)
-    assert payload["invocation_log_path"].endswith("python_adapter/logs/invocations.jsonl")
+    assert payload["invocation_log_path"].replace("\\", "/").endswith("python_adapter/logs/invocations.jsonl")
 
 
 def test_start_run_returns_explicit_error_when_remote_agent_discovery_fails(monkeypatch) -> None:

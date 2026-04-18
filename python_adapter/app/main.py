@@ -186,6 +186,26 @@ async def stream_run_events(run_id: str, _auth: None = Depends(enforce_stream_ap
     return EventSourceResponse(event_generator())
 
 
+@app.get("/api/runs/{run_id}/events/raw")
+async def stream_raw_run_events(run_id: str, _auth: None = Depends(enforce_stream_api_key)) -> EventSourceResponse:
+    try:
+        adapter.require_run(run_id)
+    except RunNotFoundError as exc:
+        raise map_run_not_found_error(exc) from exc
+
+    async def event_generator():
+        async for event in adapter.stream_raw_events(run_id):
+            logger.write({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "run_id": run_id,
+                "phase": "stream_raw_event",
+                "raw_event": event.model_dump(),
+            })
+            yield {"event": "message", "data": json.dumps(event.model_dump())}
+
+    return EventSourceResponse(event_generator())
+
+
 @app.post("/api/runs/{run_id}/answers")
 async def answer_question(run_id: str, request: QuestionAnswerRequest, _auth: None = Depends(enforce_api_key)) -> JSONResponse:
     try:

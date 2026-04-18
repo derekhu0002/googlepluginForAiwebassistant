@@ -219,6 +219,44 @@ describe("streaming api client", () => {
     expect(stream.url).toBe("http://localhost:8000/api/runs/run-1/events");
   });
 
+  it("parses incoming raw SSE messages", async () => {
+    vi.stubEnv("VITE_EXTENSION_ENV", "development");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+
+    global.EventSource = FakeEventSource as unknown as typeof EventSource;
+
+    const { createRawRunEventStream } = await import("./api");
+    const events: string[] = [];
+    const stream = createRawRunEventStream("run-raw-1", {
+      onEvent(event) {
+        events.push(event.eventType);
+      },
+      onError() {
+        throw new Error("unexpected");
+      }
+    }) as unknown as FakeEventSource;
+
+    stream.emit("message", JSON.stringify({
+      id: "raw-1",
+      runId: "run-raw-1",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      source: "opencode",
+      eventType: "message.part.delta",
+      payload: {
+        event: {
+          payload: {
+            type: "message.part.delta"
+          }
+        }
+      }
+    }));
+
+    expect(events).toEqual(["message.part.delta"]);
+    expect(stream.url).toBe("http://localhost:8000/api/runs/run-raw-1/events/raw");
+  });
+
   it("attaches correlated transport observability traces to normalized events", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
     vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");

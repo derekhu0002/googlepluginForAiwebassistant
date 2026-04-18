@@ -1,4 +1,5 @@
 export const NORMALIZED_EVENT_TYPES = ["thinking", "tool_call", "question", "result", "error"] as const;
+export const RAW_RUN_EVENT_SOURCES = ["opencode", "adapter"] as const;
 
 /** @ArchitectureID: ELM-APP-EXT-SHARED-API-CONTRACT */
 export const MAIN_AGENTS = ["TARA_analyst", "ThreatIntelliganceCommander"] as const;
@@ -6,6 +7,7 @@ export const MAIN_AGENTS = ["TARA_analyst", "ThreatIntelliganceCommander"] as co
 export type MainAgent = typeof MAIN_AGENTS[number];
 
 export const DEFAULT_MAIN_AGENT: MainAgent = "TARA_analyst";
+export type RawRunEventSource = typeof RAW_RUN_EVENT_SOURCES[number];
 
 export type NormalizedEventType = typeof NORMALIZED_EVENT_TYPES[number];
 export const NORMALIZED_EVENT_CHANNELS = ["reasoning", "assistant_text", "tool"] as const;
@@ -183,6 +185,16 @@ export interface NormalizedRunEvent {
   canonical?: RunEventCanonicalMetadata;
   transport?: RunEventTransportMetadata;
   observability?: TranscriptObservabilityEnvelope;
+}
+
+export interface RawRunEventEnvelope {
+  id: string;
+  runId: string;
+  createdAt: string;
+  sequence: number;
+  source: RawRunEventSource;
+  eventType: string;
+  payload: Record<string, unknown>;
 }
 
 export interface RunStreamLifecycle {

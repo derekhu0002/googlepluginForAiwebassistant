@@ -10,6 +10,7 @@ import {
   type MessageFeedbackRequest,
   type NormalizedRunEvent,
   type QuestionAnswerRequest,
+  type RawRunEventEnvelope,
   type RunStartRequest,
   type TranscriptTraceRecord,
   withCanonicalEventMetadata
@@ -105,6 +106,16 @@ const streamEventSchema = z.object({
   tool: nullableOptional(eventToolSchema),
   question: nullableOptional(questionPayloadSchema),
   semantic: nullableOptional(eventSemanticSchema)
+});
+
+const rawStreamEventSchema = z.object({
+  id: z.string(),
+  runId: z.string(),
+  createdAt: z.string(),
+  sequence: z.number(),
+  source: z.enum(["opencode", "adapter"]),
+  eventType: z.string().min(1),
+  payload: z.record(z.string(), z.unknown())
 });
 
 function withHeaders() {
@@ -355,6 +366,214 @@ export function createRunEventStream(runId: string, handlers: {
         } satisfies TranscriptTraceRecord
       });
       handlers.onError(error instanceof Error ? error : new Error("Invalid stream event"));
+    }
+  });
+
+  eventSource.addEventListener("error", () => {
+    if (closedByClient) {
+      return;
+    }
+
+    if (!hasConnected && !hasReceivedEvent) {
+      logTransport({
+        transition: "error",
+        reconnectCount,
+        closeReason: "connection_failed",
+        trace: {
+          stage: "transport",
+          step: "connection_error",
+          outcome: "failure",
+          createdAt: new Date().toISOString(),
+          correlation: {
+            runId,
+            rawEventId: null,
+            canonicalEventKey: null,
+            sequence: null,
+            contentKey: null,
+            contentPreview: ""
+          },
+          details: { reconnectCount, closeReason: "connection_failed" }
+        } satisfies TranscriptTraceRecord
+      });
+      handlers.onError(new Error("SSE connection failed"));
+      return;
+    }
+
+    reconnectCount += 1;
+    handlers.onStatusChange?.("reconnecting");
+    logTransport({
+      transition: "reconnecting",
+      reconnectCount,
+      closeReason: "eventsource_error",
+      trace: {
+        stage: "transport",
+        step: "reconnecting",
+        outcome: "info",
+        createdAt: new Date().toISOString(),
+        correlation: {
+          runId,
+          rawEventId: null,
+          canonicalEventKey: null,
+          sequence: null,
+          contentKey: null,
+          contentPreview: ""
+        },
+        details: { reconnectCount, closeReason: "eventsource_error" }
+      } satisfies TranscriptTraceRecord
+    });
+  });
+
+  return eventSource;
+}
+
+export function createRawRunEventStream(runId: string, handlers: {
+  onEvent: (event: RawRunEventEnvelope) => void;
+  onError: (error: Error) => void;
+  onStatusChange?: (status: "connecting" | "streaming" | "reconnecting") => void;
+  onTransportLog?: (entry: Record<string, unknown>) => void;
+}): EventSource {
+  const streamUrl = new URL(`${extensionConfig.apiBaseUrl}/api/runs/${runId}/events/raw`);
+  if (extensionConfig.apiKey) {
+    streamUrl.searchParams.set("api_key", extensionConfig.apiKey);
+  }
+
+  const eventSource = new EventSource(streamUrl.toString());
+  const close = eventSource.close.bind(eventSource);
+  let hasConnected = false;
+  let hasReceivedEvent = false;
+  let closedByClient = false;
+  let reconnectCount = 0;
+
+  const logTransport = (entry: Record<string, unknown>) => {
+    handlers.onTransportLog?.({
+      runId,
+      source: "transport",
+      ...entry
+    });
+  };
+
+  const closeStream = () => {
+    if (closedByClient) {
+      return;
+    }
+    closedByClient = true;
+    close();
+  };
+
+  eventSource.close = closeStream;
+
+  handlers.onStatusChange?.("connecting");
+  logTransport({
+    transition: "connecting",
+    reconnectCount,
+    closeReason: null,
+    trace: {
+      stage: "transport",
+      step: "connect",
+      outcome: "info",
+      createdAt: new Date().toISOString(),
+      correlation: {
+        runId,
+        rawEventId: null,
+        canonicalEventKey: null,
+        sequence: null,
+        contentKey: null,
+        contentPreview: ""
+      },
+      details: { reconnectCount, state: "connecting" }
+    } satisfies TranscriptTraceRecord
+  });
+
+  eventSource.addEventListener("open", () => {
+    hasConnected = true;
+    handlers.onStatusChange?.("streaming");
+    logTransport({
+      transition: reconnectCount > 0 ? "reopen" : "open",
+      reconnectCount,
+      closeReason: null,
+      trace: {
+        stage: "transport",
+        step: reconnectCount > 0 ? "reopen" : "open",
+        outcome: "success",
+        createdAt: new Date().toISOString(),
+        correlation: {
+          runId,
+          rawEventId: null,
+          canonicalEventKey: null,
+          sequence: null,
+          contentKey: null,
+          contentPreview: ""
+        },
+        details: { reconnectCount }
+      } satisfies TranscriptTraceRecord
+    });
+  });
+
+  eventSource.addEventListener("message", (event) => {
+    const messageEvent = event as MessageEvent<string>;
+    const receivedAt = new Date().toISOString();
+    const rawData = messageEvent.data;
+    const transportReceiptTrace = {
+      stage: "transport",
+      step: "receipt",
+      outcome: "info",
+      createdAt: receivedAt,
+      correlation: {
+        runId,
+        rawEventId: null,
+        canonicalEventKey: null,
+        sequence: null,
+        contentKey: rawData.trim() ? `${rawData.trim().slice(0, 160).length}:${rawData.trim().slice(0, 160)}` : null,
+        contentPreview: rawData.trim().slice(0, 160)
+      },
+      details: {
+        reconnectCount,
+        rawByteLength: rawData.length
+      }
+    } satisfies TranscriptTraceRecord;
+
+    try {
+      const parsed = rawStreamEventSchema.parse(JSON.parse(rawData));
+      hasReceivedEvent = true;
+      handlers.onStatusChange?.("streaming");
+      logTransport({
+        transition: "message",
+        reconnectCount,
+        rawEventId: parsed.id,
+        parseSuccess: true,
+        trace: {
+          ...transportReceiptTrace,
+          correlation: {
+            ...transportReceiptTrace.correlation,
+            rawEventId: parsed.id,
+            sequence: parsed.sequence,
+            contentKey: `${parsed.source}:${parsed.eventType}`,
+            contentPreview: parsed.eventType
+          }
+        }
+      });
+      handlers.onEvent(parsed);
+    } catch (error) {
+      const failureReason = error instanceof Error ? error.message : "Invalid raw stream event";
+      logTransport({
+        transition: "message_error",
+        reconnectCount,
+        parseSuccess: false,
+        reason: failureReason,
+        failureStep: "parse",
+        trace: {
+          stage: "transport",
+          step: "parse",
+          outcome: "failure",
+          createdAt: new Date().toISOString(),
+          correlation: transportReceiptTrace.correlation,
+          details: {
+            reconnectCount,
+            reason: failureReason
+          }
+        } satisfies TranscriptTraceRecord
+      });
+      handlers.onError(error instanceof Error ? error : new Error("Invalid raw stream event"));
     }
   });
 

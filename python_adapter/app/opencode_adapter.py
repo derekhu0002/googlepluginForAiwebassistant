@@ -19,6 +19,7 @@ from .models import (
     QuestionAnswerRequest,
     QuestionOption,
     QuestionPayload,
+    RawRunEventEnvelope,
     RunStartRequest,
 )
 
@@ -100,6 +101,32 @@ class OpencodeAdapter:
             tool=tool,
             question=question,
             semantic=semantic,
+        )
+
+    def _next_raw_event(
+        self,
+        run: dict[str, Any],
+        source: str,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> RawRunEventEnvelope:
+        run["raw_sequence"] += 1
+        return RawRunEventEnvelope(
+            id=f"{run['run_id']}-raw-{run['raw_sequence']}",
+            runId=run["run_id"],
+            createdAt=self._now(),
+            sequence=run["raw_sequence"],
+            source=source,  # type: ignore[arg-type]
+            eventType=event_type,
+            payload=payload,
+        )
+
+    def _wrap_normalized_event_as_raw(self, run: dict[str, Any], event: NormalizedRunEvent) -> RawRunEventEnvelope:
+        return self._next_raw_event(
+            run,
+            "adapter",
+            "normalized_event",
+            {"event": event.model_dump(exclude_none=True)},
         )
 
     def _next_tool_event(
@@ -419,6 +446,7 @@ class OpencodeAdapter:
             "part_types": {},
             "buffered_part_deltas": {},
             "result_emitted": False,
+            "raw_sequence": 0,
             "confirmed_primary_agent": None,
             "primary_agent_evidence_source": None,
             "selected_remote_agent": None,
@@ -552,6 +580,52 @@ class OpencodeAdapter:
                 "error",
                 f"opencode serve 初始化失败：{run['startup_error']}",
                 data={"opencode_mode": "real", "target": self.settings.opencode_base_url},
+            )
+            run["completed"] = True
+
+    async def stream_raw_events(self, run_id: str):
+        run = self.require_run(run_id)
+
+        for event in run["events"]:
+            await asyncio.sleep(0.01)
+            yield self._wrap_normalized_event_as_raw(run, event)
+
+        if run["mode"] in {"mock-adapter", "mock-fallback"}:
+            while run["waiting_question_id"] and not run["completed"]:
+                await asyncio.sleep(0.05)
+
+            if not run["completed"]:
+                yield self._wrap_normalized_event_as_raw(run, self._build_mock_result(run))
+                run["completed"] = True
+            return
+
+        if run["startup_error"]:
+            yield self._next_raw_event(
+                run,
+                "adapter",
+                "adapter.error",
+                {
+                    "message": f"opencode serve 初始化失败：{run['startup_error']}",
+                    "opencode_mode": "real",
+                    "target": self.settings.opencode_base_url,
+                },
+            )
+            run["completed"] = True
+            return
+
+        try:
+            async for event in self._stream_real_raw_events(run):
+                yield event
+        except Exception as exc:
+            yield self._next_raw_event(
+                run,
+                "adapter",
+                "adapter.error",
+                {
+                    "message": str(exc),
+                    "opencode_mode": "real",
+                    "target": self.settings.opencode_base_url,
+                },
             )
             run["completed"] = True
             return
@@ -727,6 +801,37 @@ class OpencodeAdapter:
             if final_event:
                 yield final_event
 
+    async def _stream_real_raw_events(self, run: dict[str, Any]):
+        async with self._client_factory(None) as client:
+            async with client.stream("GET", self.settings.opencode_global_event_endpoint, params=self._query_params()) as response:
+                response.raise_for_status()
+                async for global_event in self._iter_sse_payloads(response):
+                    if not self._event_matches_session(run, global_event):
+                        continue
+                    payload = global_event.get("payload") or {}
+                    event_type = payload.get("type") if isinstance(payload, dict) else None
+                    yield self._next_raw_event(
+                        run,
+                        "opencode",
+                        str(event_type or "unknown"),
+                        {"event": global_event},
+                    )
+
+        if not run["result_emitted"]:
+            messages = await self._fetch_session_messages(run)
+            if messages is not None:
+                run["result_emitted"] = True
+                yield self._next_raw_event(
+                    run,
+                    "adapter",
+                    "session.messages",
+                    {
+                        "session_id": run.get("session_id"),
+                        "messages": messages,
+                    },
+                )
+        run["completed"] = True
+
     async def _normalize_global_event(self, run: dict[str, Any], global_event: dict[str, Any]) -> list[NormalizedRunEvent | None]:
         payload = global_event.get("payload") or {}
         event_type = payload.get("type")
@@ -895,15 +1000,8 @@ class OpencodeAdapter:
         if run["result_emitted"] or not run.get("session_id"):
             return None
 
-        async with self._client_factory(30.0) as client:
-            response = await client.get(
-                self.settings.opencode_session_messages_endpoint.format(session_id=run["session_id"]),
-                params={**self._query_params(), "limit": 20},
-            )
-            response.raise_for_status()
-            payload = response.json()
-
-        if not isinstance(payload, list):
+        payload = await self._fetch_session_messages(run)
+        if payload is None:
             return None
 
         for index, item in enumerate(payload, start=1):
@@ -958,6 +1056,23 @@ class OpencodeAdapter:
             },
             semantic=self._assistant_text_semantic((final_item.get("info") or {}).get("id"), emission_kind="final"),
         )
+
+    async def _fetch_session_messages(self, run: dict[str, Any]) -> list[dict[str, Any]] | None:
+        session_id = run.get("session_id")
+        if not session_id:
+            return None
+
+        async with self._client_factory(30.0) as client:
+            response = await client.get(
+                self.settings.opencode_session_messages_endpoint.format(session_id=session_id),
+                params={**self._query_params(), "limit": 20},
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+        if not isinstance(payload, list):
+            return None
+        return [item for item in payload if isinstance(item, dict)]
 
     def _event_matches_session(self, run: dict[str, Any], global_event: dict[str, Any]) -> bool:
         session_id = run.get("session_id")
