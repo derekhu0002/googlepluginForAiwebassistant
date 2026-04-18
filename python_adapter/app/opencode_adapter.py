@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -28,6 +30,15 @@ REMOTE_AGENT_WHITELIST: dict[MainAgent, frozenset[str]] = {
     "TARA_analyst": frozenset({"tara_analyst", "tara-analyst"}),
     "ThreatIntelliganceCommander": frozenset({"threatintelligancecommander", "threat_intelligance_commander", "threat-intelligance-commander"}),
 }
+
+LOG_FILE_PATH = Path(__file__).with_name("opencode_adapter.log")
+_LOGGER = logging.getLogger("opencode_adapter")
+if not _LOGGER.handlers:
+    _LOGGER.setLevel(logging.INFO)
+    _file_handler = logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")
+    _file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    _LOGGER.addHandler(_file_handler)
+    _LOGGER.propagate = False
 
 
 class RunNotFoundError(LookupError):
@@ -183,10 +194,12 @@ class OpencodeAdapter:
                 response = await client.get(self.settings.opencode_agent_list_endpoint, params=self._query_params())
                 response.raise_for_status()
                 payload = response.json()
-        except Exception as exc:
+        except Exception as exc: 
             raise RuntimeError(f"Remote /agent discovery failed: unable to fetch remote agent catalog: {exc}") from exc
 
         catalog = self._extract_remote_agent_catalog(payload)
+        _LOGGER.info("Remote agent catalog: %s", catalog)
+        
         if not catalog:
             raise RuntimeError("Remote /agent discovery failed: invalid /agent response payload")
         return self._select_canonical_remote_agent(requested_agent, catalog)
@@ -663,13 +676,23 @@ class OpencodeAdapter:
         selected_remote_agent = run.get("selected_remote_agent")
         if not isinstance(selected_remote_agent, str) or not selected_remote_agent.strip():
             raise RuntimeError("Remote /agent discovery failed: canonical agent not selected before prompt dispatch")
+
+        prompt_parts: list[dict[str, str]] = [{"type": "text", "text": request.prompt}]
+        context_payload: Any = request.context
+        if hasattr(context_payload, "model_dump"):
+            context_payload = context_payload.model_dump(exclude_none=True)
+        if isinstance(context_payload, dict) and context_payload:
+            context_text = json.dumps(context_payload, ensure_ascii=False)
+            if context_text and context_text != "{}":
+                prompt_parts.append({"type": "text", "text": f"[context]\n{context_text}"})
+
         async with self._client_factory(30.0) as client:
             response = await client.post(
                 self.settings.opencode_prompt_async_endpoint.format(session_id=session_id),
                 params=self._query_params(),
                 json={
                     "agent": selected_remote_agent,
-                    "parts": [{"type": "text", "text": request.prompt}],
+                    "parts": prompt_parts,
                 },
             )
             response.raise_for_status()
@@ -688,11 +711,13 @@ class OpencodeAdapter:
                 async for global_event in self._iter_sse_payloads(response):
                     if not self._event_matches_session(run, global_event):
                         continue
-
+                    _LOGGER.info(f" Normalizing global event: {global_event}")
                     normalized_events = await self._normalize_global_event(run, global_event)
+                    _LOGGER.info(f" Normalized into {normalized_events}")
                     for event in normalized_events:
                         if event is None:
                             continue
+                        _LOGGER.info(f" Yielding stream event 001: {event}")
                         yield event
                         if event.type in {"result", "error"}:
                             return
@@ -966,6 +991,7 @@ class OpencodeAdapter:
                     except json.JSONDecodeError:
                         continue
                     if isinstance(payload, dict):
+                        _LOGGER.info(f" Yielding stream event 002: {payload}")
                         yield payload
         if data_lines:
             try:
@@ -973,6 +999,7 @@ class OpencodeAdapter:
             except json.JSONDecodeError:
                 return
             if isinstance(payload, dict):
+                _LOGGER.info(f" Yielding stream event 003: {payload}")
                 yield payload
 
     def _build_question_answer_payload(self, answer: QuestionAnswerRequest, request_payload: dict[str, Any] | None) -> list[str]:
