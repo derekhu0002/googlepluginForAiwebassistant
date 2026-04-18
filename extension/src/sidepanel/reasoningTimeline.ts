@@ -639,7 +639,10 @@ function findInlineAnswerStartIndex(text: string) {
       return startIndex;
     }
 
-    if (countLatinLetters(prefix) >= 20 || LEAKED_REASONING_PREFIX_PATTERNS.some((candidate) => candidate.test(prefix.toLowerCase()))) {
+    if (
+      (countLatinLetters(prefix) >= 20 && !hasSubstantialChineseContent(prefix))
+      || LEAKED_REASONING_PREFIX_PATTERNS.some((candidate) => candidate.test(prefix.toLowerCase()))
+    ) {
       return startIndex;
     }
   }
@@ -1210,7 +1213,7 @@ export function collectAssistantResponseAggregation(events: NormalizedRunEvent[]
       }
       currentLogicalMessageId = logicalMessageId;
       aggregation.text = thinkingEmissionKind === "snapshot"
-        ? mergeAssistantResponseSnapshot(aggregation.text, event.message)
+        ? event.message
         : mergeAssistantResponseDelta(aggregation.text, event.message);
       aggregation.firstResponseAt = aggregation.firstResponseAt ?? event.createdAt;
       aggregation.lastResponseAt = event.createdAt;
@@ -1225,7 +1228,7 @@ export function collectAssistantResponseAggregation(events: NormalizedRunEvent[]
         aggregation = createEmptyAssistantResponseAggregation();
       }
       currentLogicalMessageId = logicalMessageId;
-      aggregation.text = mergeAssistantResponseSnapshot(aggregation.text, event.message);
+      aggregation.text = event.message;
       aggregation.firstResponseAt = aggregation.firstResponseAt ?? event.createdAt;
       aggregation.lastResponseAt = event.createdAt;
       aggregation.preferredMessageId = aggregation.preferredMessageId ?? logicalMessageId;
@@ -2563,7 +2566,7 @@ function processLiveProjectionEvent(
     state.currentAssistantGroupAnchorId = getAssistantGroupAnchorId(state.runId, logicalMessageId);
     const thinkingEmissionKind = getAssistantResponseThinkingEmissionKind(event);
     state.assistantTextSoFar = thinkingEmissionKind === "snapshot" || event.type === "result"
-      ? mergeAssistantResponseSnapshot(state.assistantTextSoFar, event.message)
+      ? event.message
       : mergeAssistantResponseDelta(state.assistantTextSoFar, event.message);
     state.assistantResponse = {
       text: state.assistantTextSoFar.trim(),
@@ -3587,7 +3590,7 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
       currentAssistantGroupAnchorId = getAssistantGroupAnchorId(runId, currentAssistantMessageId);
       const thinkingEmissionKind = getAssistantResponseThinkingEmissionKind(event);
       assistantTextSoFar = thinkingEmissionKind === "snapshot" || event.type === "result"
-        ? mergeAssistantResponseSnapshot(assistantTextSoFar, event.message)
+        ? event.message
         : mergeAssistantResponseDelta(assistantTextSoFar, event.message);
 
       upsertAssistantOutputSegment(event, assistantTextSoFar);

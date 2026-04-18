@@ -62,7 +62,7 @@ describe("opencode raw event projector", () => {
       data: { field: "text", message_id: "msg-1" },
       semantic: {
         channel: "assistant_text",
-        emissionKind: "delta",
+        emissionKind: "snapshot",
         messageId: "msg-1",
         partId: "part-1"
       }
@@ -140,5 +140,89 @@ describe("opencode raw event projector", () => {
         options: [{ label: "高", value: "高" }]
       }
     });
+  });
+
+  it("surfaces session idle and unknown opencode events in the session", () => {
+    const projector = createOpencodeRawEventProjector("run-3");
+
+    const idleEvents = projector.project({
+      id: "run-3-raw-1",
+      runId: "run-3",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      source: "opencode",
+      eventType: "session.idle",
+      payload: {
+        event: {
+          payload: {
+            type: "session.idle",
+            properties: {
+              sessionID: "ses-1"
+            }
+          }
+        }
+      }
+    });
+
+    expect(idleEvents).toHaveLength(1);
+    expect(idleEvents[0]).toMatchObject({
+      type: "tool_call",
+      title: "会话空闲"
+    });
+
+    const fallbackEvents = projector.project({
+      id: "run-3-raw-2",
+      runId: "run-3",
+      createdAt: "2026-04-01T00:00:01.000Z",
+      sequence: 2,
+      source: "opencode",
+      eventType: "session.custom",
+      payload: {
+        event: {
+          payload: {
+            type: "session.custom",
+            properties: {
+              message: "custom upstream message"
+            }
+          }
+        }
+      }
+    });
+
+    expect(fallbackEvents).toHaveLength(1);
+    expect(fallbackEvents[0]).toMatchObject({
+      type: "tool_call",
+      title: "原始事件 session.custom",
+      message: "custom upstream message"
+    });
+  });
+
+  it("does not surface assistant metadata updates as duplicate visible messages", () => {
+    const projector = createOpencodeRawEventProjector("run-4");
+
+    const events = projector.project({
+      id: "run-4-raw-1",
+      runId: "run-4",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      source: "opencode",
+      eventType: "message.updated",
+      payload: {
+        event: {
+          payload: {
+            type: "message.updated",
+            properties: {
+              sessionID: "ses-1",
+              info: {
+                id: "msg-1",
+                role: "assistant"
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(events).toEqual([]);
   });
 });

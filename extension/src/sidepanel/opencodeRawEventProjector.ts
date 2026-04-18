@@ -88,27 +88,13 @@ function toolSemantic(messageId: string | undefined | null, emissionKind: "delta
 }
 
 function simplifyToolCallMessage(toolName: string, status: string, title: unknown = null) {
-  const normalizedTool = toolName.toLowerCase();
-  const normalizedStatus = status.toLowerCase();
-  if (normalizedTool.includes("search") || normalizedTool.includes("grep") || normalizedTool.includes("glob")) {
-    return "正在检索相关信息。";
-  }
-  if (normalizedTool.includes("read")) {
-    return "正在读取所需内容。";
-  }
-  if (normalizedTool.includes("write") || normalizedTool.includes("edit") || normalizedTool.includes("patch")) {
-    return "正在整理并更新内容。";
-  }
-  if (normalizedTool.includes("bash") || normalizedTool.includes("command")) {
-    return "正在执行必要步骤。";
-  }
-  if (["completed", "done", "success"].includes(normalizedStatus)) {
-    return "当前步骤已完成，正在进入下一步。";
-  }
-  if (typeof title === "string" && title.trim()) {
-    return "正在处理当前分析步骤。";
-  }
-  return "正在处理当前分析步骤。";
+  const parts = [
+    typeof title === "string" && title.trim() ? title.trim() : "",
+    toolName.trim() ? `tool=${toolName.trim()}` : "",
+    status.trim() ? `status=${status.trim()}` : ""
+  ].filter(Boolean);
+
+  return parts.join(" | ") || "收到工具状态更新。";
 }
 
 function normalizeQuestionRequest(requestPayload: Record<string, unknown>): QuestionPayload {
@@ -158,6 +144,52 @@ function asRecord(value: unknown) {
   return typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
 }
 
+function truncateDisplayText(value: string, limit = 240) {
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > limit ? `${normalized.slice(0, limit)}...` : normalized;
+}
+
+function toDisplayText(value: unknown): string {
+  if (typeof value === "string") {
+    return truncateDisplayText(value);
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return truncateDisplayText(value.map((item) => toDisplayText(item)).filter(Boolean).join(" | "));
+  }
+
+  const record = asRecord(value);
+  const candidates = [record.message, record.text, record.delta, record.error, record.title, record.description]
+    .map((item) => typeof item === "string" ? item.trim() : "")
+    .filter(Boolean);
+  if (candidates.length) {
+    return truncateDisplayText(candidates.join(" | "));
+  }
+
+  const status = asRecord(record.status);
+  if (typeof status.type === "string" && status.type.trim()) {
+    return `status=${status.type.trim()}`;
+  }
+
+  const info = asRecord(record.info);
+  const infoParts = [
+    typeof info.role === "string" && info.role.trim() ? `role=${info.role.trim()}` : "",
+    typeof info.id === "string" && info.id.trim() ? `id=${info.id.trim()}` : ""
+  ].filter(Boolean);
+  if (infoParts.length) {
+    return infoParts.join(" | ");
+  }
+
+  const serialized = JSON.stringify(value);
+  return truncateDisplayText(serialized ?? "");
+}
+
 export function createOpencodeRawEventProjector(runId: string): OpencodeRawEventProjector {
   const state = createInitialState();
 
@@ -179,6 +211,25 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
     };
   };
 
+  const createRawVisibleEvent = (
+    raw: RawRunEventEnvelope,
+    eventType: string,
+    message: string,
+    options: Omit<NormalizedRunEvent, "id" | "runId" | "type" | "createdAt" | "sequence" | "message"> = {}
+  ) => nextEvent(raw, "tool_call", message, {
+    title: options.title ?? eventType,
+    data: {
+      upstreamEventType: eventType,
+      upstreamSource: raw.source,
+      rawSequence: raw.sequence,
+      ...(typeof options.data === "object" && options.data !== null ? options.data as Record<string, unknown> : {})
+    },
+    logData: {
+      raw
+    },
+    ...options
+  });
+
   const emitAssistantText = (raw: RawRunEventEnvelope, message: string, messageId?: string, partId?: string, emissionKind: "delta" | "snapshot" | "final" = "delta") => {
     if (!message.trim()) {
       return [] as NormalizedRunEvent[];
@@ -192,19 +243,6 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
   const flushBufferedDelta = (raw: RawRunEventEnvelope, partId: string, messageId?: string) => {
     const buffered = state.bufferedPartDeltas[partId];
     delete state.bufferedPartDeltas[partId];
-    if (!buffered?.delta) {
-      return [] as NormalizedRunEvent[];
-    }
-    const resolvedMessageId = messageId || buffered.messageId;
-    const partType = state.partTypes[partId];
-    if (partType === "text") {
-      return emitAssistantText(raw, buffered.delta, resolvedMessageId, partId, "delta");
-    }
-    if (partType === "reasoning") {
-      return [nextEvent(raw, "thinking", buffered.delta, {
-        semantic: reasoningSemantic(resolvedMessageId, "delta", partId)
-      })];
-    }
     return [] as NormalizedRunEvent[];
   };
 
@@ -247,19 +285,30 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
       const status = asRecord(properties.status);
       const statusType = typeof status.type === "string" ? status.type : "unknown";
       const details = statusType === "retry" && status.attempt !== undefined ? `（attempt=${String(status.attempt)}）` : "";
-      return [nextEvent(raw, "tool_call", `opencode session 状态更新：${statusType}${details}`, {
-        title: "会话状态",
+      return [createRawVisibleEvent(raw, eventType, `opencode session 状态更新：${statusType}${details}`, {
+        title: `上游事件 ${eventType}`,
         data: { status }
+      })];
+    }
+
+    if (eventType === "session.idle") {
+      return [createRawVisibleEvent(raw, eventType, "opencode session 已进入 idle，准备同步最终消息。", {
+        title: "会话空闲",
+        data: properties
       })];
     }
 
     if (eventType === "message.part.delta") {
       const delta = typeof properties.delta === "string" ? properties.delta : "";
       if (!delta) {
-        return [] as NormalizedRunEvent[];
+        return [createRawVisibleEvent(raw, eventType, "收到空的消息增量。", {
+          title: "消息增量",
+          data: properties
+        })];
       }
       const partId = partIdFromProperties(properties);
       const messageId = typeof properties.messageID === "string" ? properties.messageID : undefined;
+      const field = typeof properties.field === "string" ? properties.field : undefined;
       const partType = partId ? state.partTypes[partId] : undefined;
       if (partType === "text") {
         return emitAssistantText(raw, delta, messageId, partId, "delta");
@@ -272,7 +321,18 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
       if (partId) {
         state.bufferedPartDeltas[partId] = { delta, messageId };
       }
-      return [] as NormalizedRunEvent[];
+
+      if (!partType && field === "text") {
+        return [] as NormalizedRunEvent[];
+      }
+
+      return [createRawVisibleEvent(raw, eventType, delta, {
+        title: "消息增量",
+        data: {
+          ...properties,
+          pendingPartType: true
+        }
+      })];
     }
 
     if (eventType === "message.part.updated") {
@@ -307,9 +367,8 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
         })];
       }
       if (partType === "reasoning") {
-        const flushed = partId ? flushBufferedDelta(raw, partId, messageId) : [];
-        if (flushed.length) {
-          return flushed;
+        if (partId) {
+          flushBufferedDelta(raw, partId, messageId);
         }
         return [nextEvent(raw, "thinking", typeof part.text === "string" && part.text.trim() ? part.text : "模型正在推理。", {
           semantic: reasoningSemantic(messageId, "snapshot", partId)
@@ -317,13 +376,18 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
       }
       if (partType === "text" && typeof part.text === "string" && part.text.trim()) {
         state.lastOutputText = part.text;
-        const flushed = partId ? flushBufferedDelta(raw, partId, messageId) : [];
-        if (flushed.length) {
-          return flushed;
+        if (partId) {
+          flushBufferedDelta(raw, partId, messageId);
         }
         return emitAssistantText(raw, part.text, messageId, partId, "snapshot");
       }
-      return [] as NormalizedRunEvent[];
+      return [createRawVisibleEvent(raw, eventType, toDisplayText(part) || `收到 ${partType || "unknown"} part 更新。`, {
+        title: `消息片段更新${partType ? ` ${partType}` : ""}`,
+        data: {
+          ...properties,
+          part
+        }
+      })];
     }
 
     if (eventType === "message.updated") {
@@ -335,8 +399,14 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
             data: { info }
           })];
         }
+
+        return [] as NormalizedRunEvent[];
       }
-      return [] as NormalizedRunEvent[];
+
+      return [createRawVisibleEvent(raw, eventType, toDisplayText(info) || "assistant 消息已更新。", {
+        title: "消息更新",
+        data: { info }
+      })];
     }
 
     if (eventType === "question.asked") {
@@ -354,7 +424,7 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
 
     if (eventType === "question.replied") {
       state.waitingQuestionId = null;
-      return [nextEvent(raw, "tool_call", "问题已回答，继续等待 opencode 输出。", {
+      return [createRawVisibleEvent(raw, eventType, "问题已回答，继续等待 opencode 输出。", {
         title: "已提交回答",
         data: properties
       })];
@@ -366,7 +436,10 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
       })];
     }
 
-    return [] as NormalizedRunEvent[];
+    return [createRawVisibleEvent(raw, eventType, toDisplayText(properties) || `收到上游事件 ${eventType}。`, {
+      title: `原始事件 ${eventType}`,
+      data: properties
+    })];
   };
 
   return {

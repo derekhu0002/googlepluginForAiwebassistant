@@ -780,6 +780,55 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(result).toBe(finalOutput);
   });
 
+  it("keeps chinese upstream reasoning that happens to contain a later answer heading", () => {
+    const fullSnapshot = [
+      "根据威胁情报风险评估技能的要求，我需要基于事件上下文和已审查的STIX证据来评估威胁重要性。然而，从您提供的信息中，我只看到了一些基本的上下文信息（来源、时间戳、用户名状态），但没有具体的SR（安全事件）详情或STIX证据。",
+      "",
+      "为了提供准确的风险评估和建议，我需要以下信息：",
+      "",
+      "## 需要的信息：",
+      "1. SR详情",
+      "2. 已发现的证据",
+      "",
+      "## 建议的下一步动作：",
+      "1. 验证用户身份",
+      "2. 扩展程序审查"
+    ].join("\n");
+
+    const model = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-live-chinese-reasoning",
+        prompt: "请总结当前 SR 的风险与建议下一步动作。",
+        events: [
+          createEvent(1, {
+            runId: "run-live-chinese-reasoning",
+            type: "thinking",
+            message: fullSnapshot,
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "snapshot",
+              identity: "assistant_text:msg-live:part-1",
+              itemKind: "text",
+              messageId: "msg-live",
+              partId: "part-1"
+            },
+            data: { field: "text", message_id: "msg-live" }
+          })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    expect(model.finalAnswerPart?.text).toContain("根据威胁情报风险评估技能的要求，我需要基于事件上下文和已审查的STIX证据来评估威胁重要性");
+    expect(model.finalAnswerPart?.text).toContain("需要的信息");
+    expect(model.finalAnswerPart?.text).toContain("建议的下一步动作");
+  });
+
   it("dedupes reasoning parts when the same anchor drifts between assistant-message and fragment-group containers", () => {
     const parts = buildTranscriptPartStream({
       runId: "run-1",

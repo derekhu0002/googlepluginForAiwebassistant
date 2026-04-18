@@ -486,7 +486,7 @@ export function useSidepanelController() {
       status: selectedHistoryFallbackDetail.run.status,
       updatedAt: selectedHistoryFallbackDetail.run.updatedAt ?? selectedHistoryFallbackDetail.run.startedAt,
       pendingQuestionId: null,
-      includeToolCallParts: false
+      includeToolCallParts: true
     }];
     }
 
@@ -500,7 +500,7 @@ export function useSidepanelController() {
       status: detail.run.status,
       updatedAt: detail.run.updatedAt ?? detail.run.startedAt,
       pendingQuestionId: null,
-      includeToolCallParts: false
+      includeToolCallParts: true
     }));
   }, [activeSessionRunDetails, frozenSessionRunDetails, selectedHistoryFallbackDetail, selectedSessionIsCurrent]);
 

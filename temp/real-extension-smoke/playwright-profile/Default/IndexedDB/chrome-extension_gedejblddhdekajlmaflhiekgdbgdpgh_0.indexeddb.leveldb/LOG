@@ -1,3 +1,6 @@
-2026/04/17-13:33:56.780 6040 Reusing MANIFEST D:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\IndexedDB\chrome-extension_gedejblddhdekajlmaflhiekgdbgdpgh_0.indexeddb.leveldb/MANIFEST-000001
-2026/04/17-13:33:56.781 6040 Recovering log #3
-2026/04/17-13:33:56.794 6040 Reusing old log D:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\IndexedDB\chrome-extension_gedejblddhdekajlmaflhiekgdbgdpgh_0.indexeddb.leveldb/000003.log 
+2026/04/18-14:42:17.780 68d4 Reusing MANIFEST D:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\IndexedDB\chrome-extension_gedejblddhdekajlmaflhiekgdbgdpgh_0.indexeddb.leveldb/MANIFEST-000001
+2026/04/18-14:42:17.780 68d4 Recovering log #3
+2026/04/18-14:42:17.802 68d4 Reusing old log D:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\IndexedDB\chrome-extension_gedejblddhdekajlmaflhiekgdbgdpgh_0.indexeddb.leveldb/000003.log 
+2026/04/18-14:43:03.209 75d4 Level-0 table #5: started
+2026/04/18-14:43:04.741 75d4 Level-0 table #5: 1100646 bytes OK
+2026/04/18-14:43:05.598 75d4 Delete type=0 #3
