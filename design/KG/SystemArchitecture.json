@@ -6,15 +6,30 @@
 "id": "2242",
 "name": "ApplicationFunction1"
 ,"type": "ArchiMate_ApplicationFunction"
-,"browser_path": "Model/NEWWORLD/ApplicationFunction1"
-,"description": "[ACCEPTANCE CRITERIA]完成端到端自测试，发出真实（“请总结当前 SR 的风险与建议下一步动作。”）请求到OPENCODE SERVER，触发完整流程，并检测界面显示的消息是否和从OPENCODE SERVER接收到的消息一致，不重复、不遗漏、不乱序。"
+,"testcases": [
+{
+"name": "TestCase1",
+"description": "真实端到端 SMOKE：使用精确 prompt“请总结当前 SR 的风险与建议下一步动作。”，校验界面显示消息与 OPENCODE SERVER 接收消息一致，不重复、不遗漏、不乱序。\r\n",
+"acceptanceCriteria": "extension/scripts/real-extension-smoke.mjs"
+}
+]
 },
 {
 "id": "2243",
 "name": "ApplicationFunction2"
 ,"type": "ArchiMate_ApplicationFunction"
-,"browser_path": "Model/NEWWORLD/ApplicationFunction2"
-,"description": "[ACCEPTANCE CRITERIA]\r\n1.界面上不要显示transcript-part-tool类型的消息\r\n2.请确定每次消息完成后，界面都能正确显示已完成"
+,"testcases": [
+{
+"name": "TestCase2",
+"description": "会话界面隐藏 tool transcript：验证主舞台 transcript 不显示 transcript-part-tool 类型消息，仅保留用户消息、assistant 正文和 summary；对应真实 smoke 与 sidepanel transcript 渲染回归。",
+"acceptanceCriteria": ""
+},
+{
+"name": "TestCase3",
+"description": "完成态显示正确：当消息已形成终态证据后，界面应从进行中收敛为已完成；验证 session.idle / result 后 summary 显示“已完成”，且真实 smoke 面板状态正确。",
+"acceptanceCriteria": ""
+}
+]
 }
 ],
 "relationships": [
@@ -24,7 +39,6 @@
 {
 "view_id": "194",
 "view_name": "SystemArchitecture"
-,"browser_path": "Model/NEWWORLD/SystemArchitecture"
 ,"included_elements": [
 "2242",
 "2243"
