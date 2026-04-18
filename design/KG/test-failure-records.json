@@ -2,13 +2,13 @@
   {
     "testcasename": "TestCase2",
     "testdescription": "会话界面隐藏 tool transcript：验证主舞台 transcript 不显示 transcript-part-tool 类型消息，仅保留用户消息、assistant 正文和 summary；对应真实 smoke 与 sidepanel transcript 渲染回归。",
-    "acceptanceCriteria": "",
+    "acceptanceCriteria": "extension/scripts/acceptance-testcase2.mjs",
     "relatedIntentElementId": "2243"
   },
   {
     "testcasename": "TestCase3",
     "testdescription": "完成态显示正确：当消息已形成终态证据后，界面应从进行中收敛为已完成；验证 session.idle / result 后 summary 显示“已完成”，且真实 smoke 面板状态正确。",
-    "acceptanceCriteria": "",
+    "acceptanceCriteria": "extension/scripts/acceptance-testcase3.mjs",
     "relatedIntentElementId": "2243"
   }
 ]

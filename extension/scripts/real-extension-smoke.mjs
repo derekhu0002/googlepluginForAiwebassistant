@@ -15,6 +15,7 @@ const ADAPTER_LOG_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url
 const LAUNCH_MODE = process.env.EXTENSION_SMOKE_BROWSER_MODE ?? "launch";
 const CHROMIUM_EXECUTABLE = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? null;
 const NOISE_MARKERS = ["会话已创建", "会话状态", "正在读取所需内容"];
+const ENFORCE_ASSISTANT_TEXT_COMPARISON = process.env.REAL_SMOKE_ENFORCE_TEXT_COMPARISON !== "0";
 
 function normalizeComparableText(value) {
   return String(value ?? "")
@@ -601,7 +602,11 @@ async function main() {
     }
 
     if (!assistantTextComparison.rawVsUi.ok || !assistantTextComparison.stateVsUi.ok) {
-      throw new Error(`Assistant message comparison failed: ${JSON.stringify(assistantTextComparison, null, 2)}`);
+      if (ENFORCE_ASSISTANT_TEXT_COMPARISON) {
+        throw new Error(`Assistant message comparison failed: ${JSON.stringify(assistantTextComparison, null, 2)}`);
+      }
+
+      console.warn(`Assistant message comparison mismatch ignored by REAL_SMOKE_ENFORCE_TEXT_COMPARISON=0: ${JSON.stringify(assistantTextComparison, null, 2)}`);
     }
   } finally {
     await browserSession.close();
