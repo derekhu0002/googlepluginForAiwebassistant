@@ -10,3 +10,4 @@ __pycache__/
 .pytest_cache/
 .opencode/.obsidian
 .obsidian
+python_adapter/app/opencode_adapter.log
