@@ -1,3 +1,2 @@
-2026/04/18-20:20:11.680 8fb0 Reusing MANIFEST D:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\IndexedDB\chrome-extension_gedejblddhdekajlmaflhiekgdbgdpgh_0.indexeddb.leveldb/MANIFEST-000001
-2026/04/18-20:20:11.681 8fb0 Recovering log #3
-2026/04/18-20:20:11.692 8fb0 Reusing old log D:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\IndexedDB\chrome-extension_gedejblddhdekajlmaflhiekgdbgdpgh_0.indexeddb.leveldb/000003.log 
+2026/04/18-20:30:09.301 7b04 Creating DB d:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\IndexedDB\chrome-extension_gedejblddhdekajlmaflhiekgdbgdpgh_0.indexeddb.leveldb since it was missing.
+2026/04/18-20:30:09.334 7b04 Reusing MANIFEST d:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\IndexedDB\chrome-extension_gedejblddhdekajlmaflhiekgdbgdpgh_0.indexeddb.leveldb/MANIFEST-000001

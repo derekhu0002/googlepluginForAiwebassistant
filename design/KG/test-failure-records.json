@@ -1,5 +1,11 @@
 [
   {
+    "testcasename": "TestCase1",
+    "testdescription": "真实端到端 SMOKE：使用精确 prompt“请总结当前 SR 的风险与建议下一步动作。”，校验界面显示消息与 OPENCODE SERVER 接收消息一致，不重复、不遗漏、不乱序。\r\n",
+    "acceptanceCriteria": "extension/scripts/real-extension-smoke.mjs",
+    "relatedIntentElementId": "2242"
+  },
+  {
     "testcasename": "TestCase2",
     "testdescription": "会话界面隐藏 tool transcript：验证主舞台 transcript 不显示 transcript-part-tool 类型消息，仅保留用户消息、assistant 正文和 summary；对应真实 smoke 与 sidepanel transcript 渲染回归。",
     "acceptanceCriteria": "extension/scripts/acceptance-testcase2.mjs",

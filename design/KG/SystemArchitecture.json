@@ -26,8 +26,8 @@
 },
 {
 "name": "TestCase3",
-"description": "完成态显示正确：当消息已形成终态证据后，界面应从进行中收敛为已完成；验证 session.idle / result 后 summary 显示“已完成”，且真实 smoke 面板状态正确。",
-"acceptanceCriteria": "extension/scripts/acceptance-testcase3.mjs"
+"description": "完成态显示正确：\r\n1、会话开始时一直到会话结束前页面的transcript-part-summary-copy状态都应该是“进行中”，且“新会话”按钮不可点击，且对话框不可发起新消息；\r\n2、会话结束后transcript-part-summary-copy需要显示“已完成”，且“新会话”按钮可点击，且对话框可发起新消息；\r\n3、以上测试需要在真实SMOKE环境测试，不可MOCK；\r\n历史记录：前期有测试用例：extension/scripts/acceptance-testcase3.mjs，但该用例未完全覆盖以上要求；",
+"acceptanceCriteria": ""
 }
 ]
 }
