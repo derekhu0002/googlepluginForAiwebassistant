@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 
 const CDP_ORIGIN = process.env.CHROME_CDP_ORIGIN ?? "http://127.0.0.1:9222";
 const TEST_URL = process.env.EXTENSION_TEST_URL ?? "http://127.0.0.1:4173/";
-const RUN_PROMPT = process.env.EXTENSION_SMOKE_PROMPT ?? "请只回复 REAL_EXTENSION_SMOKE_OK。";
+const RUN_PROMPT = process.env.EXTENSION_SMOKE_PROMPT ?? "请总结当前 SR 的风险与建议下一步动作。";
 const STATE_KEY = "ai-web-assistant-state";
 const OUTPUT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../temp/real-extension-smoke");
 const EXTENSION_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");

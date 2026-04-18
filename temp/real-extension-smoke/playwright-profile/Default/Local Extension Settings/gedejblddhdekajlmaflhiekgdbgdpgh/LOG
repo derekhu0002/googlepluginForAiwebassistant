@@ -1,71 +1,8 @@
-2026/04/18-15:35:19.947 6e88 Creating DB D:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\Local Extension Settings\gedejblddhdekajlmaflhiekgdbgdpgh since it was missing.
-2026/04/18-15:35:19.963 6e88 Reusing MANIFEST D:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\Local Extension Settings\gedejblddhdekajlmaflhiekgdbgdpgh/MANIFEST-000001
-2026/04/18-15:35:27.060 6660 Level-0 table #5: started
-2026/04/18-15:35:27.076 6660 Level-0 table #5: 498809 bytes OK
-2026/04/18-15:35:27.086 6660 Delete type=0 #3
-2026/04/18-15:35:27.998 6660 Level-0 table #7: started
-2026/04/18-15:35:28.014 6660 Level-0 table #7: 457442 bytes OK
-2026/04/18-15:35:28.023 6660 Delete type=0 #4
-2026/04/18-15:35:28.881 6e88 Level-0 table #9: started
-2026/04/18-15:35:28.894 6e88 Level-0 table #9: 453647 bytes OK
-2026/04/18-15:35:28.902 6e88 Delete type=0 #6
-2026/04/18-15:35:29.856 6660 Level-0 table #11: started
-2026/04/18-15:35:29.873 6660 Level-0 table #11: 429542 bytes OK
-2026/04/18-15:35:29.881 6660 Delete type=0 #8
-2026/04/18-15:35:30.678 6660 Level-0 table #13: started
-2026/04/18-15:35:30.698 6660 Level-0 table #13: 426459 bytes OK
-2026/04/18-15:35:30.706 6660 Delete type=0 #10
-2026/04/18-15:35:31.488 6660 Level-0 table #15: started
-2026/04/18-15:35:31.502 6660 Level-0 table #15: 462067 bytes OK
-2026/04/18-15:35:31.510 6660 Delete type=0 #12
-2026/04/18-15:35:31.512 6660 Compacting 4@0 + 1@1 files
-2026/04/18-15:35:31.541 6660 Generated table #16@0: 1 keys, 53560 bytes
-2026/04/18-15:35:31.541 6660 Compacted 4@0 + 1@1 files => 53560 bytes
-2026/04/18-15:35:31.547 6660 compacted to: files[ 0 1 1 0 0 0 0 ]
-2026/04/18-15:35:31.548 6660 Delete type=2 #7
-2026/04/18-15:35:31.548 6660 Delete type=2 #9
-2026/04/18-15:35:31.548 6660 Delete type=2 #11
-2026/04/18-15:35:31.548 6660 Delete type=2 #13
-2026/04/18-15:35:31.548 6660 Delete type=2 #15
-2026/04/18-15:35:32.401 6660 Level-0 table #18: started
-2026/04/18-15:35:32.417 6660 Level-0 table #18: 443979 bytes OK
-2026/04/18-15:35:32.422 6660 Delete type=0 #14
-2026/04/18-15:35:33.280 6660 Level-0 table #20: started
-2026/04/18-15:35:33.297 6660 Level-0 table #20: 464694 bytes OK
-2026/04/18-15:35:33.303 6660 Delete type=0 #17
-2026/04/18-15:35:34.040 6660 Level-0 table #22: started
-2026/04/18-15:35:34.056 6660 Level-0 table #22: 423623 bytes OK
-2026/04/18-15:35:34.061 6660 Delete type=0 #19
-2026/04/18-15:35:34.631 6660 Level-0 table #24: started
-2026/04/18-15:35:34.646 6660 Level-0 table #24: 437337 bytes OK
-2026/04/18-15:35:34.653 6660 Delete type=0 #21
-2026/04/18-15:35:34.654 6660 Compacting 4@0 + 1@1 files
-2026/04/18-15:35:34.679 6660 Generated table #25@0: 1 keys, 63289 bytes
-2026/04/18-15:35:34.679 6660 Compacted 4@0 + 1@1 files => 63289 bytes
-2026/04/18-15:35:34.683 6660 compacted to: files[ 0 1 1 0 0 0 0 ]
-2026/04/18-15:35:34.684 6660 Delete type=2 #16
-2026/04/18-15:35:34.684 6660 Delete type=2 #18
-2026/04/18-15:35:34.684 6660 Delete type=2 #20
-2026/04/18-15:35:34.684 6660 Delete type=2 #22
-2026/04/18-15:35:34.684 6660 Delete type=2 #24
-2026/04/18-15:35:35.141 6660 Level-0 table #27: started
-2026/04/18-15:35:35.157 6660 Level-0 table #27: 452605 bytes OK
-2026/04/18-15:35:35.163 6660 Delete type=0 #23
-2026/04/18-15:35:35.722 6660 Level-0 table #29: started
-2026/04/18-15:35:35.739 6660 Level-0 table #29: 468900 bytes OK
-2026/04/18-15:35:35.744 6660 Delete type=0 #26
-2026/04/18-15:35:36.088 6660 Level-0 table #31: started
-2026/04/18-15:35:36.104 6660 Level-0 table #31: 411769 bytes OK
-2026/04/18-15:35:36.109 6660 Delete type=0 #28
-2026/04/18-15:35:36.756 6660 Level-0 table #33: started
-2026/04/18-15:35:36.770 6660 Level-0 table #33: 426767 bytes OK
-2026/04/18-15:35:36.775 6660 Delete type=0 #30
-2026/04/18-15:35:36.777 6660 Compacting 4@0 + 1@1 files
-2026/04/18-15:35:36.799 6660 Generated table #34@0: 1 keys, 73708 bytes
-2026/04/18-15:35:36.799 6660 Compacted 4@0 + 1@1 files => 73708 bytes
-2026/04/18-15:35:36.803 6660 compacted to: files[ 0 1 1 0 0 0 0 ]
-2026/04/18-15:35:36.803 6660 Delete type=2 #25
-2026/04/18-15:35:36.803 6660 Delete type=2 #27
-2026/04/18-15:35:36.803 6660 Delete type=2 #29
-2026/04/18-15:35:36.803 6660 Delete type=2 #31
-2026/04/18-15:35:36.803 6660 Delete type=2 #33
+2026/04/18-19:42:45.166 8fb4 Creating DB d:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\Local Extension Settings\gedejblddhdekajlmaflhiekgdbgdpgh since it was missing.
+2026/04/18-19:42:45.186 8fb4 Reusing MANIFEST d:\projects\googlepluginForAiwebassistant\temp\real-extension-smoke\playwright-profile\Default\Local Extension Settings\gedejblddhdekajlmaflhiekgdbgdpgh/MANIFEST-000001
+2026/04/18-19:43:01.801 6978 Level-0 table #5: started
+2026/04/18-19:43:01.821 6978 Level-0 table #5: 540940 bytes OK
+2026/04/18-19:43:01.829 6978 Delete type=0 #3
+2026/04/18-19:43:03.585 6978 Level-0 table #7: started
+2026/04/18-19:43:03.602 6978 Level-0 table #7: 502601 bytes OK
+2026/04/18-19:43:03.610 6978 Delete type=0 #4
