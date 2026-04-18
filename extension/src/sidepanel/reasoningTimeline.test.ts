@@ -1048,6 +1048,69 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(secondModel.liveParts.map((part) => part.text)).toEqual(["当前问题", "替换后的首段"]);
   });
 
+  it("does not accumulate duplicate resolved terminal output when recomputing the same completed run", () => {
+    const liveSegment = {
+      runId: "run-terminal-repeat",
+      prompt: "当前问题",
+      events: [
+        createEvent(1, {
+          runId: "run-terminal-repeat",
+          type: "thinking",
+          message: "第一段说明",
+          data: { field: "text", message_id: "msg-terminal-repeat" }
+        }),
+        createEvent(2, {
+          runId: "run-terminal-repeat",
+          type: "tool_call",
+          message: "读取上下文"
+        }),
+        createEvent(3, {
+          runId: "run-terminal-repeat",
+          type: "thinking",
+          message: "第二段说明",
+          data: { field: "text", message_id: "msg-terminal-repeat" }
+        }),
+        createEvent(4, {
+          runId: "run-terminal-repeat",
+          type: "result",
+          message: "最终回答",
+          data: { message_id: "msg-terminal-repeat" }
+        })
+      ],
+      status: "done" as const,
+      runStatus: "done" as const,
+      streamStatus: "done" as const,
+      finalOutput: "最终回答",
+      includeSummary: true,
+      includeToolCallParts: false
+    };
+
+    const firstModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment
+    });
+
+    const secondModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment,
+      previousModel: firstModel
+    });
+
+    const firstTextPartIds = firstModel.parts.filter((part) => part.kind === "text").map((part) => part.id);
+    const secondTextPartIds = secondModel.parts.filter((part) => part.kind === "text").map((part) => part.id);
+
+    expect(secondModel.liveProjectionDebug).toMatchObject({
+      reusedPreviousStore: true,
+      appliedDeltaEventCount: 0
+    });
+    expect(secondTextPartIds).toEqual(firstTextPartIds);
+    expect(new Set(secondTextPartIds).size).toBe(secondTextPartIds.length);
+    expect(secondModel.parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(
+      firstModel.parts.filter((part) => part.kind === "text").map((part) => part.text)
+    );
+    expect(secondModel.finalAnswerPart?.text).toBe("最终回答");
+  });
+
   it("builds historical archive batches separately from live tail projection", () => {
     const model = buildStableTranscriptProjection({
       historicalSegments: [{

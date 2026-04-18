@@ -2225,20 +2225,25 @@ function finalizeLiveProjectionState(state: LiveTranscriptProjectionState, optio
   const currentOutputIndex = state.currentOutputItemId
     ? items.findIndex((item) => item.id === state.currentOutputItemId)
     : -1;
+  const existingOutputIndex = currentOutputIndex >= 0 && items[currentOutputIndex]?.groupAnchorId === state.currentAssistantGroupAnchorId
+    ? currentOutputIndex
+    : findAssistantOutputIndexByGroupAnchor(items, state.currentAssistantGroupAnchorId);
 
   if (assistantDisplayText) {
     const resolvedSegmentText = sanitizeAssistantDisplayText(assistantDisplayText);
     if (resolvedSegmentText) {
-      if (currentOutputIndex >= 0) {
-        items[currentOutputIndex] = {
-          ...items[currentOutputIndex],
+      if (existingOutputIndex >= 0) {
+        items[existingOutputIndex] = {
+          ...items[existingOutputIndex],
           anchorId: outputAnchorId,
           summary: resolvedSegmentText,
           updatedAt: state.assistantResponse.lastResponseAt ?? fallbackTimestamp,
-          primaryType: presentationState.runStatus === "done" ? "result" : items[currentOutputIndex].primaryType,
-          actionAnchorId: items[currentOutputIndex].actionAnchorId ?? options.events.at(-1)?.id,
-          originEventTypes: [...new Set([...items[currentOutputIndex].originEventTypes, presentationState.runStatus === "done" ? "result" : "thinking"])] as NormalizedEventType[]
+          primaryType: presentationState.runStatus === "done" ? "result" : items[existingOutputIndex].primaryType,
+          actionAnchorId: items[existingOutputIndex].actionAnchorId ?? options.events.at(-1)?.id,
+          originEventTypes: [...new Set([...items[existingOutputIndex].originEventTypes, presentationState.runStatus === "done" ? "result" : "thinking"])] as NormalizedEventType[]
         };
+        state.currentOutputItemId = items[existingOutputIndex].id;
+        state.currentOutputAnchorId = outputAnchorId;
       } else {
         const syntheticEvent = {
           id: `${state.runId}:resolved-output`,
