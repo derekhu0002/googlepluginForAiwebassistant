@@ -161,9 +161,10 @@ export function useSidepanelController() {
   const rawProjectorRef = useRef<OpencodeRawEventProjector | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isBusy = state.status === "collecting" || state.status === "streaming";
+  const hasTerminalEvidence = hasTerminalRunEvidence(state);
+  const isBusy = state.status === "collecting" || (state.status === "streaming" && !hasTerminalEvidence);
   const hasActiveSession = Boolean(state.activeSessionId ?? state.currentRun?.sessionId);
-  const canSendWhileStreaming = state.status === "streaming" && hasActiveSession && hasTerminalRunEvidence(state);
+  const canSendWhileStreaming = state.status === "streaming" && hasActiveSession && hasTerminalEvidence;
   const isSendDisabled = state.status === "collecting" || (state.status === "streaming" && !canSendWhileStreaming) || !prompt.trim();
   const questionEvent = useMemo(() => getActiveQuestionEvent(state.runEvents, state.stream.pendingQuestionId), [state.runEvents, state.stream.pendingQuestionId]);
   const hasLivePendingQuestion = useMemo(() => hasPendingQuestion(state.runEvents, state.stream.pendingQuestionId), [state.runEvents, state.stream.pendingQuestionId]);

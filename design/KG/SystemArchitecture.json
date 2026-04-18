@@ -1,7 +1,62 @@
 {
-"name": "NEWWORLD",
+"name": "System",
 "description": "",
 "elements": [
+{
+"id": "1207",
+"name": "StrategyLayerAndMotivationAspect"
+,"type": "ArchiMate_Assessment"
+,"subdiagram_views": [
+{
+"view_id": "159",
+"view_name": "StrategyLayerAndMotivationAspect"
+}
+]
+},
+{
+"id": "1208",
+"name": "BusinessLayer"
+,"type": "ArchiMate_Assessment"
+,"subdiagram_views": [
+{
+"view_id": "160",
+"view_name": "BusinessLayer"
+}
+]
+},
+{
+"id": "1209",
+"name": "ApplicationLayer"
+,"type": "ArchiMate_Assessment"
+,"subdiagram_views": [
+{
+"view_id": "161",
+"view_name": "ApplicationLayer"
+}
+]
+},
+{
+"id": "1210",
+"name": "TechnologyLayer"
+,"type": "ArchiMate_Assessment"
+,"subdiagram_views": [
+{
+"view_id": "162",
+"view_name": "TechnologyLayer"
+}
+]
+},
+{
+"id": "1211",
+"name": "ProjectManagement"
+,"type": "ArchiMate_Assessment"
+,"subdiagram_views": [
+{
+"view_id": "163",
+"view_name": "ProjectManagement"
+}
+]
+},
 {
 "id": "2242",
 "name": "ApplicationFunction1"
@@ -27,7 +82,7 @@
 {
 "name": "TestCase3",
 "description": "完成态显示正确：\r\n1、会话开始时一直到会话结束前页面的transcript-part-summary-copy状态都应该是“进行中”，且“新会话”按钮不可点击，且对话框不可发起新消息；\r\n2、会话结束后transcript-part-summary-copy需要显示“已完成”，且“新会话”按钮可点击，且对话框可发起新消息；\r\n3、以上测试需要在真实SMOKE环境测试，不可MOCK；\r\n历史记录：前期有测试用例：extension/scripts/acceptance-testcase3.mjs，但该用例未完全覆盖以上要求；",
-"acceptanceCriteria": ""
+"acceptanceCriteria": "extension/scripts/acceptance-testcase3.mjs"
 }
 ]
 }
@@ -37,11 +92,75 @@
 ],
 "views": [
 {
-"view_id": "194",
-"view_name": "SystemArchitecture"
+"view_id": "159",
+"view_name": "StrategyLayerAndMotivationAspect"
+,"parent_element_id": "1207"
+,"parent_element_name": "StrategyLayerAndMotivationAspect"
+,"included_elements": [
+
+]
+,"included_relationships": [
+
+]
+},
+{
+"view_id": "160",
+"view_name": "BusinessLayer"
+,"parent_element_id": "1208"
+,"parent_element_name": "BusinessLayer"
+,"included_elements": [
+
+]
+,"included_relationships": [
+
+]
+},
+{
+"view_id": "161",
+"view_name": "ApplicationLayer"
+,"parent_element_id": "1209"
+,"parent_element_name": "ApplicationLayer"
 ,"included_elements": [
 "2242",
 "2243"
+]
+,"included_relationships": [
+
+]
+},
+{
+"view_id": "162",
+"view_name": "TechnologyLayer"
+,"parent_element_id": "1210"
+,"parent_element_name": "TechnologyLayer"
+,"included_elements": [
+
+]
+,"included_relationships": [
+
+]
+},
+{
+"view_id": "163",
+"view_name": "ProjectManagement"
+,"parent_element_id": "1211"
+,"parent_element_name": "ProjectManagement"
+,"included_elements": [
+
+]
+,"included_relationships": [
+
+]
+},
+{
+"view_id": "158",
+"view_name": "SystemArchitecture"
+,"included_elements": [
+"1207",
+"1208",
+"1209",
+"1210",
+"1211"
 ]
 ,"included_relationships": [
 

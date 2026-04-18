@@ -140,6 +140,29 @@ function partIdFromProperties(properties: Record<string, unknown>, part?: Record
   return nested?.trim() || undefined;
 }
 
+function messageIdFromProperties(properties: Record<string, unknown>, part?: Record<string, unknown>) {
+  const direct = typeof properties.messageID === "string"
+    ? properties.messageID
+    : typeof properties.messageId === "string"
+      ? properties.messageId
+      : undefined;
+  if (direct?.trim()) {
+    return direct.trim();
+  }
+
+  const nestedPart = part ?? (typeof properties.part === "object" && properties.part ? properties.part as Record<string, unknown> : undefined);
+  if (!nestedPart) {
+    return undefined;
+  }
+
+  const nested = typeof nestedPart.messageID === "string"
+    ? nestedPart.messageID
+    : typeof nestedPart.messageId === "string"
+      ? nestedPart.messageId
+      : undefined;
+  return nested?.trim() || undefined;
+}
+
 function asRecord(value: unknown) {
   return typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
 }
@@ -240,10 +263,43 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
     })];
   };
 
-  const flushBufferedDelta = (raw: RawRunEventEnvelope, partId: string, messageId?: string) => {
+  const mergeBufferedDelta = (current: string, delta: string) => {
+    if (!delta.trim()) {
+      return current;
+    }
+    if (!current.trim()) {
+      return delta;
+    }
+    if (current === delta || current.endsWith(delta)) {
+      return current;
+    }
+    if (delta.startsWith(current)) {
+      return delta;
+    }
+    return `${current}${delta}`;
+  };
+
+  const flushBufferedDelta = (raw: RawRunEventEnvelope, partId: string, messageId?: string, supersedingText?: string) => {
     const buffered = state.bufferedPartDeltas[partId];
     delete state.bufferedPartDeltas[partId];
-    return [] as NormalizedRunEvent[];
+    if (!buffered?.delta?.trim()) {
+      return [] as NormalizedRunEvent[];
+    }
+
+    if (supersedingText?.trim()) {
+      const normalizedBuffered = buffered.delta.trim();
+      const normalizedSuperseding = supersedingText.trim();
+      if (
+        normalizedSuperseding === normalizedBuffered
+        || normalizedSuperseding.startsWith(normalizedBuffered)
+        || normalizedSuperseding.includes(normalizedBuffered)
+      ) {
+        return [] as NormalizedRunEvent[];
+      }
+    }
+
+    const resolvedMessageId = messageId ?? buffered.messageId;
+    return emitAssistantText(raw, buffered.delta, resolvedMessageId, partId, "delta");
   };
 
   const buildResultFromMessages = (raw: RawRunEventEnvelope, messages: Record<string, unknown>[]) => {
@@ -324,7 +380,7 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
         })];
       }
       const partId = partIdFromProperties(properties);
-      const messageId = typeof properties.messageID === "string" ? properties.messageID : undefined;
+      const messageId = messageIdFromProperties(properties);
       const field = typeof properties.field === "string" ? properties.field : undefined;
       const partType = partId ? state.partTypes[partId] : undefined;
       if (partType === "text") {
@@ -336,7 +392,11 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
         })];
       }
       if (partId) {
-        state.bufferedPartDeltas[partId] = { delta, messageId };
+        const currentBuffered = state.bufferedPartDeltas[partId];
+        state.bufferedPartDeltas[partId] = {
+          delta: mergeBufferedDelta(currentBuffered?.delta ?? "", delta),
+          messageId: messageId ?? currentBuffered?.messageId
+        };
       }
 
       if (!partType && field === "text") {
@@ -356,7 +416,7 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
       const part = asRecord(properties.part);
       const partType = typeof part.type === "string" ? part.type : undefined;
       const partId = partIdFromProperties(properties, part);
-      const messageId = typeof properties.messageID === "string" ? properties.messageID : undefined;
+      const messageId = messageIdFromProperties(properties, part);
       if (partId && partType) {
         state.partTypes[partId] = partType;
       }
@@ -384,19 +444,16 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
         })];
       }
       if (partType === "reasoning") {
-        if (partId) {
-          flushBufferedDelta(raw, partId, messageId);
-        }
-        return [nextEvent(raw, "thinking", typeof part.text === "string" && part.text.trim() ? part.text : "模型正在推理。", {
+        const supersedingText = typeof part.text === "string" ? part.text : undefined;
+        const flushed = partId ? flushBufferedDelta(raw, partId, messageId, supersedingText) : [] as NormalizedRunEvent[];
+        return [...flushed, nextEvent(raw, "thinking", typeof part.text === "string" && part.text.trim() ? part.text : "模型正在推理。", {
           semantic: reasoningSemantic(messageId, "snapshot", partId)
         })];
       }
       if (partType === "text" && typeof part.text === "string" && part.text.trim()) {
         state.lastOutputText = part.text;
-        if (partId) {
-          flushBufferedDelta(raw, partId, messageId);
-        }
-        return emitAssistantText(raw, part.text, messageId, partId, "snapshot");
+        const flushed = partId ? flushBufferedDelta(raw, partId, messageId, part.text) : [] as NormalizedRunEvent[];
+        return [...flushed, ...emitAssistantText(raw, part.text, messageId, partId, "snapshot")];
       }
       return [createRawVisibleEvent(raw, eventType, toDisplayText(part) || `收到 ${partType || "unknown"} part 更新。`, {
         title: `消息片段更新${partType ? ` ${partType}` : ""}`,

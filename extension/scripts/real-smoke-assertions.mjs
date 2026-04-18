@@ -21,6 +21,14 @@ async function readJsonArtifact(fileName) {
   return JSON.parse(content);
 }
 
+async function readOptionalJsonArtifact(fileName) {
+  try {
+    return await readJsonArtifact(fileName);
+  } catch {
+    return null;
+  }
+}
+
 function runSmokeScript(options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [smokeScriptPath], {
@@ -58,13 +66,14 @@ function assert(condition, message, details) {
 export async function runSmokeAndLoadArtifacts(options = {}) {
   await runSmokeScript(options);
 
-  const [visibleParts, extensionState, comparison] = await Promise.all([
+  const [visibleParts, extensionState, comparison, statusCheckpoints] = await Promise.all([
     readJsonArtifact("visible-parts.json"),
     readJsonArtifact("extension-state.json"),
-    readJsonArtifact("comparison.json")
+    readJsonArtifact("comparison.json"),
+    readOptionalJsonArtifact("status-checkpoints.json")
   ]);
 
-  return { visibleParts, extensionState, comparison };
+  return { visibleParts, extensionState, comparison, statusCheckpoints };
 }
 
 export function assertToolTranscriptHidden(artifacts) {
@@ -72,17 +81,19 @@ export function assertToolTranscriptHidden(artifacts) {
   const assistantTextParts = artifacts.visibleParts.filter((part) => part.role === "assistant" && part.kind === "text");
   const summaryPart = artifacts.visibleParts.find((part) => part.kind === "summary");
   const invalidParts = artifacts.visibleParts.filter((part) => !allowedVisibleKinds.has(part.kind));
+  const sequenceComparison = artifacts.comparison?.assistantMessageSequenceComparison;
 
   assert(promptParts.length >= 1, "Visible transcript is missing the user prompt", artifacts.visibleParts);
   assert(assistantTextParts.length >= 1, "Visible transcript is missing assistant text output", artifacts.visibleParts);
   assert(Boolean(summaryPart), "Visible transcript is missing the summary part", artifacts.visibleParts);
   assert(invalidParts.length === 0, "Visible transcript exposed non-user-facing parts", invalidParts);
   assert(!artifacts.visibleParts.some((part) => part.kind === "tool"), "Visible transcript leaked tool parts", artifacts.visibleParts);
+  assert(Boolean(sequenceComparison), "Real smoke did not produce assistant message sequence diagnostics", artifacts.comparison);
   assert(
-    artifacts.comparison?.assistantTextComparison?.rawVsUi?.ok === true
-      && artifacts.comparison?.assistantTextComparison?.stateVsUi?.ok === true,
-    "Real smoke assistant text comparison did not match UI output",
-    artifacts.comparison?.assistantTextComparison
+    sequenceComparison?.rawVsUi?.ok === true
+      && sequenceComparison?.stateVsUi?.ok === true,
+    "Real smoke assistant message sequence did not match UI output",
+    sequenceComparison
   );
 }
 
@@ -101,4 +112,19 @@ export function assertCompletedSummaryAfterTerminalEvidence(artifacts) {
     sample: runEvents.slice(-5)
   });
   assert(assistantTextParts.length >= 1, "Visible transcript is missing assistant text output", artifacts.visibleParts);
+}
+
+export function assertRunControlsTransition(artifacts) {
+  const inProgress = artifacts.statusCheckpoints?.inProgress;
+  const completed = artifacts.statusCheckpoints?.completed;
+
+  assert(Boolean(inProgress), "Real smoke did not capture the in-progress UI checkpoint", artifacts.statusCheckpoints);
+  assert(Boolean(completed), "Real smoke did not capture the completed UI checkpoint", artifacts.statusCheckpoints);
+  assert(normalizeText(inProgress?.summaryText).includes("进行中"), "Summary copy did not stay in progress during the run", inProgress);
+  assert(inProgress?.newSessionDisabled === true, "New session button was not disabled during the run", inProgress);
+  assert(inProgress?.sendDisabled === true, "Send button was not disabled during the run", inProgress);
+  assert(normalizeText(completed?.summaryText).includes("已完成"), "Summary copy did not switch to completed after the run", completed);
+  assert(!normalizeText(completed?.summaryText).includes("进行中"), "Summary copy still showed in-progress after completion", completed);
+  assert(completed?.newSessionDisabled === false, "New session button did not re-enable after completion", completed);
+  assert(completed?.sendDisabled === false, "Send button did not re-enable after completion", completed);
 }

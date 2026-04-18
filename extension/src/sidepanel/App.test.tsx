@@ -2276,6 +2276,8 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(startButton?.disabled).toBe(true);
+    const newSessionButton = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("新会话")) as HTMLButtonElement | undefined;
+    expect(newSessionButton?.disabled).toBe(true);
 
     const lastStreamCall = mockCreateRunEventStream.mock.calls[mockCreateRunEventStream.mock.calls.length - 1] as unknown[] | undefined;
     const handlers = (lastStreamCall?.[1] ?? {}) as { onEvent?: (event: NormalizedRunEvent) => Promise<void>; onStatusChange?: (status: "connecting" | "streaming" | "reconnecting") => void };
@@ -2291,6 +2293,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(startButton?.disabled).toBe(false);
+    expect(newSessionButton?.disabled).toBe(false);
     expect(container.textContent).toContain("最终回答");
   });
 

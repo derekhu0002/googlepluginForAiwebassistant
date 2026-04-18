@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createOpencodeRawEventProjector } from "./opencodeRawEventProjector";
 
 describe("opencode raw event projector", () => {
-  it("buffers part deltas until text part type is known and emits final result from session snapshot", () => {
+  it("uses nested message IDs on text snapshots after buffered deltas and emits final result from session snapshot", () => {
     const projector = createOpencodeRawEventProjector("run-1");
 
     const deltaEvents = projector.project({
@@ -44,9 +44,9 @@ describe("opencode raw event projector", () => {
             type: "message.part.updated",
             properties: {
               sessionID: "ses-1",
-              messageID: "msg-1",
               part: {
                 id: "part-1",
+                messageID: "msg-1",
                 type: "text",
                 text: "partial result"
               }

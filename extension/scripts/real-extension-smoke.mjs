@@ -15,17 +15,19 @@ const ADAPTER_LOG_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url
 const LAUNCH_MODE = process.env.EXTENSION_SMOKE_BROWSER_MODE ?? "launch";
 const CHROMIUM_EXECUTABLE = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? null;
 const NOISE_MARKERS = ["会话已创建", "会话状态", "正在读取所需内容"];
-const ENFORCE_ASSISTANT_TEXT_COMPARISON = process.env.REAL_SMOKE_ENFORCE_TEXT_COMPARISON !== "0";
+const ENFORCE_ASSISTANT_SEQUENCE_COMPARISON = process.env.REAL_SMOKE_ENFORCE_SEQUENCE_COMPARISON !== "0";
+const CAPTURE_PROGRESS_CHECKPOINTS = process.env.REAL_SMOKE_CAPTURE_PROGRESS_CHECKPOINT === "1";
 
 function normalizeComparableText(value) {
   return String(value ?? "")
     .replace(/\r\n/gu, "\n")
-    .replace(/`+/gu, "")
-    .replace(/^[ \t]*#{1,6}[ \t]+/gmu, "")
-    .replace(/^[ \t]*[-*][ \t]+/gmu, "")
-    .replace(/^[ \t]*\d+\.[ \t]+/gmu, "")
-    .replace(/\*\*(.*?)\*\*/gu, "$1")
-    .replace(/__(.*?)__/gu, "$1")
+    .replace(/`+/gu, " ")
+    .replace(/\*\*(.*?)\*\*/gu, " $1 ")
+    .replace(/__(.*?)__/gu, " $1 ")
+    .replace(/^[ \t]*#{1,6}[ \t]*/gmu, " ")
+    .replace(/^[ \t]*[-*+][ \t]*/gmu, " ")
+    .replace(/^[ \t]*\d+\.[ \t]*/gmu, " ")
+    .replace(/\[(.*?)\]\((.*?)\)/gu, " $1 ")
     .replace(/\s+/gu, " ")
     .trim();
 }
@@ -97,6 +99,23 @@ async function getVisibleTranscriptParts(frame) {
     anchorId: node.getAttribute("data-part-anchor"),
     text: (node.textContent ?? "").trim()
   })));
+}
+
+async function getInteractiveCheckpoint(frame) {
+  return await frame.locator("body").evaluate((root) => {
+    const summary = root.querySelector(".transcript-part-summary-copy");
+    const newSessionButton = Array.from(root.querySelectorAll("button")).find((node) => node.textContent?.includes("新会话"));
+    const sendButton = root.querySelector("button.send-button[aria-label='发送消息']");
+    const textarea = root.querySelector("textarea");
+
+    return {
+      summaryText: (summary?.textContent ?? "").trim(),
+      newSessionDisabled: newSessionButton instanceof HTMLButtonElement ? newSessionButton.disabled : null,
+      sendDisabled: sendButton instanceof HTMLButtonElement ? sendButton.disabled : null,
+      textareaDisabled: textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+      panelText: (root.textContent ?? "").trim()
+    };
+  });
 }
 
 async function readInvocationLogEntries() {
@@ -202,6 +221,62 @@ function extractExpectedAssistantTexts(runEntries) {
     .filter((value) => normalizeComparableText(value));
 }
 
+function extractExpectedAssistantMessageIds(runEntries) {
+  const orderedMessageIds = [];
+  const seenMessageIds = new Set();
+
+  for (const entry of runEntries) {
+    if (entry?.phase !== "stream_raw_event") {
+      continue;
+    }
+
+    const rawEvent = entry.raw_event;
+    if (!rawEvent || typeof rawEvent !== "object") {
+      continue;
+    }
+
+    if (rawEvent.source === "opencode" && rawEvent.eventType === "message.part.updated") {
+      const properties = rawEvent.payload?.event?.payload?.properties;
+      const part = properties?.part;
+      const messageId = typeof properties?.messageID === "string"
+        ? properties.messageID
+        : typeof part?.messageID === "string"
+          ? part.messageID
+          : null;
+      const partType = typeof part?.type === "string" ? part.type : null;
+      const text = typeof part?.text === "string" ? part.text : "";
+      if (!messageId || partType !== "text" || !normalizeComparableText(text) || seenMessageIds.has(messageId)) {
+        continue;
+      }
+
+      seenMessageIds.add(messageId);
+      orderedMessageIds.push(messageId);
+      continue;
+    }
+
+    if (rawEvent.source === "adapter" && rawEvent.eventType === "session.messages") {
+      const messages = Array.isArray(rawEvent.payload?.messages) ? rawEvent.payload.messages : [];
+      for (const message of messages) {
+        const messageId = typeof message?.info?.id === "string" ? message.info.id : null;
+        const role = typeof message?.info?.role === "string" ? message.info.role : null;
+        const text = (Array.isArray(message?.parts) ? message.parts : [])
+          .filter((part) => part?.type === "text" && typeof part?.text === "string")
+          .map((part) => part.text)
+          .join("\n")
+          .trim();
+        if (!messageId || role !== "assistant" || !normalizeComparableText(text) || seenMessageIds.has(messageId)) {
+          continue;
+        }
+
+        seenMessageIds.add(messageId);
+        orderedMessageIds.push(messageId);
+      }
+    }
+  }
+
+  return orderedMessageIds;
+}
+
 function extractAssistantTextsFromState(state) {
   const textsByMessageId = new Map();
   const messageOrder = [];
@@ -243,6 +318,55 @@ function extractAssistantTextsFromState(state) {
     .filter((value) => normalizeComparableText(value));
 }
 
+function extractAssistantMessageIdsFromState(state) {
+  const orderedMessageIds = [];
+  const seenMessageIds = new Set();
+  const events = Array.isArray(state?.runEvents) ? state.runEvents : [];
+
+  for (const event of events) {
+    if (event?.semantic?.channel !== "assistant_text") {
+      continue;
+    }
+
+    const messageId = typeof event?.semantic?.messageId === "string"
+      ? event.semantic.messageId
+      : typeof event?.data?.message_id === "string"
+        ? event.data.message_id
+        : null;
+    const text = normalizeComparableText(event?.message);
+    if (!messageId || !text || seenMessageIds.has(messageId)) {
+      continue;
+    }
+
+    seenMessageIds.add(messageId);
+    orderedMessageIds.push(messageId);
+  }
+
+  return orderedMessageIds;
+}
+
+function extractVisibleAssistantMessageIds(visibleParts) {
+  const orderedMessageIds = [];
+  const seenMessageIds = new Set();
+
+  for (const part of visibleParts ?? []) {
+    if (part?.role !== "assistant" || part?.kind !== "text") {
+      continue;
+    }
+
+    const messageId = typeof part?.anchorId === "string" ? part.anchorId.trim() : "";
+    const text = normalizeComparableText(part?.text);
+    if (!messageId || !text || seenMessageIds.has(messageId)) {
+      continue;
+    }
+
+    seenMessageIds.add(messageId);
+    orderedMessageIds.push(messageId);
+  }
+
+  return orderedMessageIds;
+}
+
 function compareOrderedTextArrays(expected, actual) {
   const normalizedExpected = expected.map((value) => normalizeComparableText(value)).filter(Boolean);
   const normalizedActual = actual.map((value) => normalizeComparableText(value)).filter(Boolean);
@@ -251,6 +375,35 @@ function compareOrderedTextArrays(expected, actual) {
     expected: normalizedExpected,
     actual: normalizedActual,
     duplicateVisibleMessages: normalizedActual.filter((value, index) => normalizedActual.indexOf(value) !== index)
+  };
+}
+
+function compareOrderedIdArrays(expected, actual) {
+  return {
+    ok: JSON.stringify(expected) === JSON.stringify(actual),
+    expected,
+    actual,
+    duplicateActualIds: actual.filter((value, index) => actual.indexOf(value) !== index),
+    missingIds: expected.filter((value) => !actual.includes(value)),
+    unexpectedIds: actual.filter((value) => !expected.includes(value))
+  };
+}
+
+function compareOrderedSubsequence(expected, actual) {
+  let cursor = 0;
+  for (const actualId of actual) {
+    if (cursor < expected.length && actualId === expected[cursor]) {
+      cursor += 1;
+    }
+  }
+
+  return {
+    ok: cursor === expected.length,
+    expected,
+    actual,
+    missingIds: expected.slice(cursor),
+    duplicateActualIds: actual.filter((value, index) => actual.indexOf(value) !== index),
+    unexpectedIds: actual.filter((value) => !expected.includes(value))
   };
 }
 
@@ -464,6 +617,13 @@ async function waitForStableAssistantOutput(page, extensionId, frame, options = 
   throw new Error("Timed out waiting for assistant output to stabilize");
 }
 
+async function waitForInteractiveCheckpoint(frame, predicate, options = {}) {
+  return await waitFor(async () => {
+    const checkpoint = await getInteractiveCheckpoint(frame);
+    return predicate(checkpoint) ? checkpoint : null;
+  }, options);
+}
+
 async function main() {
   await mkdir(OUTPUT_DIR, { recursive: true });
   const beforeEntries = await readInvocationLogEntries();
@@ -514,11 +674,36 @@ async function main() {
       errorMessage: "Timed out waiting for the embedded panel to show live run output"
     });
 
+    const inProgressCheckpoint = CAPTURE_PROGRESS_CHECKPOINTS
+      ? await waitForInteractiveCheckpoint(frame, (checkpoint) => (
+        checkpoint.summaryText.includes("进行中")
+        && checkpoint.newSessionDisabled === true
+        && checkpoint.sendDisabled === true
+      ), {
+        timeoutMs: 90000,
+        intervalMs: 250,
+        errorMessage: "Timed out waiting for in-progress UI checkpoint"
+      })
+      : null;
+
     const settled = await waitForStableAssistantOutput(page, extensionId, frame, {
       timeoutMs: 120000,
       intervalMs: 1000,
       stablePollsRequired: 4
     });
+
+    const completedCheckpoint = CAPTURE_PROGRESS_CHECKPOINTS
+      ? await waitForInteractiveCheckpoint(frame, (checkpoint) => (
+        checkpoint.summaryText.includes("已完成")
+        && !checkpoint.summaryText.includes("进行中")
+        && checkpoint.newSessionDisabled === false
+        && checkpoint.sendDisabled === false
+      ), {
+        timeoutMs: 30000,
+        intervalMs: 250,
+        errorMessage: "Timed out waiting for completed UI checkpoint"
+      })
+      : null;
 
     const pageScreenshotPath = path.join(OUTPUT_DIR, "test-page.png");
     const panelScreenshotPath = path.join(OUTPUT_DIR, "embedded-panel.png");
@@ -527,6 +712,7 @@ async function main() {
     const rawEventsJsonPath = path.join(OUTPUT_DIR, "raw-events.json");
     const visiblePartsJsonPath = path.join(OUTPUT_DIR, "visible-parts.json");
     const comparisonJsonPath = path.join(OUTPUT_DIR, "comparison.json");
+    const statusCheckpointsJsonPath = path.join(OUTPUT_DIR, "status-checkpoints.json");
 
     await page.screenshot({ path: pageScreenshotPath, fullPage: true });
     await frame.locator("body").screenshot({ path: panelScreenshotPath });
@@ -544,10 +730,18 @@ async function main() {
         .filter((part) => part.role === "assistant" && part.kind === "text")
         .map((part) => part.text)
     );
+    const expectedAssistantMessageIds = extractExpectedAssistantMessageIds(runEntries);
+    const stateAssistantMessageIds = extractAssistantMessageIdsFromState(settled.state);
+    const visibleAssistantMessageIds = extractVisibleAssistantMessageIds(settled.visibleParts);
     const assistantTextComparison = {
       rawVsUi: compareOrderedTextArrays(expectedAssistantTexts, visibleAssistantTexts),
       stateVsUi: compareOrderedTextArrays(stateAssistantTexts, visibleAssistantTexts),
       rawVsState: compareOrderedTextArrays(expectedAssistantTexts, stateAssistantTexts)
+    };
+    const assistantMessageSequenceComparison = {
+      rawVsUi: compareOrderedSubsequence(expectedAssistantMessageIds, visibleAssistantMessageIds),
+      stateVsUi: compareOrderedIdArrays(stateAssistantMessageIds, visibleAssistantMessageIds),
+      rawVsState: compareOrderedSubsequence(expectedAssistantMessageIds, stateAssistantMessageIds)
     };
 
     await writeFile(stateJsonPath, JSON.stringify(settled.state, null, 2), "utf8");
@@ -555,10 +749,18 @@ async function main() {
     await writeFile(visiblePartsJsonPath, JSON.stringify(settled.visibleParts ?? [], null, 2), "utf8");
     await writeFile(comparisonJsonPath, JSON.stringify({
       runId: settled.state?.currentRun?.runId ?? null,
+      expectedAssistantMessageIds,
+      stateAssistantMessageIds,
+      visibleAssistantMessageIds,
       expectedAssistantTexts,
       stateAssistantTexts,
       visibleAssistantTexts,
-      assistantTextComparison
+      assistantTextComparison,
+      assistantMessageSequenceComparison
+    }, null, 2), "utf8");
+    await writeFile(statusCheckpointsJsonPath, JSON.stringify({
+      inProgress: inProgressCheckpoint,
+      completed: completedCheckpoint
     }, null, 2), "utf8");
 
     const summary = {
@@ -574,6 +776,7 @@ async function main() {
       runEventCount: Array.isArray(settled.state?.runEvents) ? settled.state.runEvents.length : 0,
       rawEventCount: runEntries.length,
       containsNoiseMarkers: NOISE_MARKERS.filter((marker) => settled.panelText.includes(marker)),
+      assistantMessageSequenceComparison,
       assistantTextComparison,
       panelTextSample: settled.panelText.slice(0, 2000),
       exports: {
@@ -583,7 +786,8 @@ async function main() {
         state: stateJsonPath,
         rawEvents: rawEventsJsonPath,
         visibleParts: visiblePartsJsonPath,
-        comparison: comparisonJsonPath
+        comparison: comparisonJsonPath,
+        statusCheckpoints: statusCheckpointsJsonPath
       }
     };
 
@@ -601,12 +805,12 @@ async function main() {
       throw new Error("Embedded panel did not render any visible content");
     }
 
-    if (!assistantTextComparison.rawVsUi.ok || !assistantTextComparison.stateVsUi.ok) {
-      if (ENFORCE_ASSISTANT_TEXT_COMPARISON) {
-        throw new Error(`Assistant message comparison failed: ${JSON.stringify(assistantTextComparison, null, 2)}`);
+    if (!assistantMessageSequenceComparison.rawVsUi.ok || !assistantMessageSequenceComparison.stateVsUi.ok) {
+      if (ENFORCE_ASSISTANT_SEQUENCE_COMPARISON) {
+        throw new Error(`Assistant message sequence comparison failed: ${JSON.stringify(assistantMessageSequenceComparison, null, 2)}`);
       }
 
-      console.warn(`Assistant message comparison mismatch ignored by REAL_SMOKE_ENFORCE_TEXT_COMPARISON=0: ${JSON.stringify(assistantTextComparison, null, 2)}`);
+      console.warn(`Assistant message sequence comparison mismatch ignored by REAL_SMOKE_ENFORCE_SEQUENCE_COMPARISON=0: ${JSON.stringify(assistantMessageSequenceComparison, null, 2)}`);
     }
   } finally {
     await browserSession.close();
