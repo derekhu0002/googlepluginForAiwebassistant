@@ -18,6 +18,7 @@ import {
   type TranscriptTraceRecord,
   type RunRecord
 } from "../shared/protocol";
+import { appendSidepanelDebugLog } from "./debugLogStore";
 import { collectRunAssistantResponseText, isAssistantResponseDeltaEvent } from "./reasoningTimeline";
 import { getNextPendingQuestionId } from "./questionState";
 
@@ -65,8 +66,37 @@ export interface RunEventAcceptanceResult {
   diagnostic: RunEventDiagnostic;
 }
 
+const ACCEPTANCE_LOG_PREVIEW_LIMIT = 160;
+
 function logRunAcceptance(entry: Record<string, unknown>) {
-  console.info("[sidepanel-run-acceptance]", entry);
+  const stored = appendSidepanelDebugLog("sidepanel-run-acceptance", entry);
+  console.info("[sidepanel-run-acceptance]", stored.entry);
+}
+
+function previewAcceptanceLogText(value: string | null | undefined, limit = ACCEPTANCE_LOG_PREVIEW_LIMIT) {
+  const normalized = value?.replace(/\s+/gu, " ").trim() ?? "";
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > limit ? `${normalized.slice(0, limit)}...` : normalized;
+}
+
+function summarizeAcceptanceEvent(event: NormalizedRunEvent) {
+  return {
+    runId: event.runId,
+    rawEventId: event.id,
+    canonicalEventKey: event.canonical?.key ?? null,
+    type: event.type,
+    sequence: Number.isFinite(event.sequence) ? event.sequence : null,
+    createdAt: event.createdAt,
+    semanticIdentity: event.semantic?.identity ?? null,
+    messageId: event.semantic?.messageId ?? null,
+    partId: event.semantic?.partId ?? null,
+    channel: event.semantic?.channel ?? null,
+    emissionKind: event.semantic?.emissionKind ?? null,
+    messagePreview: previewAcceptanceLogText(event.question?.message ?? event.message)
+  };
 }
 
 function isTerminalAssistantStatus(status: AssistantState["status"]) {
@@ -288,19 +318,16 @@ export function acceptIncomingRunEvent(
   };
 
   logRunAcceptance({
-    runId: event.runId,
-    rawEventId: event.id,
-    canonicalEventKey: canonicalKey,
+    ...summarizeAcceptanceEvent(event),
     decision,
-    sequence,
+    accepted,
+    identitySource: event.canonical?.identitySource,
     priorFrontierSequence: priorFrontier.lastSequence,
     resultingFrontierSequence: nextRunEventState.frontier.lastSequence,
-    identitySource: event.canonical?.identitySource,
-    semanticIdentity: event.semantic?.identity,
-    messageId: event.semantic?.messageId,
-    partId: event.semantic?.partId,
-    channel: event.semantic?.channel,
-    emissionKind: event.semantic?.emissionKind
+    priorAcceptedEventCount: priorFrontier.acceptedEventCount,
+    nextAcceptedEventCount: nextRunEventState.frontier.acceptedEventCount,
+    nextEventCount: effectiveNextEvents.length,
+    replacedSameSequenceReplay: shouldReplaceSameSequenceReplay
   });
 
   return {

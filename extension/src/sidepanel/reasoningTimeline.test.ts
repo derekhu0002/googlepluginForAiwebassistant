@@ -632,6 +632,60 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.filter((part) => part.kind === "text").map((part) => part.text)).toEqual(["第一段结论，正在补充完整说明。"]);
   });
 
+  it("splits a divergent terminal result into a new assistant message instead of overwriting the streamed text", () => {
+    const streamedText = [
+      "我需要更多信息来执行风险评估。",
+      "",
+      "1. 发生了什么？涉及哪些系统、用户或资产？",
+      "2. 已发现的证据有哪些？"
+    ].join("\n");
+    const finalOutput = "请提供更多细节，以便我为您提供准确的风险总结和建议。";
+
+    const model = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-projection-stream-preferred",
+        prompt: "继续分析",
+        events: [
+          createEvent(1, {
+            runId: "run-projection-stream-preferred",
+            type: "thinking",
+            message: streamedText,
+            semantic: {
+              channel: "assistant_text",
+              emissionKind: "snapshot",
+              identity: "assistant_text:msg-stream-preferred:part-1",
+              itemKind: "text",
+              messageId: "msg-stream-preferred",
+              partId: "part-1"
+            },
+            data: { field: "text", message_id: "msg-stream-preferred" }
+          }),
+          createEvent(2, {
+            runId: "run-projection-stream-preferred",
+            type: "result",
+            message: finalOutput,
+            data: { message_id: "msg-stream-preferred" }
+          })
+        ],
+        status: "done",
+        runStatus: "done",
+        streamStatus: "done",
+        finalOutput,
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    const textParts = model.liveParts.filter((part) => part.kind === "text").map((part) => part.text);
+
+    expect(textParts).toHaveLength(2);
+    expect(textParts[0]).toContain("我需要更多信息来执行风险评估");
+    expect(textParts[0]).toContain("1. 发生了什么？涉及哪些系统、用户或资产？");
+    expect(textParts[0]).toContain("2. 已发现的证据有哪些？");
+    expect(textParts[1]).toBe(finalOutput);
+  });
+
   it("keeps one merged final answer when assistant message ids churn mid-run", () => {
     const model = buildStableTranscriptProjection({
       historicalSegments: [],

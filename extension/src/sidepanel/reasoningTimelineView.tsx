@@ -14,10 +14,26 @@ import {
   type TranscriptTailPatchModel
 } from "./reasoningTimeline";
 import { deriveTranscriptTraceCorrelation } from "../shared/protocol";
+import { appendSidepanelDebugLog } from "./debugLogStore";
 import { useScrollFollowController } from "./useScrollFollowController";
 
 const MAX_MARKDOWN_FPS = 30;
 const MIN_MARKDOWN_FRAME_MS = 1000 / MAX_MARKDOWN_FPS;
+const RENDER_LOG_PREVIEW_LIMIT = 160;
+
+function logTranscriptRender(entry: Record<string, unknown>) {
+  const stored = appendSidepanelDebugLog("transcript-render", entry);
+  console.info("[transcript-render]", stored.entry);
+}
+
+function previewRenderLogText(value: string | null | undefined, limit = RENDER_LOG_PREVIEW_LIMIT) {
+  const normalized = value?.replace(/\s+/gu, " ").trim() ?? "";
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > limit ? `${normalized.slice(0, limit)}...` : normalized;
+}
 
 function normalizeFeedbackFailureMessage(message: string) {
   return message.trim() || "反馈提交失败";
@@ -277,6 +293,57 @@ function applyFeedbackStateToMessages(messages: TranscriptMessageModel[], feedba
   });
 }
 
+function mergeAdjacentAssistantTextParts(parts: TranscriptPartModel[]) {
+  if (parts.length <= 1) {
+    return parts;
+  }
+
+  const merged: TranscriptPartModel[] = [];
+
+  for (const part of parts) {
+    const previous = merged[merged.length - 1];
+    if (
+      previous
+      && previous.role === "assistant"
+      && part.role === "assistant"
+      && previous.kind === "text"
+      && part.kind === "text"
+      && previous.runId === part.runId
+    ) {
+      const previousText = previous.text.trim();
+      const nextText = part.text.trim();
+      const combinedText = nextText && previousText
+        ? previousText === nextText
+          ? previousText
+          : `${previousText}\n\n${nextText}`
+        : previous.text || part.text;
+
+      merged[merged.length - 1] = {
+        ...previous,
+        ...part,
+        id: previous.id,
+        text: combinedText,
+        createdAt: previous.createdAt,
+        anchorId: previous.anchorId,
+        groupAnchorId: previous.groupAnchorId,
+        originEventTypes: [...new Set([...previous.originEventTypes, ...part.originEventTypes])],
+        badges: previous.badges.length ? previous.badges : part.badges,
+        sourceQuestionPrompt: previous.sourceQuestionPrompt ?? part.sourceQuestionPrompt,
+        supportsCopy: previous.supportsCopy || part.supportsCopy,
+        supportsRetry: previous.supportsRetry || part.supportsRetry,
+        supportsFeedback: previous.supportsFeedback || part.supportsFeedback,
+        feedbackState: part.feedbackState ?? previous.feedbackState,
+        actionAnchorId: part.actionAnchorId ?? previous.actionAnchorId
+      };
+      continue;
+    }
+
+    merged.push(part);
+  }
+
+  return merged;
+}
+
 function HistoricalMessageBlock({
   message,
   onCopy,
@@ -292,9 +359,11 @@ function HistoricalMessageBlock({
   onQuestionSubmit?: (answer: { answer: string; choiceId?: string }) => void;
   questionSubmitDisabled?: boolean;
 }) {
+  const renderableParts = useMemo(() => mergeAdjacentAssistantTextParts(message.parts), [message.parts]);
+
   return (
     <article className={`transcript-message transcript-message-${message.role}`} data-message-id={message.id} data-message-role={message.role}>
-      {message.parts.map((part) => (
+      {renderableParts.map((part) => (
         <MemoTranscriptPartBlock
           key={part.id}
           part={part}
@@ -662,7 +731,7 @@ function ConversationViewport({
   questionSubmitDisabled?: boolean;
 }) {
   const orderedActiveParts = useMemo(
-    () => activeParts.filter((part) => part.kind !== "summary"),
+    () => mergeAdjacentAssistantTextParts(activeParts).filter((part) => part.kind !== "summary"),
     [activeParts]
   );
   const finalAnswerIndex = finalAnswerPart
@@ -882,7 +951,7 @@ export function ReasoningTimeline({
     ?? fallbackParts.map((part) => `${part.id}:${part.text.length}:${part.updatedAt}`).join("|");
 
   useEffect(() => {
-    onRenderTrace?.(buildRenderTrace({
+    const renderTraces = buildRenderTrace({
       runId,
       transcriptReadModel: transcriptReadModel ?? null,
       fallbackParts,
@@ -890,7 +959,23 @@ export function ReasoningTimeline({
       tailRenderRevision,
       projectedTranscriptPresent: Boolean(projectedTranscript),
       presentationState
-    }));
+    });
+    const mismatchTrace = renderTraces.find((trace) => trace.step === "projection_vs_render");
+    logTranscriptRender({
+      phase: "render_trace",
+      runId,
+      projectedTranscriptPresent: Boolean(projectedTranscript),
+      traceCount: renderTraces.length,
+      activeMessageId: transcriptReadModel?.activeAssistantMessageId ?? null,
+      sealedMessageCount: transcriptReadModel?.sealedMessages.length ?? 0,
+      visiblePartCount: transcriptReadModel?.parts.length ?? fallbackParts.length,
+      finalAnswerPartId: transcriptReadModel?.finalAnswerPart?.id ?? null,
+      finalAnswerPreview: previewRenderLogText(transcriptReadModel?.finalAnswerPart?.text ?? fallbackParts.at(-1)?.text),
+      tailPatchRevision: transcriptReadModel?.tailPatch?.revision ?? null,
+      tailDeltaPreview: previewRenderLogText(transcriptReadModel?.tailPatch?.deltaText),
+      missingRenderedIds: mismatchTrace?.details?.missingRenderedIds ?? []
+    });
+    onRenderTrace?.(renderTraces);
   }, [contentRevision, fallbackParts, onRenderTrace, presentationState, projectedTranscript, runId, tailRenderRevision, transcriptReadModel]);
 
   const scrollFollow = useScrollFollowController({

@@ -62,7 +62,7 @@ describe("indexedDB history store", () => {
   });
 
   /** @ArchitectureID: ELM-FUNC-EXT-CALL-ADAPTER-API */
-  it("suppresses duplicate event persistence by canonical identity while keeping deterministic order", async () => {
+  it("keeps sequence-advancing delta events while suppressing same-sequence replays", async () => {
     const run: RunRecord = {
       runId: "run-dup",
       selectedAgent: DEFAULT_MAIN_AGENT,
@@ -112,9 +112,27 @@ describe("indexedDB history store", () => {
         partId: "part-1"
       }
     });
+    await store.saveEvent({
+      id: "raw-2-replay",
+      runId: "run-dup",
+      type: "thinking",
+      createdAt: "2026-04-01T00:00:03.000Z",
+      sequence: 2,
+      message: "Hello world replay",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    });
 
     const detail = await store.getRunDetail("run-dup");
-    expect(detail?.events).toHaveLength(1);
-    expect(detail?.events[0]?.message).toBe("Hello world");
+    expect(detail?.events).toHaveLength(2);
+    expect(detail?.events.map((event) => event.sequence)).toEqual([1, 2]);
+    expect(detail?.events[0]?.message).toBe("Hello");
+    expect(detail?.events[1]?.message).toBe("Hello world replay");
   });
 });

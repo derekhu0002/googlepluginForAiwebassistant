@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createRunEventStream, submitQuestionAnswer } from "../shared/api";
 import { toDisplayMessage } from "../shared/errors";
 import { initialAssistantState } from "../shared/state";
-import { appendTranscriptTraceRecord, DEFAULT_MAIN_AGENT, MAIN_AGENTS, type NormalizedRunEvent, type TranscriptTraceRecord, createEmptyRunEventState, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
+import { appendTranscriptTraceRecord, DEFAULT_MAIN_AGENT, MAIN_AGENTS, withCanonicalEventMetadata, type NormalizedRunEvent, type TranscriptTraceRecord, createEmptyRunEventState, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage, SyncableAssistantRunState } from "../shared/types";
 import { getActiveQuestionEvent, hasPendingQuestion } from "./questionState";
 import { buildRunDiagnosticsSnapshot, downloadRunDiagnosticsLog, type RunDiagnosticsSource } from "./diagnostics";
@@ -27,6 +27,7 @@ import {
   truncateText
 } from "./model";
 import { useRunHistory } from "./useRunHistory";
+import { appendSidepanelDebugLog, clearSidepanelDebugLogs } from "./debugLogStore";
 
 export type DrawerKey = "sessions" | "context" | "rules" | "run";
 
@@ -45,7 +46,36 @@ export interface MainAgentOption {
 }
 
 function logSidepanelRunEvent(entry: Record<string, unknown>) {
-  console.info("[sidepanel-run-event]", entry);
+  const stored = appendSidepanelDebugLog("sidepanel-run-event", entry);
+  console.info("[sidepanel-run-event]", stored.entry);
+}
+
+const STREAM_LOG_PREVIEW_LIMIT = 160;
+
+function previewSidepanelLogText(value: string | null | undefined, limit = STREAM_LOG_PREVIEW_LIMIT) {
+  const normalized = value?.replace(/\s+/gu, " ").trim() ?? "";
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > limit ? `${normalized.slice(0, limit)}...` : normalized;
+}
+
+function summarizeSidepanelEvent(event: NormalizedRunEvent) {
+  return {
+    runId: event.runId,
+    rawEventId: event.id,
+    canonicalEventKey: event.canonical?.key ?? null,
+    type: event.type,
+    sequence: Number.isFinite(event.sequence) ? event.sequence : null,
+    createdAt: event.createdAt,
+    semanticIdentity: event.semantic?.identity ?? null,
+    messageId: event.semantic?.messageId ?? null,
+    partId: event.semantic?.partId ?? null,
+    channel: event.semantic?.channel ?? null,
+    emissionKind: event.semantic?.emissionKind ?? null,
+    messagePreview: previewSidepanelLogText(event.question?.message ?? event.message)
+  };
 }
 
 function getTransportTrace(entry: Record<string, unknown>) {
@@ -581,6 +611,7 @@ export function useSidepanelController() {
     setStreamError("");
     eventSourceRef.current?.close();
     clearSelectedRun().catch(() => undefined);
+    clearSidepanelDebugLogs();
 
     const nextPrompt = retryPayload?.prompt ?? prompt;
     if (!nextPrompt.trim()) {
@@ -645,8 +676,13 @@ export function useSidepanelController() {
         }));
       },
       onEvent: async (event) => {
+        const normalizedEvent = withCanonicalEventMetadata(event);
+        logSidepanelRunEvent({
+          phase: "stream_event_received",
+          ...summarizeSidepanelEvent(normalizedEvent)
+        });
         setState((current) => {
-          const acceptance = acceptIncomingRunEvent(current.runEvents, event, current.runEventState);
+          const acceptance = acceptIncomingRunEvent(current.runEvents, normalizedEvent, current.runEventState);
           const nextSyncMetadata = createRunStateSyncMetadata("sidepanel", acceptance.nextRunEventState);
           const enrichedDiagnostic = {
             ...acceptance.diagnostic,
@@ -670,13 +706,7 @@ export function useSidepanelController() {
           };
           logSidepanelRunEvent({
             phase: "accept_event",
-            runId: event.runId,
-            rawEventId: event.id,
-            canonicalEventKey: acceptance.event.canonical?.key,
-            sequence: event.sequence,
-            semanticIdentity: event.semantic?.identity,
-            messageId: event.semantic?.messageId,
-            partId: event.semantic?.partId,
+            ...summarizeSidepanelEvent(acceptance.event),
             decision: acceptance.decision,
             priorFrontierSequence: current.runEventState.frontier.lastSequence,
             resultingFrontierSequence: nextRunEventState.frontier.lastSequence,
@@ -965,6 +995,19 @@ export function useSidepanelController() {
   }
 
   function handleRenderTrace(traces: TranscriptTraceRecord[]) {
+    const activeMessageTrace = traces.find((trace) => trace.step === "render_path");
+    const tailTrace = traces.find((trace) => trace.step === "tail_revision");
+    const projectionMismatch = traces.find((trace) => trace.step === "projection_vs_render");
+    logSidepanelRunEvent({
+      phase: "render_trace_updated",
+      runId: traces[0]?.correlation.runId ?? null,
+      traceCount: traces.length,
+      steps: traces.map((trace) => `${trace.stage}:${trace.step}:${trace.outcome}`),
+      activeMessageId: activeMessageTrace?.details?.activeMessageId ?? null,
+      tailPatchRevision: tailTrace?.details?.tailPatchRevision ?? null,
+      tailRenderRevision: tailTrace?.details?.tailRenderRevision ?? null,
+      missingRenderedIds: projectionMismatch?.details?.missingRenderedIds ?? []
+    });
     setState((current) => {
       if (areTranscriptTraceListsEqual(current.renderTrace, traces)) {
         return current;

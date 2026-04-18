@@ -18,6 +18,7 @@ export type NormalizedEventItemKind = typeof NORMALIZED_EVENT_ITEM_KINDS[number]
 
 export type CanonicalEventIdentitySource =
   | "semantic_identity"
+  | "semantic_identity_sequence"
   | "semantic_message_part_channel_emission"
   | "run_sequence_type"
   | "raw_id";
@@ -345,23 +346,37 @@ function toCanonicalPart(value?: string | null) {
   return normalized ? normalized : undefined;
 }
 
+function buildSequenceScopedCanonicalKey(baseKey: string, sequence: number) {
+  return `${baseKey}:seq:${sequence}`;
+}
+
 export function deriveCanonicalEventMetadata(event: NormalizedRunEvent): RunEventCanonicalMetadata {
   const semanticIdentity = toCanonicalPart(event.semantic?.identity);
   const semanticMessageId = toCanonicalPart(event.semantic?.messageId);
   const semanticPartId = toCanonicalPart(event.semantic?.partId);
   const semanticChannel = event.semantic?.channel;
   const semanticEmissionKind = event.semantic?.emissionKind;
+  const sequence = Number.isFinite(event.sequence) ? event.sequence : null;
 
   let identitySource: CanonicalEventIdentitySource = "raw_id";
   let key = event.id;
 
   if (semanticIdentity) {
-    identitySource = "semantic_identity";
-    key = semanticIdentity;
+    if (semanticEmissionKind === "delta" && sequence !== null) {
+      identitySource = "semantic_identity_sequence";
+      key = buildSequenceScopedCanonicalKey(semanticIdentity, sequence);
+    } else {
+      identitySource = "semantic_identity";
+      key = semanticIdentity;
+    }
   } else if (semanticMessageId && semanticPartId && semanticChannel && semanticEmissionKind) {
     identitySource = "semantic_message_part_channel_emission";
     key = `${semanticMessageId}:${semanticPartId}:${semanticChannel}:${semanticEmissionKind}`;
-  } else if (Number.isFinite(event.sequence)) {
+    if (semanticEmissionKind === "delta" && sequence !== null) {
+      identitySource = "semantic_identity_sequence";
+      key = buildSequenceScopedCanonicalKey(key, sequence);
+    }
+  } else if (sequence !== null) {
     identitySource = "run_sequence_type";
     key = `${event.runId}:${event.sequence}:${event.type}`;
   }

@@ -251,7 +251,7 @@ describe("streaming api client", () => {
       observability: expect.objectContaining({
         correlation: expect.objectContaining({
           runId: "run-observe",
-          canonicalEventKey: "assistant_text:msg-1:part-1",
+          canonicalEventKey: "assistant_text:msg-1:part-1:seq:1",
           messageId: "msg-1",
           partId: "part-1"
         }),
@@ -677,7 +677,7 @@ describe("streaming api client", () => {
     expect(onTransportLog).toHaveBeenCalledWith(expect.objectContaining({
       transition: "message",
       rawEventId: "event-telemetry",
-      canonicalEventKey: "assistant_text:msg-1:part-1",
+      canonicalEventKey: "assistant_text:msg-1:part-1:seq:1",
       semanticIdentity: "assistant_text:msg-1:part-1"
     }));
   });

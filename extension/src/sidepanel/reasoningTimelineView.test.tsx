@@ -1133,6 +1133,128 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(container.textContent).not.toContain("重复段落重复段落");
   });
 
+  it("renders one continuous assistant text block when message ids churn before completion", async () => {
+    const baseModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-render-churn",
+        prompt: "当前问题",
+        events: [
+          createEvent(1, {
+            runId: "run-render-churn",
+            type: "thinking",
+            message: "我先检查当前安全事件的上下文。",
+            data: { field: "text", message_id: "msg-1" }
+          }),
+          createEvent(2, {
+            runId: "run-render-churn",
+            type: "tool_call",
+            message: "读取上下文"
+          }),
+          createEvent(3, {
+            runId: "run-render-churn",
+            type: "thinking",
+            message: "现在我需要确认现有证据是否完整。",
+            data: { field: "text", message_id: "msg-2" }
+          }),
+          createEvent(4, {
+            runId: "run-render-churn",
+            type: "tool_call",
+            message: "检查测试输入"
+          }),
+          createEvent(5, {
+            runId: "run-render-churn",
+            type: "result",
+            message: "当前安全事件风险总结：建议立即隔离受影响资产并补充日志保全。",
+            data: { message_id: "msg-3" }
+          })
+        ],
+        status: "done",
+        runStatus: "done",
+        streamStatus: "done",
+        finalOutput: "当前安全事件风险总结：建议立即隔离受影响资产并补充日志保全。",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    const userMessage = baseModel.messages.find((message) => message.role === "user");
+    const assistantMessage = baseModel.messages.find((message) => message.role === "assistant");
+    expect(userMessage).toBeTruthy();
+    expect(assistantMessage).toBeTruthy();
+
+    const assistantParts = [
+      {
+        ...assistantMessage!.parts[0],
+        id: "assistant-part-1",
+        anchorId: "msg-1",
+        text: "我先检查当前安全事件的上下文。"
+      },
+      {
+        ...assistantMessage!.parts[0],
+        id: "assistant-part-2",
+        anchorId: "msg-2",
+        text: "现在我需要确认现有证据是否完整。",
+        createdAt: "2026-04-02T00:00:03.000Z",
+        updatedAt: "2026-04-02T00:00:03.000Z"
+      },
+      {
+        ...assistantMessage!.parts[0],
+        id: "assistant-part-3",
+        anchorId: "msg-3",
+        text: "当前安全事件风险总结：建议立即隔离受影响资产并补充日志保全。",
+        createdAt: "2026-04-02T00:00:04.000Z",
+        updatedAt: "2026-04-02T00:00:04.000Z"
+      }
+    ];
+
+    const transcriptReadModel = {
+      ...baseModel,
+      messages: [
+        userMessage!,
+        {
+          ...assistantMessage!,
+          parts: assistantParts,
+          updatedAt: "2026-04-02T00:00:04.000Z"
+        }
+      ],
+      sealedMessages: [
+        userMessage!,
+        {
+          ...assistantMessage!,
+          parts: assistantParts,
+          updatedAt: "2026-04-02T00:00:04.000Z"
+        }
+      ],
+      parts: [userMessage!.parts[0], ...assistantParts],
+      finalAnswerPart: null,
+      processParts: [],
+      questionPart: null,
+      errorPart: null,
+      tailPatch: null,
+      activeMessage: null,
+      activeAssistantMessageId: null
+    };
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={transcriptReadModel}
+          runId="run-render-churn"
+          prompt="当前问题"
+          events={[]}
+          runStatus="done"
+        />
+      );
+    });
+
+    const assistantTextParts = container.querySelectorAll(".transcript-part[data-part-kind='text']");
+    expect(assistantTextParts).toHaveLength(1);
+    expect(container.textContent).toContain("我先检查当前安全事件的上下文。");
+    expect(container.textContent).toContain("现在我需要确认现有证据是否完整。");
+    expect(container.textContent).toContain("当前安全事件风险总结：建议立即隔离受影响资产并补充日志保全。");
+  });
+
   it("keeps active assistant DOM boundary stable across tail-only updates", async () => {
     const raf = createRafController();
     vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => raf.request(callback)));

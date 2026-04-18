@@ -10,6 +10,7 @@ import {
   type RunRecord,
   type TranscriptTraceRecord
 } from "../shared/protocol";
+import { appendSidepanelDebugLog } from "./debugLogStore";
 import type { MessageFeedbackUiState } from "../shared/types";
 
 const DEFAULT_EVENT_TITLES: Record<NormalizedEventType, string> = {
@@ -72,6 +73,7 @@ const INLINE_ANSWER_START_PATTERNS = [
   /(?:^|\n)[#>*-]\s/u
 ];
 const GENERIC_STREAMING_COPY = "正在继续…";
+const PROJECTION_LOG_PREVIEW_LIMIT = 160;
 
 export type TimelineCardStatus = "active" | "complete" | "waiting" | "attention";
 export type ConversationTurnKind = "assistant" | "question" | "error";
@@ -421,6 +423,10 @@ function getEventToolMessageId(event: Pick<NormalizedRunEvent, "semantic" | "dat
 
 function createProvisionalAssistantMessageId(runId: string, assistantNodeIndex: number) {
   return `assistant-provisional:${runId}:${assistantNodeIndex}`;
+}
+
+function createTerminalAssistantResultMessageId(baseMessageId: string) {
+  return `${baseMessageId}:terminal-result`;
 }
 
 function getAssistantLogicalMessageId(
@@ -843,7 +849,7 @@ function resolveAssistantDisplayText(
   }
 
   if (!sanitizedAggregatedText) {
-    return status === "done" ? sanitizedFinalOutput : "";
+    return status === "done" ? (exactFinalOutput || sanitizedFinalOutput) : "";
   }
 
   if (status !== "done") {
@@ -858,7 +864,7 @@ function resolveAssistantDisplayText(
   }
 
   if (sanitizedFinalOutput.includes(sanitizedAggregatedText)) {
-    return sanitizedFinalOutput;
+    return exactFinalOutput || sanitizedFinalOutput;
   }
 
   return sanitizedAggregatedText;
@@ -1025,6 +1031,32 @@ function mergeAssistantResponseSnapshot(current: string, snapshot: string) {
   }
 
   return joinUniqueParagraphs([existingComparable, nextComparable]);
+}
+
+function shouldSplitDivergentTerminalResult(currentText: string, resultText: string) {
+  const sanitizedCurrent = sanitizeAssistantDisplayText(currentText);
+  const sanitizedResult = sanitizeAssistantDisplayText(resultText);
+  if (!sanitizedCurrent || !sanitizedResult) {
+    return false;
+  }
+
+  if (
+    sanitizedCurrent === sanitizedResult
+    || sanitizedCurrent.includes(sanitizedResult)
+    || sanitizedResult.includes(sanitizedCurrent)
+    || shouldTreatComparableTextsAsDuplicate(getComparableBlockKey(sanitizedCurrent), getComparableBlockKey(sanitizedResult))
+  ) {
+    return false;
+  }
+
+  const structuredCurrent = splitMarkdownBlocks(normalizeMarkdownStructure(sanitizedCurrent)).length > 1
+    || /^\s*(?:\d+\.\s|[-*]\s|#{1,6}\s)/mu.test(sanitizedCurrent);
+
+  if (!structuredCurrent) {
+    return false;
+  }
+
+  return sanitizedCurrent.length > sanitizedResult.length * 1.5;
 }
 
 function createTimelineEntry(event: NormalizedRunEvent): TimelineEventEntry {
@@ -2147,6 +2179,17 @@ function shouldOpenNextAssistantNode(state: LiveTranscriptProjectionState, event
     return false;
   }
 
+  const currentText = sanitizeAssistantDisplayText(state.assistantTextSoFar);
+  const incomingText = sanitizeAssistantDisplayText(event.message);
+
+  if (
+    event.type === "result"
+    && state.currentAssistantLogicalMessageId === stableMessageId
+    && shouldSplitDivergentTerminalResult(currentText, incomingText)
+  ) {
+    return true;
+  }
+
   if (state.currentAssistantLogicalMessageId === stableMessageId) {
     return false;
   }
@@ -2155,8 +2198,6 @@ function shouldOpenNextAssistantNode(state: LiveTranscriptProjectionState, event
     return false;
   }
 
-  const currentText = sanitizeAssistantDisplayText(state.assistantTextSoFar);
-  const incomingText = sanitizeAssistantDisplayText(event.message);
   if (!currentText || !incomingText) {
     return true;
   }
@@ -2468,15 +2509,51 @@ function processLiveProjectionEvent(
   feedbackByMessageId?: Record<string, MessageFeedbackUiState>,
   pendingQuestionId?: string | null
 ) {
+  const beforeSnapshot = {
+    logicalMessageId: state.currentAssistantLogicalMessageId,
+    groupAnchorId: state.currentAssistantGroupAnchorId,
+    outputItemId: state.currentOutputItemId,
+    assistantTextLength: state.assistantTextSoFar.length,
+    itemCount: state.items.length
+  };
+  const logProjectionEventApplied = (resolution: string, details?: Record<string, unknown>) => {
+    const outputItem = state.currentOutputItemId
+      ? state.items.find((item) => item.id === state.currentOutputItemId)
+      : undefined;
+    logProjection({
+      phase: "event_applied",
+      resolution,
+      ...summarizeProjectionEvent(event),
+      before: beforeSnapshot,
+      after: {
+        logicalMessageId: state.currentAssistantLogicalMessageId,
+        groupAnchorId: state.currentAssistantGroupAnchorId,
+        outputItemId: state.currentOutputItemId,
+        assistantTextLength: state.assistantTextSoFar.length,
+        itemCount: state.items.length
+      },
+      outputItem: summarizeProjectionItem(outputItem),
+      ...details
+    });
+  };
+
   if (isAssistantResponseDeltaEvent(event) || event.type === "result") {
-    if (shouldOpenNextAssistantNode(state, event)) {
+    const previousLogicalMessageId = state.currentAssistantLogicalMessageId;
+    const stableMessageId = getAssistantStableMessageId(event);
+    const openedNextAssistantNode = shouldOpenNextAssistantNode(state, event);
+    if (openedNextAssistantNode) {
       advanceAssistantGroupInState(state);
       state.assistantTextSoFar = "";
       state.assistantResponse = createEmptyAssistantResponseAggregation();
       state.latestResultText = "";
     }
 
-    const logicalMessageId = resolveAssistantEventMessageId(state, event);
+    const logicalMessageId = openedNextAssistantNode
+      && event.type === "result"
+      && stableMessageId
+      && previousLogicalMessageId === stableMessageId
+      ? createTerminalAssistantResultMessageId(stableMessageId)
+      : resolveAssistantEventMessageId(state, event);
     state.currentAssistantLogicalMessageId = logicalMessageId;
     state.currentAssistantGroupAnchorId = getAssistantGroupAnchorId(state.runId, logicalMessageId);
     const thinkingEmissionKind = getAssistantResponseThinkingEmissionKind(event);
@@ -2495,6 +2572,11 @@ function processLiveProjectionEvent(
       state.latestResultText = sanitizeAssistantDisplayText(event.message);
     }
     upsertAssistantOutputSegmentInState(state, event, state.assistantTextSoFar);
+    logProjectionEventApplied("assistant_output_upserted", {
+      openedNextAssistantNode,
+      latestResultTextPreview: previewProjectionLogText(state.latestResultText),
+      assistantTextPreview: previewProjectionLogText(state.assistantTextSoFar)
+    });
     return;
   }
 
@@ -2529,6 +2611,10 @@ function processLiveProjectionEvent(
     }
 
     advanceAssistantGroupInState(state);
+    logProjectionEventApplied("assistant_question_recorded", {
+      pendingQuestion: event.question?.questionId === pendingQuestionId,
+      answerCountForQuestion: answersByQuestionId.get(questionId)?.length ?? 0
+    });
     return;
   }
 
@@ -2551,6 +2637,9 @@ function processLiveProjectionEvent(
       supportsCopy: true,
       supportsRetry: true
     }));
+    logProjectionEventApplied("assistant_error_recorded", {
+      errorPreview: previewProjectionLogText(event.message)
+    });
     return;
   }
 
@@ -2591,6 +2680,9 @@ function processLiveProjectionEvent(
       supportsCopy: true,
       actionAnchorId: event.type === "tool_call" ? event.id : undefined
     }));
+    logProjectionEventApplied(event.type === "tool_call" ? "tool_call_recorded" : "thinking_recorded", {
+      reasoningOnlyTextPreview: previewProjectionLogText(state.reasoningOnlyText)
+    });
   }
 }
 
@@ -2654,7 +2746,48 @@ function buildTranscriptMessagesFromFragments(fragments: ChatStreamItemModel[]) 
 }
 
 function logProjection(entry: Record<string, unknown>) {
-  console.info("[transcript-projection]", entry);
+  const stored = appendSidepanelDebugLog("transcript-projection", entry);
+  console.info("[transcript-projection]", stored.entry);
+}
+
+function previewProjectionLogText(value: string | null | undefined, limit = PROJECTION_LOG_PREVIEW_LIMIT) {
+  const normalized = value?.replace(/\s+/gu, " ").trim() ?? "";
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > limit ? `${normalized.slice(0, limit)}...` : normalized;
+}
+
+function summarizeProjectionEvent(event: NormalizedRunEvent) {
+  return {
+    runId: event.runId,
+    rawEventId: event.id,
+    canonicalEventKey: event.canonical?.key ?? null,
+    type: event.type,
+    sequence: Number.isFinite(event.sequence) ? event.sequence : null,
+    semanticIdentity: event.semantic?.identity ?? null,
+    messageId: event.semantic?.messageId ?? null,
+    partId: event.semantic?.partId ?? null,
+    channel: event.semantic?.channel ?? null,
+    emissionKind: event.semantic?.emissionKind ?? null,
+    messagePreview: previewProjectionLogText(event.question?.message ?? event.message)
+  };
+}
+
+function summarizeProjectionItem(item: ChatStreamItemModel | undefined) {
+  if (!item) {
+    return null;
+  }
+
+  return {
+    id: item.id,
+    kind: item.kind,
+    anchorId: item.anchorId,
+    groupAnchorId: item.groupAnchorId,
+    primaryType: item.primaryType,
+    summaryPreview: previewProjectionLogText(item.summary)
+  };
 }
 
 function buildProjectionTraceRecord(
@@ -3133,7 +3266,9 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
     phase: "start",
     historicalEventCount: options.historicalSegments.reduce((total, segment) => total + segment.events.length, 0),
     liveEventCount: options.liveSegment?.events.length ?? 0,
-    reusedProjectionState: Boolean(options.previousModel?.liveProjectionState)
+    reusedProjectionState: Boolean(options.previousModel?.liveProjectionState),
+    liveRunId: options.liveSegment?.runId ?? null,
+    historicalRunIds: options.historicalSegments.map((segment) => segment.runId)
   });
   const historySignature = createHistorySegmentsSignature(options.historicalSegments);
   const canReuseHistory = Boolean(
@@ -3285,7 +3420,16 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
     messageCount: projectionWithAnomalies.messages.length,
     partCount: projectionWithAnomalies.parts.length,
     anomalyCount: projectionWithAnomalies.anomalies?.length ?? 0,
-    runId: options.liveSegment?.runId ?? options.historicalSegments.at(-1)?.runId ?? null
+    runId: options.liveSegment?.runId ?? options.historicalSegments.at(-1)?.runId ?? null,
+    sealedMessageCount: projectionWithAnomalies.sealedMessages.length,
+    activeMessageId: projectionWithAnomalies.activeAssistantMessageId,
+    finalAnswerPartId: projectionWithAnomalies.finalAnswerPart?.id ?? null,
+    finalAnswerPreview: previewProjectionLogText(projectionWithAnomalies.finalAnswerPart?.text),
+    questionPartId: projectionWithAnomalies.questionPart?.id ?? null,
+    errorPartId: projectionWithAnomalies.errorPart?.id ?? null,
+    tailPatchRevision: projectionWithAnomalies.tailPatch?.revision ?? null,
+    tailDeltaPreview: previewProjectionLogText(projectionWithAnomalies.tailPatch?.deltaText),
+    anomalyTypes: projectionWithAnomalies.anomalies?.map((anomaly) => anomaly.anomalyType) ?? []
   });
   return projectionWithAnomalies;
 }

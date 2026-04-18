@@ -33,7 +33,7 @@ describe("sidepanel canonical run-event acceptance", () => {
     expect(result.accepted).toBe(true);
     expect(result.decision).toBe("accepted");
     expect(result.nextEvents).toHaveLength(1);
-    expect(result.nextRunEventState.frontier.lastAcceptedCanonicalKey).toBe("assistant_text:msg-1:part-1");
+    expect(result.nextRunEventState.frontier.lastAcceptedCanonicalKey).toBe("assistant_text:msg-1:part-1:seq:1");
     expect(result.diagnostic.decision).toBe("accepted");
     expect(result.event.observability?.traces).toEqual(expect.arrayContaining([
       expect.objectContaining({ stage: "acceptance", step: "decision", outcome: "accepted" })
@@ -44,7 +44,7 @@ describe("sidepanel canonical run-event acceptance", () => {
   });
 
   // @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
-  it("rejects duplicate canonical identities even when raw ids differ", () => {
+  it("accepts later delta events for the same semantic part when sequence advances", () => {
     const initial = acceptIncomingRunEvent([], createEvent(1, {
       id: "raw-a",
       semantic: {
@@ -57,8 +57,42 @@ describe("sidepanel canonical run-event acceptance", () => {
       }
     }), createEmptyRunEventState());
 
-    const duplicate = acceptIncomingRunEvent(initial.nextEvents, createEvent(2, {
+    const advancedDelta = acceptIncomingRunEvent(initial.nextEvents, createEvent(2, {
       id: "raw-b",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    }), initial.nextRunEventState);
+
+    expect(advancedDelta.accepted).toBe(true);
+    expect(advancedDelta.decision).toBe("accepted");
+    expect(advancedDelta.nextEvents).toHaveLength(2);
+    expect(advancedDelta.nextEvents.map((event) => event.sequence)).toEqual([1, 2]);
+    expect(advancedDelta.diagnostic.canonicalEventKey).toBe("assistant_text:msg-1:part-1:seq:2");
+  });
+
+  it("rejects same-sequence delta replays even when raw ids differ", () => {
+    const initial = acceptIncomingRunEvent([], createEvent(1, {
+      id: "raw-a",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "delta",
+        identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    }), createEmptyRunEventState());
+
+    const duplicate = acceptIncomingRunEvent(initial.nextEvents, createEvent(1, {
+      id: "raw-b",
+      createdAt: "2026-04-02T00:00:09.000Z",
+      message: "event-1 replay",
       semantic: {
         channel: "assistant_text",
         emissionKind: "delta",
@@ -72,7 +106,7 @@ describe("sidepanel canonical run-event acceptance", () => {
     expect(duplicate.accepted).toBe(false);
     expect(duplicate.decision).toBe("duplicate");
     expect(duplicate.nextEvents).toHaveLength(1);
-    expect(duplicate.diagnostic.canonicalEventKey).toBe("assistant_text:msg-1:part-1");
+    expect(duplicate.diagnostic.canonicalEventKey).toBe("assistant_text:msg-1:part-1:seq:1");
   });
 
   // @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
@@ -136,6 +170,8 @@ describe("sidepanel canonical run-event acceptance", () => {
     expect(duplicate.accepted).toBe(true);
     const replay = acceptIncomingRunEvent(duplicate.nextEvents, createEvent(3, {
       id: "raw-duplicate-replay",
+      sequence: 2,
+      createdAt: "2026-04-02T00:00:09.000Z",
       semantic: {
         channel: "assistant_text",
         emissionKind: "delta",

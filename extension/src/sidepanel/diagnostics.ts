@@ -1,5 +1,6 @@
 import type { AnswerRecord, NormalizedRunEvent, RunRecord, TranscriptTraceRecord } from "../shared/protocol";
 import type { AssistantState } from "../shared/types";
+import { getSidepanelDebugLogs, type SidepanelDebugLogEntry } from "./debugLogStore";
 import { hasTerminalRunEvidence, truncateText } from "./model";
 import { buildStableTranscriptProjection, resolveCockpitStatusModel, resolveTimelinePresentationState, type TranscriptPartModel, type TranscriptReadModel } from "./reasoningTimeline";
 
@@ -75,6 +76,7 @@ export interface RunDiagnosticsSnapshot {
       contentPreview: string;
     }>;
   };
+  debugLogs: SidepanelDebugLogEntry[];
   answers: AnswerRecord[];
   events: Array<{
     id: string;
@@ -303,6 +305,7 @@ export function buildRunDiagnosticsSnapshot(options: {
     ...(options.transcriptReadModel?.projectionTraces ?? []),
     ...(options.renderTrace ?? [])
   ];
+  const debugLogs = getSidepanelDebugLogs(options.source.run.runId);
 
   return {
     exportedAt,
@@ -365,6 +368,7 @@ export function buildRunDiagnosticsSnapshot(options: {
       withTools: withToolsSummary
     },
     observability: summarizeObservability(stageSequence),
+    debugLogs,
     answers: options.source.answers,
     events: options.source.events.map((event) => ({
       id: event.id,
@@ -413,6 +417,9 @@ export function formatRunDiagnosticsLog(snapshot: RunDiagnosticsSnapshot) {
     "",
     "=== OBSERVABILITY ===",
     JSON.stringify(snapshot.observability, null, 2),
+    "",
+    "=== DEBUG_LOGS ===",
+    JSON.stringify(snapshot.debugLogs, null, 2),
     "",
     "=== EVENTS ===",
     JSON.stringify(snapshot.events, null, 2),
