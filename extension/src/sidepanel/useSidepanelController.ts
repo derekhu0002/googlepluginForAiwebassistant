@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createRawRunEventStream, submitQuestionAnswer } from "../shared/api";
 import { toDisplayMessage } from "../shared/errors";
 import { initialAssistantState } from "../shared/state";
-import { appendTranscriptTraceRecord, DEFAULT_MAIN_AGENT, MAIN_AGENTS, withCanonicalEventMetadata, type NormalizedRunEvent, type TranscriptTraceRecord, createEmptyRunEventState, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
+import { appendTranscriptTraceRecord, DEFAULT_MAIN_AGENT, MAIN_AGENT_CONFIGS, withCanonicalEventMetadata, type NormalizedRunEvent, type TranscriptTraceRecord, createEmptyRunEventState, type MainAgent, type RunHistoryDetail, type RunRecord } from "../shared/protocol";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage, SyncableAssistantRunState } from "../shared/types";
 import { getActiveQuestionEvent, hasPendingQuestion } from "./questionState";
 import { buildRunDiagnosticsSnapshot, downloadRunDiagnosticsLog, type RunDiagnosticsSource } from "./diagnostics";
@@ -566,10 +566,10 @@ export function useSidepanelController() {
   );
   const selectedThreadRun = selectedSessionItem?.latestRun ?? selectedHistoryFallbackDetail?.run ?? state.currentRun;
   const selectedThreadAgent = selectedThreadRun?.selectedAgent ?? state.currentRun?.selectedAgent ?? state.mainAgentPreference;
-  const mainAgentOptions = useMemo<MainAgentOption[]>(() => MAIN_AGENTS.map((agent) => ({
-    value: agent,
-    label: agent,
-    description: agent === DEFAULT_MAIN_AGENT ? "默认主 AGENT" : "可切换的备用主 AGENT"
+  const mainAgentOptions = useMemo<MainAgentOption[]>(() => MAIN_AGENT_CONFIGS.map((agent) => ({
+    value: agent.id,
+    label: agent.label,
+    description: agent.description || (agent.id === DEFAULT_MAIN_AGENT ? "默认主 AGENT" : "可切换的备用主 AGENT")
   })), []);
   const nextRunAgentDescription = state.currentRun?.selectedAgent && state.currentRun.selectedAgent !== state.mainAgentPreference
     ? `当前 run 继续使用 ${state.currentRun.selectedAgent}；切换只影响后续新 run。`

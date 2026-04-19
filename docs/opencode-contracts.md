@@ -32,7 +32,7 @@ The extension sends `RunStartRequest` (`extension/src/shared/protocol.ts`, `pyth
 ```json
 {
   "prompt": "...",
-  "selectedAgent": "TARA_analyst | ThreatIntelliganceCommander",
+  "selectedAgent": "config/main-agents.json 中声明的任一 main agent",
   "capture": { "...": "..." },
   "sessionId": "optional-existing-session",
   "context": {
@@ -243,9 +243,9 @@ Implemented in:
 
 Behavior:
 
-1. The adapter only accepts `TARA_analyst` and `ThreatIntelliganceCommander` from the plugin.
+1. The adapter only accepts main agents declared in `config/main-agents.json`.
 2. Before any session bootstrap, it calls remote `/agent`.
-3. It maps the plugin-selected main agent to an allowed remote alias set (`REMOTE_AGENT_WHITELIST`).
+3. It maps the plugin-selected main agent to the configured remote alias set from `config/main-agents.json`.
 4. It requires exactly one matching remote canonical agent.
 5. During streaming/result fetch, if OpenCode explicitly reports a different agent in event/message payloads, the adapter converts that into a runtime error.
 6. If upstream omits agent evidence entirely, the adapter does **not** fail just for that omission.

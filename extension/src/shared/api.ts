@@ -6,6 +6,7 @@ import {
   MAIN_AGENTS,
   appendTranscriptTrace,
   deriveTranscriptTraceCorrelation,
+  isMainAgent,
   type MainAgent,
   type MessageFeedbackRequest,
   type NormalizedRunEvent,
@@ -25,12 +26,16 @@ const failureSchema = z.object({
   })
 });
 
+const mainAgentSchema = z.string().refine((value): value is MainAgent => isMainAgent(value), {
+  message: "Unknown main agent"
+});
+
 const startRunSchema = z.union([
   z.object({
       ok: z.literal(true),
       data: z.object({
         runId: z.string().min(1),
-        selectedAgent: z.enum(MAIN_AGENTS),
+        selectedAgent: mainAgentSchema,
         sessionId: z.string().min(1).optional()
       })
     }),

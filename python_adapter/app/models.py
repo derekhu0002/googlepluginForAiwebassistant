@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-MainAgent = Literal["TARA_analyst", "ThreatIntelliganceCommander"]
+MainAgent = str
 
 
 NormalizedEventType = Literal["thinking", "tool_call", "question", "result", "error"]

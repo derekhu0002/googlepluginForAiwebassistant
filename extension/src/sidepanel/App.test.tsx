@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_MAIN_AGENT } from "../shared/protocol";
+import { DEFAULT_MAIN_AGENT, MAIN_AGENTS } from "../shared/protocol";
 import { initialAssistantState } from "../shared/state";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
 import type { NormalizedRunEvent, RunHistoryDetail, RunRecord } from "../shared/protocol";
@@ -94,7 +94,7 @@ const { App, mergeStateUpdate } = await import("./App");
 interface ChromeStubOptions {
   contexts: ActiveTabContext[];
   permissionsRequest?: ReturnType<typeof vi.fn>;
-  startRunResponse?: { ok: boolean; data?: { runId: string; sessionId?: string; selectedAgent?: "TARA_analyst" | "ThreatIntelliganceCommander"; currentRun: AssistantState["currentRun"] }; error?: { message: string } };
+  startRunResponse?: { ok: boolean; data?: { runId: string; sessionId?: string; selectedAgent?: string; currentRun: AssistantState["currentRun"] }; error?: { message: string } };
   rules?: PageRule[];
   getStateResponse?: AssistantState;
 }
@@ -1767,9 +1767,10 @@ describe("side panel host permission request flow", () => {
     expect(menu).toBeTruthy();
     expect(menu?.textContent).toContain("TARA_analyst");
     expect(menu?.textContent).toContain("ThreatIntelliganceCommander");
+    expect(menu?.textContent).toContain("Xagent");
 
     const options = Array.from(menu?.querySelectorAll("button") ?? []);
-    expect(options).toHaveLength(2);
+    expect(options).toHaveLength(MAIN_AGENTS.length);
 
     await act(async () => {
       options[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

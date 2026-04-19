@@ -1,0 +1,38 @@
+{
+  "defaultMainAgent": "TARA_analyst",
+  "mainAgents": [
+    {
+      "id": "TARA_analyst",
+      "label": "TARA_analyst",
+      "description": "默认主 AGENT",
+      "remoteAliases": [
+        "TARA_analyst",
+        "TARA-analyst",
+        "tara_analyst",
+        "tara-analyst"
+      ]
+    },
+    {
+      "id": "ThreatIntelliganceCommander",
+      "label": "ThreatIntelliganceCommander",
+      "description": "可切换的备用主 AGENT",
+      "remoteAliases": [
+        "ThreatIntelliganceCommander",
+        "threatintelligancecommander",
+        "threat_intelligance_commander",
+        "threat-intelligance-commander"
+      ]
+    },
+    {
+      "id": "Xagent",
+      "label": "Xagent",
+      "description": "可切换的备用主 AGENT",
+      "remoteAliases": [
+        "Xagent",
+        "xagent",
+        "x_agent",
+        "x-agent"
+      ]
+    }
+  ]
+}

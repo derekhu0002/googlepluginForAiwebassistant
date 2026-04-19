@@ -11,6 +11,7 @@ from uuid import uuid4
 import httpx
 
 from .config import Settings
+from .main_agents import ALLOWED_MAIN_AGENTS, DEFAULT_MAIN_AGENT, REMOTE_AGENT_WHITELIST
 from .models import (
     MainAgent,
     NormalizedRunEvent,
@@ -25,12 +26,6 @@ from .models import (
 
 
 ClientFactory = Callable[[float | None], httpx.AsyncClient]
-DEFAULT_MAIN_AGENT: MainAgent = "TARA_analyst"
-ALLOWED_MAIN_AGENTS = frozenset({"TARA_analyst", "ThreatIntelliganceCommander"})
-REMOTE_AGENT_WHITELIST: dict[MainAgent, frozenset[str]] = {
-    "TARA_analyst": frozenset({"tara_analyst", "tara-analyst"}),
-    "ThreatIntelliganceCommander": frozenset({"threatintelligancecommander", "threat_intelligance_commander", "threat-intelligance-commander"}),
-}
 
 LOG_FILE_PATH = Path(__file__).with_name("opencode_adapter.log")
 _LOGGER = logging.getLogger("opencode_adapter")

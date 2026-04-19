@@ -1,12 +1,22 @@
 export const NORMALIZED_EVENT_TYPES = ["thinking", "tool_call", "question", "result", "error"] as const;
 export const RAW_RUN_EVENT_SOURCES = ["opencode", "adapter"] as const;
 
+import {
+  DEFAULT_MAIN_AGENT as DEFAULT_MAIN_AGENT_VALUE,
+  MAIN_AGENT_CONFIGS as MAIN_AGENT_CONFIGS_VALUE,
+  MAIN_AGENTS as MAIN_AGENTS_VALUE,
+  getMainAgentConfig,
+  isMainAgent,
+  type MainAgent
+} from "./mainAgents";
+
 /** @ArchitectureID: ELM-APP-EXT-SHARED-API-CONTRACT */
-export const MAIN_AGENTS = ["TARA_analyst", "ThreatIntelliganceCommander"] as const;
+export const MAIN_AGENT_CONFIGS = MAIN_AGENT_CONFIGS_VALUE;
+export const MAIN_AGENTS = MAIN_AGENTS_VALUE;
+export { getMainAgentConfig, isMainAgent };
+export type { MainAgent };
 
-export type MainAgent = typeof MAIN_AGENTS[number];
-
-export const DEFAULT_MAIN_AGENT: MainAgent = "TARA_analyst";
+export const DEFAULT_MAIN_AGENT: MainAgent = DEFAULT_MAIN_AGENT_VALUE;
 export type RawRunEventSource = typeof RAW_RUN_EVENT_SOURCES[number];
 
 export type NormalizedEventType = typeof NORMALIZED_EVENT_TYPES[number];
