@@ -52,6 +52,9 @@
   padding: 0;
   overflow: hidden;
   max-height: min(44dvh, 420px);
+  background: var(--cockpit-surface);
+  border: 1px solid var(--cockpit-border);
+  box-shadow: 0 18px 40px rgba(23, 23, 23, 0.08);
 }
 
 .bottom-drawer-header {
@@ -62,6 +65,7 @@
   min-height: 0;
   overflow: auto;
   padding: 0 16px 16px;
+  background: transparent;
 }
 
 .bottom-drawer-placeholder {
@@ -96,7 +100,8 @@
   padding: 10px 12px;
   border: 1px solid var(--cockpit-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--cockpit-surface-2);
+  box-shadow: 0 10px 24px rgba(23, 23, 23, 0.05);
 }
 
 .status-rail {
@@ -129,7 +134,8 @@
   padding: 8px 10px;
   border: 1px solid var(--cockpit-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--cockpit-surface-2);
+  box-shadow: 0 10px 24px rgba(23, 23, 23, 0.05);
 }
 
 .reference-rail-list span {
