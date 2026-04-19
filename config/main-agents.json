@@ -24,14 +24,14 @@
       ]
     },
     {
-      "id": "Xagent",
-      "label": "Xagent",
+      "id": "ThreatIntelAnalyst_test",
+      "label": "ThreatIntelAnalyst_test",
       "description": "可切换的备用主 AGENT",
       "remoteAliases": [
-        "Xagent",
-        "xagent",
-        "x_agent",
-        "x-agent"
+        "ThreatIntelAnalyst_test",
+        "threatintelanalyst_test",
+        "threat_intel_analyst_test",
+        "threat-intel-analyst-test"
       ]
     }
   ]
