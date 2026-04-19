@@ -1250,8 +1250,18 @@ export function collectRunAssistantResponseText(events: NormalizedRunEvent[], fi
   return resolveAssistantDisplayText(collectAssistantResponseAggregation(events, finalOutput).text, finalOutput, finalOutput?.trim() ? "done" : undefined);
 }
 
-export function hasTerminalResultEvidence(options: { events: NormalizedRunEvent[]; finalOutput?: string | null; }) {
-  return options.events.some((event) => event.type === "result") || Boolean(trimTerminalText(options.finalOutput));
+export function hasTerminalResultEvidence(options: {
+  events: NormalizedRunEvent[];
+  finalOutput?: string | null;
+  runStatus?: TimelineRunStatus;
+  streamStatus?: TimelineStreamStatus;
+}) {
+  if (options.events.some((event) => event.type === "result")) {
+    return true;
+  }
+
+  const declaredTerminalStatus = options.runStatus === "done" || options.streamStatus === "done";
+  return declaredTerminalStatus && Boolean(trimTerminalText(options.finalOutput));
 }
 
 export function hasTerminalErrorEvidence(options: { events: NormalizedRunEvent[]; errorMessage?: string | null; }) {
@@ -1863,7 +1873,21 @@ function shouldCoalesceAssistantTranscriptMessages(current: TranscriptMessageMod
     return false;
   }
 
-  return shouldTreatComparableTextsAsDuplicate(currentText, incomingText);
+  return currentText === incomingText;
+}
+
+function canMergeAssistantTranscriptBuffer(messages: TranscriptMessageModel[]) {
+  if (messages.length <= 1) {
+    return true;
+  }
+
+  const textMessages = messages.filter((message) => hasTranscriptMessageTextPart(message));
+  if (textMessages.length <= 1) {
+    return true;
+  }
+
+  const baseline = textMessages[0];
+  return textMessages.slice(1).every((message) => shouldCoalesceAssistantTranscriptMessages(baseline, message));
 }
 
 function isAssistantTranscriptBoundaryMessage(message: TranscriptMessageModel) {
@@ -1936,6 +1960,12 @@ function coalesceAssistantTranscriptMessages(messages: TranscriptMessageModel[])
     }
 
     if (!buffer.some((message) => hasTranscriptMessageTextPart(message))) {
+      result.push(...buffer);
+      buffer = [];
+      return;
+    }
+
+    if (!canMergeAssistantTranscriptBuffer(buffer)) {
       result.push(...buffer);
       buffer = [];
       return;

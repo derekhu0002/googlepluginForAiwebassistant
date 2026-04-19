@@ -81,6 +81,29 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.map((part) => part.kind)).toEqual(["prompt", "text", "summary"]);
   });
 
+  it("preserves distinct assistant messages in live transcript projection", () => {
+    const transcript = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-1",
+        prompt: "请回答",
+        events: [
+          createEvent(1, { type: "thinking", message: "第一条消息", data: { field: "text", message_id: "msg-1" } }),
+          createEvent(2, { type: "thinking", message: "第二条消息", data: { field: "text", message_id: "msg-2" } })
+        ],
+        status: "streaming",
+        runStatus: "streaming",
+        streamStatus: "streaming",
+        finalOutput: "第二条消息",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    expect(transcript.sealedMessages.flatMap((message) => message.parts.map((part) => part.text))).toContain("第一条消息");
+    expect(transcript.finalAnswerPart?.text).toBe("第二条消息");
+  });
+
   it("can still include tool-call parts when explicitly requested", () => {
     const parts = buildTranscriptPartStream({
       runId: "run-1",
@@ -1524,6 +1547,17 @@ describe("reasoning timeline share-aligned transcript contract", () => {
       runStatus: "done",
       streamStatus: "done",
       hasTerminalEvidence: true
+    });
+
+    expect(resolveTimelinePresentationState({
+      events: [createEvent(3, { type: "thinking", message: "第一段已出现" })],
+      runStatus: "streaming",
+      streamStatus: "streaming",
+      finalOutput: "第一段已出现"
+    })).toMatchObject({
+      runStatus: "streaming",
+      streamStatus: "streaming",
+      hasTerminalEvidence: false
     });
 
     expect(resolveCockpitStatusModel({
