@@ -12,3 +12,4 @@ __pycache__/
 .obsidian
 python_adapter/app/opencode_adapter.log
 /temp
+extension/dist/
