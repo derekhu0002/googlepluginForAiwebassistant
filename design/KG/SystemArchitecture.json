@@ -64,30 +64,9 @@
 ,"testcases": [
 {
 "name": "TestCase1",
-"description": "真实端到端 SMOKE：使用精确 prompt“请总结当前 SR 的风险与建议下一步动作。”，校验界面显示消息与 OPENCODE SERVER 接收消息一致，不重复、不遗漏、不乱序。\r\n",
+"description": "真实端到端 SMOKE：使用精确 prompt“请总结当前 SR 的风险与建议下一步动作。”，校验界面显示消息与 OPENCODE SERVER 接收消息一致，不重复、不遗漏、不乱序。\r\n\r\n\"RuntimeView\": {\r\n\"coveredComponents\": [\r\n\"test_site 页面\",\r\n\"extension content script / 浮动 AI 入口\",\r\n\"embedded side panel iframe\",\r\n\"sidepanel App + useSidepanelController\",\r\n\"reasoningTimeline / reasoningTimelineView\",\r\n\"extension shared api SSE 客户端\",\r\n\"python_adapter FastAPI\",\r\n\"opencode serve\",\r\n\"python_adapter/logs/invocations.jsonl\",\r\n\"Playwright smoke driver\"\r\n],\r\n\"interactionFlow\": [\r\n\"Playwright smoke driver 打开 test_site 页面并通过 content script 唤起 embedded side panel iframe\",\r\n\"side panel 通过 shared api 向 python_adapter POST /api/runs 发起 run，并建立 /api/runs/{runId}/events 或 raw events SSE 连接\",\r\n\"python_adapter 创建或复用 opencode session，转发 prompt 到 opencode serve，并持续代理上游流式事件\",\r\n\"sidepanel controller 接收 adapter 事件，投影为 transcriptReadModel，再由 reasoningTimelineView 渲染主舞台消息\",\r\n\"smoke 脚本同时读取 python_adapter/logs/invocations.jsonl、extension state 和最终可见 transcript，校验最终可见 assistant 消息与 canonical state 收敛一致\"\r\n]}",
 "Input": "",
 "acceptanceCriteria": "extension\\scripts\\real-extension-smoke.mjs",
-"RuntimeView": {
-"coveredComponents": [
-"test_site 页面",
-"extension content script / 浮动 AI 入口",
-"embedded side panel iframe",
-"sidepanel App + useSidepanelController",
-"reasoningTimeline / reasoningTimelineView",
-"extension shared api SSE 客户端",
-"python_adapter FastAPI",
-"opencode serve",
-"python_adapter/logs/invocations.jsonl",
-"Playwright smoke driver"
-],
-"interactionFlow": [
-"Playwright smoke driver 打开 test_site 页面并通过 content script 唤起 embedded side panel iframe",
-"side panel 通过 shared api 向 python_adapter POST /api/runs 发起 run，并建立 /api/runs/{runId}/events 或 raw events SSE 连接",
-"python_adapter 创建或复用 opencode session，转发 prompt 到 opencode serve，并持续代理上游流式事件",
-"sidepanel controller 接收 adapter 事件，投影为 transcriptReadModel，再由 reasoningTimelineView 渲染主舞台消息",
-"smoke 脚本同时读取 python_adapter/logs/invocations.jsonl、extension state 和最终可见 transcript，校验最终可见 assistant 消息与 canonical state 收敛一致"
-]
-},
 "TestResults": ""
 }
 ]
@@ -99,62 +78,19 @@
 ,"testcases": [
 {
 "name": "TestCase2",
-"description": "会话界面隐藏 tool transcript：验证主舞台 transcript 不显示 transcript-part-tool 类型消息，仅保留用户消息、assistant 正文和 summary；对应真实 smoke 与 sidepanel transcript 渲染回归。",
+"description": "会话界面隐藏 tool transcript：验证主舞台 transcript 不显示 transcript-part-tool 类型消息，仅保留用户消息、assistant 正文和 summary；对应真实 smoke 与 sidepanel transcript 渲染回归。\r\n\r\n\"RuntimeView\": {\r\n\"coveredComponents\": [\r\n\"Playwright smoke driver\",\r\n\"embedded side panel iframe\",\r\n\"sidepanel App + useSidepanelController\",\r\n\"opencodeRawEventProjector / run event state\",\r\n\"reasoningTimeline\",\r\n\"MainStage\",\r\n\"reasoningTimelineView\",\r\n\"python_adapter FastAPI\",\r\n\"opencode serve\"\r\n],\r\n\"interactionFlow\": [\r\n\"真实 smoke 触发一次带工具调用和 assistant 输出的 run，adapter 将 opencode 事件流转发给 sidepanel\",\r\n\"controller 和 projector 将 reasoning、tool_call、assistant_text 等事件归一化为 transcriptReadModel\",\r\n\"reasoningTimeline 在 includeToolCallParts=false 的主舞台视图中仅保留 prompt、assistant 正文和 summary，不把 tool transcript 放入最终可见 transcript\",\r\n\"MainStage / reasoningTimelineView 渲染最终主舞台 DOM，smoke 只从可见 transcript 采样 part kind，确认 tool part 没有泄漏到用户会话界面\"\r\n]\r\n}",
 "Input": "",
 "acceptanceCriteria": "extension\\scripts\\acceptance-testcase2.mjs",
-"RuntimeView": {
-"coveredComponents": [
-"Playwright smoke driver",
-"embedded side panel iframe",
-"sidepanel App + useSidepanelController",
-"opencodeRawEventProjector / run event state",
-"reasoningTimeline",
-"MainStage",
-"reasoningTimelineView",
-"python_adapter FastAPI",
-"opencode serve"
-],
-"interactionFlow": [
-"真实 smoke 触发一次带工具调用和 assistant 输出的 run，adapter 将 opencode 事件流转发给 sidepanel",
-"controller 和 projector 将 reasoning、tool_call、assistant_text 等事件归一化为 transcriptReadModel",
-"reasoningTimeline 在 includeToolCallParts=false 的主舞台视图中仅保留 prompt、assistant 正文和 summary，不把 tool transcript 放入最终可见 transcript",
-"MainStage / reasoningTimelineView 渲染最终主舞台 DOM，smoke 只从可见 transcript 采样 part kind，确认 tool part 没有泄漏到用户会话界面"
-]
-},
 "TestResults": ""
 },
 {
 "name": "TestCase3",
-"description": "完成态显示正确：\r\n1、会话开始时一直到会话结束前页面的transcript-part-summary-copy状态都应该是“进行中”，且“新会话”按钮不可点击，且对话框不可发起新消息；\r\n2、会话结束后transcript-part-summary-copy需要显示“已完成”，且“新会话”按钮可点击，且对话框可发起新消息；\r\n3、以上测试需要在真实SMOKE环境测试，不可MOCK；\r\n历史记录：前期有测试用例：extension/scripts/acceptance-testcase3.mjs，但该用例未完全覆盖以上要求；",
+"description": "完成态显示正确：\r\n1、会话开始时一直到会话结束前页面的transcript-part-summary-copy状态都应该是“进行中”，且“新会话”按钮不可点击，且对话框不可发起新消息；\r\n2、会话结束后transcript-part-summary-copy需要显示“已完成”，且“新会话”按钮可点击，且对话框可发起新消息；\r\n3、以上测试需要在真实SMOKE环境测试，不可MOCK；\r\n历史记录：前期有测试用例：extension/scripts/acceptance-testcase3.mjs，但该用例未完全覆盖以上要求；\r\n\r\n\"RuntimeView\": {\r\n\"coveredComponents\": [\r\n\"Playwright smoke driver\",\r\n\"embedded side panel iframe\",\r\n\"sidepanel App + useSidepanelController\",\r\n\"currentRun / stream UI state\",\r\n\"reasoningTimeline summary part\",\r\n\"发送按钮与输入框\",\r\n\"新会话按钮\",\r\n\"python_adapter FastAPI\",\r\n\"opencode serve\"\r\n],\r\n\"interactionFlow\": [\r\n\"真实 smoke 发起 run 后，sidepanel controller 根据 adapter 流式事件驱动 currentRun、stream 和 transcript summary 的进行中状态\",\r\n\"run 进行中阶段，reasoningTimeline summary copy 呈现“进行中”，同时发送按钮与新会话按钮被禁用，避免会话尚未收敛时再次发起交互\",\r\n\"当 adapter 侧出现 terminal evidence 且 transcript 收敛后，UI summary 切换为“已完成”，发送按钮和新会话按钮重新可用\",\r\n\"smoke 脚本在 in-progress 和 completed 两个 checkpoint 分别采样 summary 文案、按钮 disabled 状态和最终 transcript，以验证完整状态转换链路\"\r\n]\r\n}",
 "Input": "",
 "acceptanceCriteria": "extension\\scripts\\acceptance-testcase3.mjs",
-"RuntimeView": {
-"coveredComponents": [
-"Playwright smoke driver",
-"embedded side panel iframe",
-"sidepanel App + useSidepanelController",
-"currentRun / stream UI state",
-"reasoningTimeline summary part",
-"发送按钮与输入框",
-"新会话按钮",
-"python_adapter FastAPI",
-"opencode serve"
-],
-"interactionFlow": [
-"真实 smoke 发起 run 后，sidepanel controller 根据 adapter 流式事件驱动 currentRun、stream 和 transcript summary 的进行中状态",
-"run 进行中阶段，reasoningTimeline summary copy 呈现“进行中”，同时发送按钮与新会话按钮被禁用，避免会话尚未收敛时再次发起交互",
-"当 adapter 侧出现 terminal evidence 且 transcript 收敛后，UI summary 切换为“已完成”，发送按钮和新会话按钮重新可用",
-"smoke 脚本在 in-progress 和 completed 两个 checkpoint 分别采样 summary 文案、按钮 disabled 状态和最终 transcript，以验证完整状态转换链路"
-]
-},
 "TestResults": ""
 }
 ]
-},
-{
-"id": "2245",
-"name": "ApplicationFunction3"
-,"type": "ArchiMate_ApplicationFunction"
 }
 ],
 "relationships": [
@@ -192,8 +128,7 @@
 ,"parent_element_name": "ApplicationLayer"
 ,"included_elements": [
 "2242",
-"2243",
-"2245"
+"2243"
 ]
 ,"included_relationships": [
 
