@@ -176,11 +176,56 @@ def test_real_contract_uses_session_prompt_async_and_question_reply() -> None:
         assert clients[2].calls[0][1] == "/session/ses-1/prompt_async"
         assert clients[2].calls[0][3] == {
             "agent": "TARA_analyst",
-            "parts": [{"type": "text", "text": "hello from adapter"}],
+            "parts": [
+                {"type": "text", "text": "hello from adapter"},
+                {"type": "text", "text": "[capture]\n{\"pageTitle\": \"Example\", \"pageUrl\": \"https://example.com\", \"software_version\": \"v1.0.0\", \"selected_sr\": \"SR-1\"}"},
+                {"type": "text", "text": "[context]\n{\"source\": \"chrome-extension\", \"capturedAt\": \"2026-04-01T00:00:00.000Z\", \"username\": \"alice\", \"usernameSource\": \"dom_text\", \"pageTitle\": \"Example\", \"pageUrl\": \"https://example.com\"}"}
+            ],
         }
         assert clients[3].calls[0][1] == "/global/event"
         assert clients[4].calls[0][1] == "/question/req-1/reply"
         assert clients[5].calls[0][1] == "/session/ses-1/message"
+
+    anyio.run(scenario)
+
+
+def test_start_run_includes_capture_and_context_in_prompt_async_payload() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+
+    clients: list[FakeAsyncClient] = []
+    response_sets = [
+        [("GET", "/agent", make_agent_catalog_response("TARA_analyst"))],
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+    ]
+
+    def factory(_timeout):
+        client = FakeAsyncClient(response_sets.pop(0))
+        clients.append(client)
+        return client
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(create_request())
+
+        assert run_id.startswith("run-")
+        assert clients[2].calls[0][1] == "/session/ses-1/prompt_async"
+        assert clients[2].calls[0][3] == {
+            "agent": "TARA_analyst",
+            "parts": [
+                {"type": "text", "text": "hello from adapter"},
+                {"type": "text", "text": "[capture]\n{\"pageTitle\": \"Example\", \"pageUrl\": \"https://example.com\", \"software_version\": \"v1.0.0\", \"selected_sr\": \"SR-1\"}"},
+                {"type": "text", "text": "[context]\n{\"source\": \"chrome-extension\", \"capturedAt\": \"2026-04-01T00:00:00.000Z\", \"username\": \"alice\", \"usernameSource\": \"dom_text\", \"pageTitle\": \"Example\", \"pageUrl\": \"https://example.com\"}"}
+            ],
+        }
 
     anyio.run(scenario)
 
@@ -615,6 +660,14 @@ def test_real_contract_reuses_existing_session_for_follow_up_prompt() -> None:
         assert len(clients) == 2
         assert clients[0].calls[0][1] == "/agent"
         assert clients[1].calls[0][1] == "/session/ses-existing/prompt_async"
+        assert clients[1].calls[0][3] == {
+            "agent": "TARA_analyst",
+            "parts": [
+                {"type": "text", "text": "hello from adapter"},
+                {"type": "text", "text": "[capture]\n{\"pageTitle\": \"Example\", \"pageUrl\": \"https://example.com\", \"software_version\": \"v1.0.0\", \"selected_sr\": \"SR-1\"}"},
+                {"type": "text", "text": "[context]\n{\"source\": \"chrome-extension\", \"capturedAt\": \"2026-04-01T00:00:00.000Z\", \"username\": \"alice\", \"usernameSource\": \"dom_text\", \"pageTitle\": \"Example\", \"pageUrl\": \"https://example.com\"}"}
+            ],
+        }
         assert adapter._runs[run_id]["session_id"] == "ses-existing"
         assert all(event.data and event.data.get("session_reused") is True for event in adapter._runs[run_id]["events"])
 
@@ -807,6 +860,11 @@ def test_real_contract_allows_session_payload_without_agent_confirmation() -> No
         assert clients[1].calls == [("POST", "/session", {"directory": adapter.settings.opencode_directory}, {"title": "SR SR-1"})]
         assert clients[2].calls[0][1] == "/session/ses-1/prompt_async"
         assert clients[2].calls[0][3]["agent"] == "TARA_Analyst"
+        assert clients[2].calls[0][3]["parts"] == [
+            {"type": "text", "text": "hello from adapter"},
+            {"type": "text", "text": "[capture]\n{\"pageTitle\": \"Example\", \"pageUrl\": \"https://example.com\", \"software_version\": \"v1.0.0\", \"selected_sr\": \"SR-1\"}"},
+            {"type": "text", "text": "[context]\n{\"source\": \"chrome-extension\", \"capturedAt\": \"2026-04-01T00:00:00.000Z\", \"username\": \"alice\", \"usernameSource\": \"dom_text\", \"pageTitle\": \"Example\", \"pageUrl\": \"https://example.com\"}"}
+        ]
 
     anyio.run(scenario)
 

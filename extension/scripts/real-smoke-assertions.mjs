@@ -9,7 +9,7 @@ const repoRoot = path.resolve(scriptsDir, "../..");
 const smokeScriptPath = path.join(scriptsDir, "real-extension-smoke.mjs");
 const smokeOutputDir = path.join(repoRoot, "temp", "real-extension-smoke");
 
-const allowedVisibleKinds = new Set(["prompt", "text", "summary"]);
+const allowedVisibleKinds = new Set(["prompt", "capture", "text", "summary"]);
 
 function normalizeText(value) {
   return String(value ?? "").replace(/\s+/gu, " ").trim();
@@ -127,4 +127,20 @@ export function assertRunControlsTransition(artifacts) {
   assert(!normalizeText(completed?.summaryText).includes("进行中"), "Summary copy still showed in-progress after completion", completed);
   assert(completed?.newSessionDisabled === false, "New session button did not re-enable after completion", completed);
   assert(completed?.sendDisabled === false, "Send button did not re-enable after completion", completed);
+}
+
+export function assertCapturedContextVisibleInTranscript(artifacts) {
+  const capturePart = artifacts.visibleParts.find((part) => part.kind === "capture" && part.role === "user");
+  const captureText = normalizeText(capturePart?.text);
+  const currentRun = artifacts.extensionState?.currentRun ?? null;
+
+  assert(Boolean(capturePart), "Visible transcript is missing the captured context part", artifacts.visibleParts);
+  assert(captureText.includes("selected_sr="), "Captured context part is missing selected_sr", { captureText });
+  assert(captureText.includes("software_version="), "Captured context part is missing software_version", { captureText });
+  assert(captureText.includes("pageTitle="), "Captured context part is missing pageTitle", { captureText });
+  assert(captureText.includes("pageUrl="), "Captured context part is missing pageUrl", { captureText });
+  assert(Boolean(currentRun?.selectedSr), "Current run is missing selectedSr after capture-backed send", currentRun);
+  assert(Boolean(currentRun?.softwareVersion), "Current run is missing softwareVersion after capture-backed send", currentRun);
+  assert(Boolean(currentRun?.pageTitle), "Current run is missing pageTitle after capture-backed send", currentRun);
+  assert(Boolean(currentRun?.pageUrl), "Current run is missing pageUrl after capture-backed send", currentRun);
 }

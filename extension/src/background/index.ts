@@ -344,7 +344,7 @@ async function startRunFromActiveTab(options: { prompt: string; selectedAgent: M
     syncMetadata: null
   });
 
-  const capturedFields = shouldCapture ? await collectFromActiveTab() : null;
+  const capturedFields = shouldCapture ? await collectFromActiveTab() : existingState.capturedFields;
   const usernameContext = shouldCapture ? await getUsernameContextFromActiveTab() : await getBestEffortUsernameContext();
   const runCapture = capturedFields
     ? {

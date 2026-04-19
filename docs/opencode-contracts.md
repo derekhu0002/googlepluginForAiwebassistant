@@ -274,7 +274,11 @@ Implemented in `OpencodeAdapter.start_run`.
 ```json
 {
   "agent": "<canonical-remote-agent>",
-  "parts": [{ "type": "text", "text": "<prompt>" }]
+  "parts": [
+    { "type": "text", "text": "<prompt>" },
+    { "type": "text", "text": "[capture]\n{...non-empty captured fields...}" },
+    { "type": "text", "text": "[context]\n{...run context...}" }
+  ]
 }
 ```
 

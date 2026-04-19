@@ -752,6 +752,15 @@ class OpencodeAdapter:
             raise RuntimeError("Remote /agent discovery failed: canonical agent not selected before prompt dispatch")
 
         prompt_parts: list[dict[str, str]] = [{"type": "text", "text": request.prompt}]
+        capture_payload = {
+            key: value
+            for key, value in request.capture.items()
+            if isinstance(value, str) and value.strip()
+        }
+        if capture_payload:
+            capture_text = json.dumps(capture_payload, ensure_ascii=False)
+            if capture_text and capture_text != "{}":
+                prompt_parts.append({"type": "text", "text": f"[capture]\n{capture_text}"})
         context_payload: Any = request.context
         if hasattr(context_payload, "model_dump"):
             context_payload = context_payload.model_dump(exclude_none=True)

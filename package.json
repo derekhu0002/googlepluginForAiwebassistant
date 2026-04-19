@@ -11,6 +11,7 @@
     "typecheck": "npm run typecheck --workspaces",
     "test": "npm run test --workspaces",
     "verify:rework": "npm run test --workspace backend && npm run test --workspace extension && npm run typecheck && npm run build",
-    "test:python-adapter": "python -m pytest python_adapter/tests"
+    "test:python-adapter": "python -m pytest python_adapter/tests",
+    "test:acceptance:visible-capture": "npm run acceptance:testcase4 --workspace extension"
   }
 }

@@ -901,13 +901,41 @@
     - `域名已授权`
 11. 在页面上先选中一句文字
 12. 输入 prompt
-13. 点击 **“采集并开始 SSE Run”**
+13. 点击 **“采集页面”**，确认采集结果摘要里出现 `software_version` 与 `selected_sr`
+14. 点击输入区右下角发送按钮发起 run
 14. 观察：
     - 摘要只显示 `software_version / selected_sr`
+    - 主会话 transcript 在用户 prompt 后新增一条 capture 摘要，包含 `selected_sr / software_version / pageTitle / pageUrl`
     - 事件流持续滚动
     - 若出现 question，可提交回答并继续 run
    - 历史记录生成
    - `python_adapter/logs/invocations.jsonl` 有新增记录
+
+---
+
+### 12.1 TestCase4：采集内容在主会话界面可见
+
+#### 操作步骤
+
+1. 打开 `http://127.0.0.1:4173/`
+2. 保证当前页面已命中规则且域名已授权
+3. 点击 **“采集页面”**
+4. 确认“采集结果摘要”里至少出现：
+   - `software_version`
+   - `selected_sr`
+5. 输入 prompt 并点击发送按钮
+6. 观察主会话 transcript
+
+#### 通过标准
+
+- 发送动作不会重新触发页面采集
+- 本轮 run 仍然复用了刚刚采集到的字段
+- 主会话 transcript 中除了用户 prompt、assistant 正文、summary 之外，还会额外出现一条用户侧 capture 摘要
+- 该 capture 摘要至少包含：
+  - `selected_sr`
+  - `software_version`
+  - `pageTitle`
+  - `pageUrl`
 
 ---
 

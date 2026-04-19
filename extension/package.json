@@ -10,7 +10,10 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "pretest": "node scripts/ensure-rollup-native.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "acceptance:testcase2": "node scripts/acceptance-testcase2.mjs",
+    "acceptance:testcase3": "node scripts/acceptance-testcase3.mjs",
+    "acceptance:testcase4": "node scripts/acceptance-testcase4.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",

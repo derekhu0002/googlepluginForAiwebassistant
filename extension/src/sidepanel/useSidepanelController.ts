@@ -30,6 +30,21 @@ import { useRunHistory } from "./useRunHistory";
 import { appendSidepanelDebugLog, clearSidepanelDebugLogs } from "./debugLogStore";
 import { createOpencodeRawEventProjector, type OpencodeRawEventProjector } from "./opencodeRawEventProjector";
 
+function toTranscriptCaptureSummary(run: RunRecord | null | undefined) {
+  if (!run) {
+    return null;
+  }
+
+  const summary = {
+    softwareVersion: run.softwareVersion,
+    selectedSr: run.selectedSr,
+    pageTitle: run.pageTitle,
+    pageUrl: run.pageUrl
+  };
+
+  return Object.values(summary).some((value) => Boolean(value?.trim())) ? summary : null;
+}
+
 export type DrawerKey = "sessions" | "context" | "rules" | "run";
 
 export interface DrawerBarItem {
@@ -480,6 +495,7 @@ export function useSidepanelController() {
       return [{
         runId: selectedHistoryFallbackDetail.run.runId,
         prompt: selectedHistoryFallbackDetail.run.prompt,
+        captureSummary: toTranscriptCaptureSummary(selectedHistoryFallbackDetail.run),
         events: selectedHistoryFallbackDetail.events,
         answers: selectedHistoryFallbackDetail.answers,
       finalOutput: selectedHistoryFallbackDetail.run.finalOutput,
@@ -494,6 +510,7 @@ export function useSidepanelController() {
     return historicalRunDetails.map((detail) => ({
       runId: detail.run.runId,
       prompt: detail.run.prompt,
+      captureSummary: toTranscriptCaptureSummary(detail.run),
       events: detail.events,
       answers: detail.answers,
       finalOutput: detail.run.finalOutput,
@@ -518,6 +535,7 @@ export function useSidepanelController() {
     return {
       runId: state.currentRun?.runId ?? state.stream.runId,
       prompt: livePrompt,
+      captureSummary: toTranscriptCaptureSummary(state.currentRun),
       events: state.runEvents,
       answers: state.answers,
       finalOutput: liveFinalOutput,

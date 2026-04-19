@@ -80,11 +80,19 @@ export type ConversationTurnKind = "assistant" | "question" | "error";
 export type FragmentBadgeTone = "neutral" | "progress" | "warning" | "danger" | "success";
 export type ChatStreamItemKind =
   | "user_prompt"
+  | "user_capture"
   | "user_answer"
   | "assistant_output"
   | "assistant_process"
   | "assistant_question"
   | "assistant_error";
+
+export interface TranscriptCaptureSummary {
+  softwareVersion?: string;
+  selectedSr?: string;
+  pageTitle?: string;
+  pageUrl?: string;
+}
 
 export interface TimelineEventEntry {
   id: string;
@@ -160,7 +168,7 @@ export interface ChatStreamItemModel {
 }
 
 export type TranscriptMessageRole = "user" | "assistant";
-export type TranscriptPartKind = "prompt" | "answer" | "text" | "reasoning" | "tool" | "question" | "error" | "summary";
+export type TranscriptPartKind = "prompt" | "capture" | "answer" | "text" | "reasoning" | "tool" | "question" | "error" | "summary";
 
 export interface TranscriptPartModel {
   id: string;
@@ -260,6 +268,7 @@ export interface ProjectionAnomalyRecord {
 interface LiveTranscriptProjectionState {
   runId: string;
   prompt: string;
+  captureSummary: TranscriptCaptureSummary | null;
   includeToolCallParts: boolean;
   eventCount: number;
   answerCount: number;
@@ -295,6 +304,7 @@ interface LiveTranscriptProjectionDebug {
 export interface BuildChatStreamItemsOptions {
   runId?: string | null;
   prompt?: string | null;
+  captureSummary?: TranscriptCaptureSummary | null;
   events: NormalizedRunEvent[];
   answers?: AnswerRecord[];
   feedbackByMessageId?: Record<string, MessageFeedbackUiState>;
@@ -1494,6 +1504,35 @@ function createPromptItem(options: { runId: string; prompt: string; createdAt: s
   });
 }
 
+function buildCaptureSummaryText(captureSummary?: TranscriptCaptureSummary | null) {
+  if (!captureSummary) {
+    return "";
+  }
+
+  const segments = [
+    captureSummary.selectedSr?.trim() ? `selected_sr=${captureSummary.selectedSr.trim()}` : "",
+    captureSummary.softwareVersion?.trim() ? `software_version=${captureSummary.softwareVersion.trim()}` : "",
+    captureSummary.pageTitle?.trim() ? `pageTitle=${captureSummary.pageTitle.trim()}` : "",
+    captureSummary.pageUrl?.trim() ? `pageUrl=${captureSummary.pageUrl.trim()}` : ""
+  ].filter(Boolean);
+
+  return segments.length ? `已采集上下文：${segments.join("；")}` : "";
+}
+
+function createCaptureItem(options: { runId: string; captureSummary: TranscriptCaptureSummary; createdAt: string; updatedAt: string; }) {
+  return createBaseItem({
+    id: `user-capture:${options.runId}`,
+    runId: options.runId,
+    kind: "user_capture",
+    title: "Captured Context",
+    summary: buildCaptureSummaryText(options.captureSummary),
+    createdAt: options.createdAt,
+    updatedAt: options.updatedAt,
+    primaryType: "user_prompt",
+    supportsCopy: true
+  });
+}
+
 function getReasoningOnlyText(events: NormalizedRunEvent[]) {
   return joinUniqueParagraphs(events
     .filter((event) => event.type === "thinking" && !isAssistantResponseDeltaEvent(event))
@@ -1636,13 +1675,15 @@ function filterTranscriptFragments(items: ChatStreamItemModel[], includeToolCall
 }
 
 function getTranscriptRole(item: ChatStreamItemModel): TranscriptMessageRole {
-  return item.kind === "user_prompt" || item.kind === "user_answer" ? "user" : "assistant";
+  return item.kind === "user_prompt" || item.kind === "user_capture" || item.kind === "user_answer" ? "user" : "assistant";
 }
 
 function getTranscriptPartKind(item: ChatStreamItemModel): TranscriptPartKind {
   switch (item.kind) {
     case "user_prompt":
       return "prompt";
+    case "user_capture":
+      return "capture";
     case "user_answer":
       return "answer";
     case "assistant_process":
@@ -2122,6 +2163,7 @@ function createTranscriptSegmentSignature(options: BuildTranscriptSegmentReadMod
     options.pendingQuestionId ?? "",
     options.finalOutput ?? "",
     options.errorMessage ?? "",
+    buildCaptureSummaryText(options.captureSummary),
     options.includeSummary === false ? "no-summary" : "with-summary",
     options.includeToolCallParts ? "with-tools" : "without-tools",
     String(options.events.length),
@@ -2417,6 +2459,7 @@ function createEmptyLiveProjectionState(options: BuildTranscriptSegmentReadModel
   return {
     runId,
     prompt,
+    captureSummary: options.captureSummary ?? null,
     includeToolCallParts: options.includeToolCallParts ?? false,
     eventCount: 0,
     answerCount: 0,
@@ -2429,9 +2472,18 @@ function createEmptyLiveProjectionState(options: BuildTranscriptSegmentReadModel
     lastAnswerSubmittedAt: null,
     lastAnswerValue: null,
     fallbackTimestamp,
-    items: prompt
-      ? [createPromptItem({ runId, prompt, createdAt: options.events[0]?.createdAt ?? fallbackTimestamp, updatedAt: options.events[0]?.createdAt ?? fallbackTimestamp })]
-      : [],
+    items: (() => {
+      const createdAt = options.events[0]?.createdAt ?? fallbackTimestamp;
+      const initialItems: ChatStreamItemModel[] = [];
+      if (prompt) {
+        initialItems.push(createPromptItem({ runId, prompt, createdAt, updatedAt: createdAt }));
+      }
+      const captureText = buildCaptureSummaryText(options.captureSummary);
+      if (captureText && options.captureSummary) {
+        initialItems.push(createCaptureItem({ runId, captureSummary: options.captureSummary, createdAt, updatedAt: createdAt }));
+      }
+      return initialItems;
+    })(),
     assistantResponse: {
       ...createEmptyAssistantResponseAggregation()
     },
@@ -3423,7 +3475,7 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
           anchorId: part.anchorId,
           groupAnchorId: part.groupAnchorId,
           runId: part.runId,
-          kind: part.kind === "prompt" ? "user_prompt" : part.kind === "answer" ? "user_answer" : part.kind === "question" ? "assistant_question" : part.kind === "error" ? "assistant_error" : part.kind === "text" ? "assistant_output" : "assistant_process",
+          kind: part.kind === "prompt" ? "user_prompt" : part.kind === "capture" ? "user_capture" : part.kind === "answer" ? "user_answer" : part.kind === "question" ? "assistant_question" : part.kind === "error" ? "assistant_error" : part.kind === "text" ? "assistant_output" : "assistant_process",
           title: "",
           summary: part.text,
           createdAt: part.createdAt,
@@ -3604,6 +3656,16 @@ export function buildFragmentSequence(options: BuildChatStreamItemsOptions): Cha
     items.push(createPromptItem({
       runId,
       prompt,
+      createdAt: events[0]?.createdAt ?? fallbackTimestamp,
+      updatedAt: events[0]?.createdAt ?? fallbackTimestamp
+    }));
+  }
+
+  const captureText = buildCaptureSummaryText(options.captureSummary);
+  if (captureText && options.captureSummary) {
+    items.push(createCaptureItem({
+      runId,
+      captureSummary: options.captureSummary,
       createdAt: events[0]?.createdAt ?? fallbackTimestamp,
       updatedAt: events[0]?.createdAt ?? fallbackTimestamp
     }));

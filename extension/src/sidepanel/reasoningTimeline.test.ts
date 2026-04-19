@@ -81,6 +81,31 @@ describe("reasoning timeline share-aligned transcript contract", () => {
     expect(parts.map((part) => part.kind)).toEqual(["prompt", "text", "summary"]);
   });
 
+  it("surfaces captured run context in the visible transcript when the run carries capture metadata", () => {
+    const parts = buildTranscriptPartStream({
+      runId: "run-1",
+      prompt: "请回答",
+      captureSummary: {
+        softwareVersion: "v2026.04.01",
+        selectedSr: "SR-DEMO-001",
+        pageTitle: "AI Web Assistant Test Site",
+        pageUrl: "http://127.0.0.1:4173/"
+      },
+      events: [
+        createEvent(1, { type: "result", message: "最终回答", data: { message_id: "msg-1" } })
+      ],
+      status: "done",
+      finalOutput: "最终回答"
+    });
+
+    expect(parts.map((part) => part.kind)).toEqual(["prompt", "capture", "text", "summary"]);
+    expect(parts[1]?.role).toBe("user");
+    expect(parts[1]?.text).toContain("selected_sr=SR-DEMO-001");
+    expect(parts[1]?.text).toContain("software_version=v2026.04.01");
+    expect(parts[1]?.text).toContain("pageTitle=AI Web Assistant Test Site");
+    expect(parts[1]?.text).toContain("pageUrl=http://127.0.0.1:4173/");
+  });
+
   it("preserves distinct assistant messages in live transcript projection", () => {
     const transcript = buildStableTranscriptProjection({
       historicalSegments: [],

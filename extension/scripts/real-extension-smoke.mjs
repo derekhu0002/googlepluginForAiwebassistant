@@ -17,6 +17,52 @@ const CHROMIUM_EXECUTABLE = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? null;
 const NOISE_MARKERS = ["会话已创建", "会话状态", "正在读取所需内容"];
 const ENFORCE_ASSISTANT_SEQUENCE_COMPARISON = process.env.REAL_SMOKE_ENFORCE_SEQUENCE_COMPARISON !== "0";
 const CAPTURE_PROGRESS_CHECKPOINTS = process.env.REAL_SMOKE_CAPTURE_PROGRESS_CHECKPOINT === "1";
+const CAPTURE_BEFORE_SEND = process.env.REAL_SMOKE_CAPTURE_BEFORE_SEND === "1";
+
+function createSmokeRule() {
+  const timestamp = new Date().toISOString();
+  return {
+    id: "rule-real-smoke-capture",
+    name: "Real Smoke Test Rule",
+    hostnamePattern: "127.0.0.1",
+    pathPattern: "*",
+    enabled: true,
+    fields: [
+      {
+        id: "field-real-smoke-page-title",
+        key: "pageTitle",
+        label: "页面标题",
+        source: "documentTitle",
+        enabled: true
+      },
+      {
+        id: "field-real-smoke-page-url",
+        key: "pageUrl",
+        label: "页面地址",
+        source: "pageUrl",
+        enabled: true
+      },
+      {
+        id: "field-real-smoke-software-version",
+        key: "software_version",
+        label: "软件版本",
+        source: "selectorText",
+        selector: "[data-software-version]",
+        enabled: true
+      },
+      {
+        id: "field-real-smoke-selected-sr",
+        key: "selected_sr",
+        label: "选中 SR",
+        source: "selectorText",
+        selector: "[data-selected-sr]",
+        enabled: true
+      }
+    ],
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+}
 
 function normalizeComparableText(value) {
   return String(value ?? "")
@@ -115,6 +161,67 @@ async function getInteractiveCheckpoint(frame) {
       textareaDisabled: textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
       panelText: (root.textContent ?? "").trim()
     };
+  });
+}
+
+async function waitForCapturedFields(page, extensionId, options = {}) {
+  return await waitFor(async () => {
+    const state = await getExtensionState(page, extensionId);
+    const capturedFields = state?.capturedFields;
+    return capturedFields && (capturedFields.selected_sr || capturedFields.software_version) ? state : null;
+  }, {
+    timeoutMs: options.timeoutMs ?? 30000,
+    intervalMs: options.intervalMs ?? 250,
+    errorMessage: options.errorMessage ?? "Timed out waiting for captured fields to become available"
+  });
+}
+
+async function getActiveContext(extensionFrame) {
+  return await extensionFrame.evaluate(async () => await chrome.runtime.sendMessage({ type: "GET_ACTIVE_CONTEXT" }));
+}
+
+async function ensureSmokeRuleConfigured(serviceWorker) {
+  const rule = createSmokeRule();
+  await serviceWorker.evaluate(async ({ nextRule }) => {
+    const storageKey = "ai-web-assistant-rules";
+    const stored = await chrome.storage.local.get(storageKey);
+    const currentRules = Array.isArray(stored?.[storageKey]) ? stored[storageKey] : [];
+    const existingIndex = currentRules.findIndex((candidate) => candidate?.id === nextRule.id);
+    const nextRules = existingIndex >= 0
+      ? currentRules.map((candidate, index) => index === existingIndex ? nextRule : candidate)
+      : [...currentRules, nextRule];
+    await chrome.storage.local.set({ [storageKey]: nextRules });
+  }, { nextRule: rule });
+}
+
+async function waitForMatchedRule(extensionFrame, options = {}) {
+  return await waitFor(async () => {
+    const context = await getActiveContext(extensionFrame);
+    return context?.matchedRule?.id ? context : null;
+  }, {
+    timeoutMs: options.timeoutMs ?? 20000,
+    intervalMs: options.intervalMs ?? 250,
+    errorMessage: options.errorMessage ?? "Timed out waiting for smoke rule to match the active page"
+  });
+}
+
+async function ensurePagePermission(frameLocator, extensionFrame) {
+  const currentContext = await getActiveContext(extensionFrame);
+  if (currentContext?.permissionGranted) {
+    return currentContext;
+  }
+
+  const permissionButton = frameLocator.locator("button[aria-label='授权当前域名']").first();
+  await permissionButton.waitFor({ timeout: 20000 });
+  await permissionButton.click();
+
+  return await waitFor(async () => {
+    const context = await getActiveContext(extensionFrame);
+    return context?.permissionGranted ? context : null;
+  }, {
+    timeoutMs: 30000,
+    intervalMs: 250,
+    errorMessage: "Timed out waiting for current-domain permission to be granted"
   });
 }
 
@@ -637,6 +744,7 @@ async function main() {
     const serviceWorker = await getExtensionServiceWorker(context);
     const extensionId = extractExtensionId(serviceWorker.url());
     const page = await ensureTestPage(context);
+    await ensureSmokeRuleConfigured(serviceWorker);
 
     await page.waitForSelector("#ai-web-assistant-floating-button", { timeout: 20000 });
     const floatingButtonText = (await page.locator("#ai-web-assistant-floating-button").textContent())?.trim() ?? "";
@@ -646,11 +754,27 @@ async function main() {
 
     const panelSelector = "#ai-web-assistant-embedded-panel iframe[title='AI Web Assistant']";
     await page.waitForSelector(panelSelector, { timeout: 20000 });
+    const extensionFrame = await getExtensionFrame(page, extensionId);
     const frame = page.frameLocator(panelSelector);
     await frame.locator("textarea").waitFor({ timeout: 20000 });
     await frame.locator("button[aria-label='发送消息']").waitFor({ timeout: 20000 });
+    await waitForMatchedRule(extensionFrame, {
+      timeoutMs: 20000,
+      intervalMs: 250,
+      errorMessage: "Timed out waiting for the smoke rule to become active in the sidepanel"
+    });
+    await ensurePagePermission(frame, extensionFrame);
 
     const initialPanelText = await frame.locator("body").innerText();
+    if (CAPTURE_BEFORE_SEND) {
+      await frame.locator("button[aria-label='采集页面']").waitFor({ timeout: 20000 });
+      await frame.locator("button[aria-label='采集页面']").click();
+      await waitForCapturedFields(page, extensionId, {
+        timeoutMs: 30000,
+        intervalMs: 250,
+        errorMessage: "Timed out waiting for page capture to complete before send"
+      });
+    }
     await frame.locator("textarea").fill(RUN_PROMPT);
     await frame.locator("button[aria-label='发送消息']").click();
 
@@ -767,6 +891,7 @@ async function main() {
       extensionId,
       testUrl: TEST_URL,
       prompt: RUN_PROMPT,
+      captureBeforeSend: CAPTURE_BEFORE_SEND,
       floatingButtonText,
       initialPanelContainsPermissionState: initialPanelText.includes("域名未授权") || initialPanelText.includes("域名已授权"),
       runId: settled.state?.currentRun?.runId ?? null,

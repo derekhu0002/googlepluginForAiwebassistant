@@ -18,7 +18,7 @@ test_site/        本地联调测试站
 - 页面采集与发送消息已解耦
 - 点击 **“采集页面”** 只会刷新当前页面上下文，不会直接发起 run
 - 发送消息使用输入区**右下角发送按钮**
-- 默认发送 **不会** 触发页面采集；如果要更新上下文，请先手动点击“采集页面”
+- 默认发送 **不会** 再次触发页面采集；如果当前已经有最近一次采集结果，发送会复用这批已采集字段进入本轮 run，并在主会话 transcript 中显示一条 capture 摘要；如果要更新上下文，请先手动点击“采集页面”
 - 如果当前域名尚未授权，side panel 会显示显式入口：**“授权当前域名”**
 - 问题补充、追问、最终回答都在同一条连续会话流中展示
 
@@ -177,6 +177,19 @@ npm run dev --workspace extension
 npm run build --workspace extension
 npm run typecheck --workspace extension
 npm run test --workspace extension
+npm run acceptance:testcase4 --workspace extension
+```
+
+### 真实 smoke 用例入口
+
+- `extension/scripts/acceptance-testcase2.mjs`
+- `extension/scripts/acceptance-testcase3.mjs`
+- `extension/scripts/acceptance-testcase4.mjs`
+
+根目录快捷入口：
+
+```bash
+npm run test:acceptance:visible-capture
 ```
 
 ### backend

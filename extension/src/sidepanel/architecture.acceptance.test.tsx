@@ -160,4 +160,55 @@ describe("sidepanel architecture acceptance", () => {
     expect(summaryText).not.toContain("进行中");
     expect(container.textContent).toContain("最终文本");
   });
+
+  it("TestCase4: shows captured page context in the visible session transcript before the assistant answer", async () => {
+    const transcriptReadModel = buildStableTranscriptProjection({
+      historicalSegments: [],
+      liveSegment: {
+        runId: "run-1",
+        prompt: "请总结当前 SR 的风险与建议下一步动作。",
+        captureSummary: {
+          softwareVersion: "v2026.04.01",
+          selectedSr: "SR-DEMO-001",
+          pageTitle: "AI Web Assistant Test Site",
+          pageUrl: "http://127.0.0.1:4173/"
+        },
+        events: [
+          createRunEvent(1, { type: "result", message: "最终文本", data: { message_id: "msg-1" } })
+        ],
+        status: "done",
+        runStatus: "done",
+        streamStatus: "done",
+        finalOutput: "最终文本",
+        includeSummary: true,
+        includeToolCallParts: false
+      }
+    });
+
+    await act(async () => {
+      root.render(
+        <ReasoningTimeline
+          transcriptReadModel={transcriptReadModel}
+          runId="run-1"
+          prompt="请总结当前 SR 的风险与建议下一步动作。"
+          events={[]}
+          runStatus="done"
+        />
+      );
+    });
+
+    const parts = Array.from(container.querySelectorAll("[data-section='part']")).map((node) => ({
+      kind: node.getAttribute("data-part-kind"),
+      role: node.getAttribute("data-part-role"),
+      text: (node.textContent ?? "").trim()
+    }));
+
+    expect(parts.map((part) => part.kind)).toEqual(["prompt", "capture", "text", "summary"]);
+    expect(parts[1]?.role).toBe("user");
+    expect(parts[1]?.text).toContain("selected_sr=SR-DEMO-001");
+    expect(parts[1]?.text).toContain("software_version=v2026.04.01");
+    expect(parts[1]?.text).toContain("pageTitle=AI Web Assistant Test Site");
+    expect(parts[1]?.text).toContain("pageUrl=http://127.0.0.1:4173/");
+    expect(parts[2]?.text).toContain("最终文本");
+  });
 });

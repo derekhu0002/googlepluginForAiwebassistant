@@ -340,6 +340,100 @@ describe("background rule-driven capture flow", () => {
     });
   });
 
+  it("reuses existing captured fields on send without triggering a fresh page capture", async () => {
+    const storageState: Record<string, unknown> = {
+      "ai-web-assistant-rules": [] as unknown[],
+      "ai-web-assistant-state": {
+        activeSessionId: "ses-active",
+        capturedFields: {
+          software_version: "v2026.04.01",
+          selected_sr: "SR-DEMO-001",
+          pageTitle: "AI Web Assistant Test Site",
+          pageUrl: "http://127.0.0.1:4173/"
+        }
+      }
+    };
+
+    const listenerRegistry: { handler?: (message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean } = {};
+    const sendMessage = vi.fn(async (_tabId: number, message: { type: string }) => {
+      if (message.type === "PING") {
+        return { ready: true };
+      }
+      if (message.type === "GET_USERNAME_CONTEXT") {
+        throw new Error("should not request username from page when capture is reused");
+      }
+      if (message.type === "COLLECT_FIELDS") {
+        throw new Error("should not capture page fields during send-only run start when previous capture exists");
+      }
+      return undefined;
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({ ok: true, data: { runId: "run-reuse-capture", sessionId: "ses-active", selectedAgent: DEFAULT_MAIN_AGENT } })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.stubGlobal("chrome", {
+      tabs: {
+        query: vi.fn().mockResolvedValue([{ id: 1, url: "https://example.com/page" }]),
+        get: vi.fn().mockResolvedValue({ id: 1, url: "https://example.com/page" }),
+        sendMessage
+      },
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: storageState[key] })),
+          set: vi.fn(async (payload: Record<string, unknown>) => Object.assign(storageState, payload))
+        }
+      },
+      permissions: {
+        contains: vi.fn().mockResolvedValue(true),
+        request: vi.fn().mockResolvedValue(true)
+      },
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        onMessage: { addListener: vi.fn((handler) => { listenerRegistry.handler = handler; }) },
+        onInstalled: { addListener: vi.fn() }
+      },
+      sidePanel: {
+        setOptions: vi.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
+        setPanelBehavior: vi.fn().mockResolvedValue(undefined)
+      },
+      scripting: {
+        executeScript: vi.fn().mockResolvedValue(undefined)
+      }
+    } as unknown as typeof chrome);
+
+    await import("./index");
+
+    const response = await new Promise<unknown>((resolve) => {
+      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", selectedAgent: DEFAULT_MAIN_AGENT, capturePageData: false } }, {}, resolve);
+    }) as { ok: boolean; data: { capturedFields: Record<string, string> | null; currentRun: { pageTitle: string; pageUrl: string; softwareVersion: string; selectedSr: string } } };
+
+    expect(response.ok).toBe(true);
+    expect(response.data.capturedFields).toEqual({
+      software_version: "v2026.04.01",
+      selected_sr: "SR-DEMO-001",
+      pageTitle: "AI Web Assistant Test Site",
+      pageUrl: "http://127.0.0.1:4173/"
+    });
+    expect(response.data.currentRun).toMatchObject({
+      softwareVersion: "v2026.04.01",
+      selectedSr: "SR-DEMO-001",
+      pageTitle: "AI Web Assistant Test Site",
+      pageUrl: "http://127.0.0.1:4173/"
+    });
+    expect(sendMessage).not.toHaveBeenCalledWith(1, expect.objectContaining({ type: "COLLECT_FIELDS" }));
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      capture: {
+        software_version: "v2026.04.01",
+        selected_sr: "SR-DEMO-001",
+        pageTitle: "AI Web Assistant Test Site",
+        pageUrl: "http://127.0.0.1:4173/"
+      }
+    });
+  });
+
   it("reuses START_RUN orchestration when retry metadata is present", async () => {
     const storageState: Record<string, unknown> = {
       "ai-web-assistant-rules": [
