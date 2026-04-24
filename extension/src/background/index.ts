@@ -163,13 +163,16 @@ async function getPermissionState(url: string | undefined) {
   const parsed = new URL(url);
   const pattern = toOriginPermissionPattern(url);
   const canRequest = extensionConfig.optionalHostPermissions.some((item) => item === `${parsed.protocol}//*/*` || item === pattern || matchesChromePattern(url, item));
+  const isLoopbackInDevelopment = extensionConfig.extensionEnv === "development"
+    && parsed.protocol === "http:"
+    && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1");
   const granted = await chrome.permissions.contains({ origins: [pattern] }).catch(() => false);
   return {
-    granted,
+    granted: granted || isLoopbackInDevelopment,
     pattern,
     canRequest,
     // activeTab 不再作为稳定采集主路径，只在 side panel 无法打开时为当前已点击标签页提供一次性嵌入式兜底 UI。
-    activeTabFallbackAvailable: !granted
+    activeTabFallbackAvailable: !(granted || isLoopbackInDevelopment)
   };
 }
 

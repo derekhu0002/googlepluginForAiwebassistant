@@ -73,6 +73,70 @@ describe("background rule-driven capture flow", () => {
     expect(response.error.code).toBe("RULE_NOT_MATCHED_ERROR");
   });
 
+  it("treats development loopback pages as authorized active contexts", async () => {
+    vi.stubEnv("VITE_OPTIONAL_HOST_PERMISSIONS", "https://example.com/*,https://*.example.com/*,http://localhost/*,http://127.0.0.1/*");
+
+    const storageState: Record<string, unknown> = {
+      "ai-web-assistant-rules": [
+        {
+          id: "rule-1",
+          name: "Loopback rule",
+          hostnamePattern: "127.0.0.1",
+          pathPattern: "*",
+          enabled: true,
+          fields: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ]
+    };
+
+    const listenerRegistry: { handler?: (message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean } = {};
+
+    vi.stubGlobal("chrome", {
+      tabs: {
+        query: vi.fn().mockResolvedValue([{ id: 1, url: "http://127.0.0.1:4173/" }]),
+        get: vi.fn().mockResolvedValue({ id: 1, url: "http://127.0.0.1:4173/" }),
+        sendMessage: vi.fn()
+      },
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: storageState[key] })),
+          set: vi.fn(async (payload: Record<string, unknown>) => Object.assign(storageState, payload))
+        }
+      },
+      permissions: {
+        contains: vi.fn().mockResolvedValue(false),
+        request: vi.fn().mockResolvedValue(true)
+      },
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        onMessage: { addListener: vi.fn((handler) => { listenerRegistry.handler = handler; }) },
+        onInstalled: { addListener: vi.fn() }
+      },
+      sidePanel: {
+        setOptions: vi.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
+        setPanelBehavior: vi.fn().mockResolvedValue(undefined)
+      },
+      scripting: {
+        executeScript: vi.fn().mockResolvedValue(undefined)
+      }
+    } as unknown as typeof chrome);
+
+    await import("./index");
+
+    const response = await new Promise<unknown>((resolve) => {
+      listenerRegistry.handler?.({ type: "GET_ACTIVE_CONTEXT" }, {}, resolve);
+    }) as { permissionGranted: boolean; canRequestPermission: boolean; activeTabFallbackAvailable: boolean; permissionOrigin: string | null; matchedRule: { id: string; name: string } | null };
+
+    expect(response.permissionGranted).toBe(true);
+    expect(response.canRequestPermission).toBe(true);
+    expect(response.activeTabFallbackAvailable).toBe(false);
+    expect(response.permissionOrigin).toBe("http://127.0.0.1/*");
+    expect(response.matchedRule).toEqual({ id: "rule-1", name: "Loopback rule" });
+  });
+
   // @ArchitectureID: ELM-FUNC-EXT-ORCHESTRATE-CAPTURE-RUNSTART
   // @ArchitectureID: ELM-COMP-EXT-BACKGROUND
   // @ArchitectureID: ELM-001
