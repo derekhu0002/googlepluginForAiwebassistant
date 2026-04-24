@@ -44,8 +44,8 @@ describe("streaming api client", () => {
   // @ArchitectureID: ELM-001
   it("starts run against python adapter endpoint with prompt, capture, and context packaged together", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { runId: "run-1", sessionId: "ses-1", selectedAgent: "TARA_analyst" } })
@@ -65,7 +65,7 @@ describe("streaming api client", () => {
 
     expect(result).toEqual({ ok: true, data: { runId: "run-1", sessionId: "ses-1", selectedAgent: "TARA_analyst" } });
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/api/runs",
+      "http://localhost:8030/api/runs",
       expect.objectContaining({ method: "POST" })
     );
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
@@ -85,8 +85,8 @@ describe("streaming api client", () => {
 
   it("submits question answers", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.fetch = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { accepted: true, runId: "run-1", questionId: "q1" } })
@@ -101,8 +101,8 @@ describe("streaming api client", () => {
   // @ArchitectureID: ELM-FUNC-EXT-PACKAGE-CAPTURE-RUNSTART
   it("starts run without capture payload when send is decoupled", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ ok: true, data: { runId: "run-no-capture", selectedAgent: "ThreatIntelliganceCommander" } })
@@ -128,8 +128,8 @@ describe("streaming api client", () => {
 
   it("submits message feedback", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({
@@ -159,15 +159,15 @@ describe("streaming api client", () => {
       }
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/api/message-feedback",
+      "http://localhost:8030/api/message-feedback",
       expect.objectContaining({ method: "POST" })
     );
   });
 
   it("returns failure state for message feedback network errors", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.fetch = vi.fn().mockRejectedValue(new Error("socket closed")) as typeof fetch;
 
@@ -182,8 +182,8 @@ describe("streaming api client", () => {
 
   it("parses incoming SSE messages", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
 
@@ -216,13 +216,13 @@ describe("streaming api client", () => {
     }));
 
     expect(events).toEqual(["thinking"]);
-    expect(stream.url).toBe("http://localhost:8000/api/runs/run-1/events");
+    expect(stream.url).toBe("http://localhost:8030/api/runs/run-1/events");
   });
 
   it("parses incoming raw SSE messages", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
 
@@ -254,13 +254,13 @@ describe("streaming api client", () => {
     }));
 
     expect(events).toEqual(["message.part.delta"]);
-    expect(stream.url).toBe("http://localhost:8000/api/runs/run-raw-1/events/raw");
+    expect(stream.url).toBe("http://localhost:8030/api/runs/run-raw-1/events/raw");
   });
 
   it("attaches correlated transport observability traces to normalized events", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
 
@@ -306,8 +306,8 @@ describe("streaming api client", () => {
   /** @ArchitectureID: ELM-APP-EXT-SHARED-API-CONTRACT */
   it("preserves normalized event semantic and tool metadata defined by the shared contract", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
 
@@ -361,8 +361,8 @@ describe("streaming api client", () => {
 
   it("accepts normalized event semantic metadata with nullable fields", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
 
@@ -403,8 +403,8 @@ describe("streaming api client", () => {
 
   it("accepts thinking and result events with question null", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
 
@@ -439,8 +439,8 @@ describe("streaming api client", () => {
 
   it("accepts events with data null", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
 
@@ -465,8 +465,8 @@ describe("streaming api client", () => {
 
   it("accepts events with logData for internal diagnostics", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
 
@@ -493,8 +493,8 @@ describe("streaming api client", () => {
 
   it("still parses valid question events", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
 
@@ -528,20 +528,20 @@ describe("streaming api client", () => {
 
   it("appends api key for sse stream when configured", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
     vi.stubEnv("VITE_API_KEY", "secret");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
     const { createRunEventStream } = await import("./api");
     const stream = createRunEventStream("run-2", { onEvent() {}, onError() {} }) as unknown as FakeEventSource;
-    expect(stream.url).toBe("http://localhost:8000/api/runs/run-2/events?api_key=secret");
+    expect(stream.url).toBe("http://localhost:8030/api/runs/run-2/events?api_key=secret");
   });
 
   it("reports initial SSE connection failure before any open or event", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
     const { createRunEventStream } = await import("./api");
@@ -557,8 +557,8 @@ describe("streaming api client", () => {
 
   it("does not report error after stream has already received events", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
     const { createRunEventStream } = await import("./api");
@@ -583,8 +583,8 @@ describe("streaming api client", () => {
 
   it("keeps stream open after terminal-looking event so later valid messages still arrive", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
     const { createRunEventStream } = await import("./api");
@@ -620,8 +620,8 @@ describe("streaming api client", () => {
 
   it("still allows explicit client close override", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
     const { createRunEventStream } = await import("./api");
@@ -645,8 +645,8 @@ describe("streaming api client", () => {
 
   it("returns to streaming after reconnect open event", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
     const { createRunEventStream } = await import("./api");
@@ -679,8 +679,8 @@ describe("streaming api client", () => {
   /** @ArchitectureID: ELM-FUNC-EXT-CALL-ADAPTER-API */
   it("emits transport telemetry with canonical identity and reconnect count", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
     const { createRunEventStream } = await import("./api");
@@ -722,8 +722,8 @@ describe("streaming api client", () => {
 
   it("distinguishes transport parse failures from normalization failures in telemetry", async () => {
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     global.EventSource = FakeEventSource as unknown as typeof EventSource;
     const { createRunEventStream } = await import("./api");

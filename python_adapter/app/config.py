@@ -22,10 +22,10 @@ def _bool(name: str, default: bool) -> bool:
 @dataclass(frozen=True)
 class Settings:
     host: str = field(default_factory=lambda: os.getenv("PYTHON_ADAPTER_HOST", "127.0.0.1"))
-    port: int = field(default_factory=lambda: int(os.getenv("PYTHON_ADAPTER_PORT", "8000")))
+    port: int = field(default_factory=lambda: int(os.getenv("PYTHON_ADAPTER_PORT", "8030")))
     allowed_origins: list[str] = field(default_factory=list)
     api_key: str = field(default_factory=lambda: os.getenv("PYTHON_ADAPTER_API_KEY", ""))
-    # Boundary reminder: extension -> python adapter (:8000) -> opencode server (:8124).
+    # Boundary reminder: extension -> python adapter (:8030) -> opencode server (:8124).
     opencode_base_url: str = field(default_factory=lambda: os.getenv("OPENCODE_BASE_URL", "http://localhost:8124"))
     opencode_directory: str = field(default_factory=lambda: os.getenv("OPENCODE_DIRECTORY", str(ADAPTER_ROOT.parent)))
     opencode_workspace: str = field(default_factory=lambda: os.getenv("OPENCODE_WORKSPACE", ""))

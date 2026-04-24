@@ -51,8 +51,8 @@ cp backend/.env.example backend/.env
 
 默认值与当前仓库实现一致：
 
-- extension 默认请求 `http://localhost:8000`
-- python adapter 默认监听 `127.0.0.1:8000`
+- extension 默认请求 `http://localhost:8030`
+- python adapter 默认监听 `127.0.0.1:8030`
 - python adapter 默认转发 feedback 到 `http://127.0.0.1:8787/api/message-feedback`
 - opencode 默认探测 `http://localhost:8124`
 - python adapter start_run 会先探测远端 `/agent`，再创建/复用 session 并调用 `prompt_async`
@@ -88,11 +88,11 @@ npm run dev --workspace backend
 
 ```bash
 . .venv/bin/activate
-uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8000 --reload
-uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8000 --reload --log-level debug
+uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8030 --reload
+uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8030 --reload --log-level debug
 ```
 
-健康检查：`http://127.0.0.1:8000/health`
+健康检查：`http://127.0.0.1:8030/health`
 
 ### 4. 启动 test site
 
@@ -205,7 +205,7 @@ npm run test --workspace backend
 
 ```bash
 . .venv/bin/activate
-uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8000 --reload
+uvicorn app.main:app --app-dir python_adapter --host 127.0.0.1 --port 8030 --reload
 python -m pytest python_adapter/tests
 python python_adapter/scripts/probe_opencode.py
 ```

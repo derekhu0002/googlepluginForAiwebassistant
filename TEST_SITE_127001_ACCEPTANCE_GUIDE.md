@@ -432,7 +432,7 @@
 ### 9.1 启动前检查
 
 1. 确认 test site 已启动并能打开：`http://127.0.0.1:4173/`
-2. 确认 Python adapter 已启动：`http://127.0.0.1:8000/health` 可访问
+2. 确认 Python adapter 已启动：`http://127.0.0.1:8030/health` 可访问
 3. 确认 `opencode serve` 已启动
 4. 确认 Chrome 已加载最新插件构建产物
 5. 如果你之前改过规则，建议先打开 side panel 看一下是否已有旧规则，避免旧配置干扰
@@ -608,7 +608,7 @@
 
 #### 操作步骤
 
-1. 打开 `http://127.0.0.1:8000/health`
+1. 打开 `http://127.0.0.1:8030/health`
 2. 确认返回 JSON，且 `backend` 为 `python-adapter`
 3. 在插件中执行一次完整 run
 4. 查看 `python_adapter/logs/invocations.jsonl`
@@ -872,7 +872,7 @@
 
 **建议排查顺序**：
 
-1. 打开 `http://127.0.0.1:8000/health`
+1. 打开 `http://127.0.0.1:8030/health`
 2. 确认 Python adapter 正常
 3. 检查 side panel 是否已有 `thinking` / `tool_call` 事件
 4. 查看 `invocations.jsonl` 是否持续写入 `stream_event`

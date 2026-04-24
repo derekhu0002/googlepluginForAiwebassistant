@@ -9,8 +9,8 @@ describe("background rule-driven capture flow", () => {
     vi.resetModules();
     vi.unstubAllEnvs();
     vi.stubEnv("VITE_EXTENSION_ENV", "development");
-    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8000");
-    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8000");
+    vi.stubEnv("VITE_ALLOWED_API_ORIGINS", "http://localhost:8030");
+    vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
     vi.stubEnv("VITE_OPTIONAL_HOST_PERMISSIONS", "https://example.com/*,https://*.example.com/*,http://localhost/*");
     vi.stubEnv("VITE_WEB_ACCESSIBLE_RESOURCE_MATCHES", "https://example.com/*,http://localhost/*");
   });
@@ -167,7 +167,7 @@ describe("background rule-driven capture flow", () => {
     expect(sendMessage).toHaveBeenNthCalledWith(2, 1, { type: "PING" });
     expect(sendMessage).toHaveBeenCalledWith(1, expect.objectContaining({ type: "COLLECT_FIELDS" }));
     const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(fetchCall?.[0]).toBe("http://localhost:8000/api/runs");
+    expect(fetchCall?.[0]).toBe("http://localhost:8030/api/runs");
     expect(JSON.parse(fetchCall?.[1]?.body as string)).toMatchObject({
       prompt: "hello",
       selectedAgent: DEFAULT_MAIN_AGENT,
@@ -329,7 +329,7 @@ describe("background rule-driven capture flow", () => {
     expect(response.data.currentRun.selectedAgent).toBe(DEFAULT_MAIN_AGENT);
     expect(sendMessage).not.toHaveBeenCalledWith(1, expect.objectContaining({ type: "COLLECT_FIELDS" }));
     const fetchCall = fetchMock.mock.calls[0];
-    expect(fetchCall?.[0]).toBe("http://localhost:8000/api/runs");
+    expect(fetchCall?.[0]).toBe("http://localhost:8030/api/runs");
     expect(JSON.parse(fetchCall?.[1]?.body as string)).toMatchObject({
       prompt: "hello",
       selectedAgent: DEFAULT_MAIN_AGENT,

@@ -28,7 +28,7 @@ def test_settings_preserve_adapter_and_upstream_port_boundary(monkeypatch) -> No
 
     settings = Settings()
 
-    assert settings.port == 8000
+    assert settings.port == 8030
     assert settings.opencode_base_url == "http://localhost:8124"
 
 
