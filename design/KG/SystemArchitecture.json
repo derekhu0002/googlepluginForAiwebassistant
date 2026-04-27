@@ -3,53 +3,46 @@
 "description": "",
 "elements": [
 {
-"id": "1207",
+"id": "{A437C67D-90A3-4a48-B9A9-D17F90FC18F0}",
 "name": "StrategyLayerAndMotivationAspect"
 ,"type": "ArchiMate_Assessment"
+,"browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect"
 ,"subdiagram_views": [
 {
-"view_id": "159",
+"view_id": "{0B4C49ED-9F3D-497e-B726-A45491B6C57E}",
 "view_name": "StrategyLayerAndMotivationAspect"
 }
 ]
 },
 {
-"id": "1208",
+"id": "{47D7DB7E-CB3F-4111-A116-B34A234A10D5}",
 "name": "BusinessLayer"
 ,"type": "ArchiMate_Assessment"
+,"browser_path": "Model/System/BusinessLayer/BusinessLayer"
 ,"subdiagram_views": [
 {
-"view_id": "160",
+"view_id": "{B7341552-BD0E-4e40-95A3-5224AAB12BF1}",
 "view_name": "BusinessLayer"
 }
 ]
 },
 {
-"id": "1209",
+"id": "{11B31EBE-2D74-42a1-ABC1-C0D0A9EBCAD8}",
 "name": "ApplicationLayer"
 ,"type": "ArchiMate_Assessment"
+,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer"
 ,"subdiagram_views": [
 {
-"view_id": "161",
+"view_id": "{84DFE546-E90B-44a6-BEB7-5470ED13B5B5}",
 "view_name": "ApplicationLayer"
 }
 ]
 },
 {
-"id": "1210",
-"name": "TechnologyLayer"
-,"type": "ArchiMate_Assessment"
-,"subdiagram_views": [
-{
-"view_id": "162",
-"view_name": "TechnologyLayer"
-}
-]
-},
-{
-"id": "2242",
+"id": "{D4D0EE2F-3A48-45fa-9847-AF61F313D69E}",
 "name": "ApplicationFunction1"
 ,"type": "ArchiMate_ApplicationFunction"
+,"browser_path": "Model/System/ApplicationLayer/ApplicationFunction1"
 ,"testcases": [
 {
 "name": "TestCase1",
@@ -61,9 +54,10 @@
 ]
 },
 {
-"id": "2243",
+"id": "{FEF0D42C-4938-4012-8464-43482D19DDBF}",
 "name": "ApplicationFunction2"
 ,"type": "ArchiMate_ApplicationFunction"
+,"browser_path": "Model/System/ApplicationLayer/ApplicationFunction2"
 ,"testcases": [
 {
 "name": "TestCase4",
@@ -87,6 +81,18 @@
 "TestResults": ""
 }
 ]
+},
+{
+"id": "{03048AE3-88C4-4893-88CD-DC244C7163B0}",
+"name": "TechnologyLayer"
+,"type": "ArchiMate_Assessment"
+,"browser_path": "Model/System/TechnologyLayer/TechnologyLayer"
+,"subdiagram_views": [
+{
+"view_id": "{DA69C86F-94DB-40e1-A44F-6EBA0BF7EC79}",
+"view_name": "TechnologyLayer"
+}
+]
 }
 ],
 "relationships": [
@@ -94,9 +100,10 @@
 ],
 "views": [
 {
-"view_id": "159",
+"view_id": "{0B4C49ED-9F3D-497e-B726-A45491B6C57E}",
 "view_name": "StrategyLayerAndMotivationAspect"
-,"parent_element_id": "1207"
+,"browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect"
+,"parent_element_id": "{A437C67D-90A3-4a48-B9A9-D17F90FC18F0}"
 ,"parent_element_name": "StrategyLayerAndMotivationAspect"
 ,"included_elements": [
 
@@ -106,9 +113,10 @@
 ]
 },
 {
-"view_id": "160",
+"view_id": "{B7341552-BD0E-4e40-95A3-5224AAB12BF1}",
 "view_name": "BusinessLayer"
-,"parent_element_id": "1208"
+,"browser_path": "Model/System/BusinessLayer/BusinessLayer/BusinessLayer"
+,"parent_element_id": "{47D7DB7E-CB3F-4111-A116-B34A234A10D5}"
 ,"parent_element_name": "BusinessLayer"
 ,"included_elements": [
 
@@ -118,22 +126,24 @@
 ]
 },
 {
-"view_id": "161",
+"view_id": "{84DFE546-E90B-44a6-BEB7-5470ED13B5B5}",
 "view_name": "ApplicationLayer"
-,"parent_element_id": "1209"
+,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/ApplicationLayer"
+,"parent_element_id": "{11B31EBE-2D74-42a1-ABC1-C0D0A9EBCAD8}"
 ,"parent_element_name": "ApplicationLayer"
 ,"included_elements": [
-"2242",
-"2243"
+"{D4D0EE2F-3A48-45fa-9847-AF61F313D69E}",
+"{FEF0D42C-4938-4012-8464-43482D19DDBF}"
 ]
 ,"included_relationships": [
 
 ]
 },
 {
-"view_id": "162",
+"view_id": "{DA69C86F-94DB-40e1-A44F-6EBA0BF7EC79}",
 "view_name": "TechnologyLayer"
-,"parent_element_id": "1210"
+,"browser_path": "Model/System/TechnologyLayer/TechnologyLayer/TechnologyLayer"
+,"parent_element_id": "{03048AE3-88C4-4893-88CD-DC244C7163B0}"
 ,"parent_element_name": "TechnologyLayer"
 ,"included_elements": [
 
@@ -143,13 +153,14 @@
 ]
 },
 {
-"view_id": "158",
+"view_id": "{98C55C09-9C9B-4f53-A566-D92C9FF20805}",
 "view_name": "SystemArchitecture"
+,"browser_path": "Model/System/SystemArchitecture"
 ,"included_elements": [
-"1207",
-"1208",
-"1209",
-"1210"
+"{A437C67D-90A3-4a48-B9A9-D17F90FC18F0}",
+"{47D7DB7E-CB3F-4111-A116-B34A234A10D5}",
+"{11B31EBE-2D74-42a1-ABC1-C0D0A9EBCAD8}",
+"{03048AE3-88C4-4893-88CD-DC244C7163B0}"
 ]
 ,"included_relationships": [
 
