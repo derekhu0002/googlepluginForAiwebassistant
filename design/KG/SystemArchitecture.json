@@ -55,6 +55,80 @@
 "name": "CHROME EXTENSION"
 ,"type": "ArchiMate_ApplicationComponent"
 ,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/CHROME EXTENSION"
+,"testcases": [
+{
+"name": "流式消息渲染的 UI 线程隔离 (防止卡死)",
+"description": "**GIVEN**: Side Panel 已连接到 `PYTHON_ADAPTER`，并开始接收高频的 SSE 流式 `result` 事件（模拟 AI 极速吐字）。\r\n**WHEN**: 在消息持续滚动渲染的同时，用户尝试在输入框内快速输入文字，或在 Side Panel 内点击切换“主 Agent”。\r\n**THEN**: 输入框字符出现不应有延迟，下拉菜单响应应即时，UI 帧率（FPS）应保持在 50+，证明 Markdown 渲染未阻塞主线程。",
+"type": "Acceptance Test",
+"Input": "",
+"acceptanceCriteria": "",
+"TestResults": ""
+},
+{
+"name": "大数据量 Markdown 解析性能基准",
+"description": "**GIVEN**: AI 返回的消息包含极端复杂的 Markdown 内容（例如：50行&#215;10列的漏洞列表表格，或包含 1000 行代码的 T-Box 固件日志）。\r\n**WHEN**: 扩展将该片段从 `thinking` 状态转换为最终 `result` 渲染时。\r\n**THEN**: 侧边栏不应出现超过 200ms 的视觉冻结，且表格应支持平滑横向滚动，不影响纵向会话滚动。",
+"type": "Acceptance Test",
+"Input": "",
+"acceptanceCriteria": "",
+"TestResults": ""
+},
+{
+"name": "长会话内存管理与 DOM 负载优化",
+"description": "**GIVEN**: 当前会话（Session）已积累超过 40 条历史运行记录，每条记录包含大量的事件（Events）和分析结论。\r\n**WHEN**: 用户发起第 41 次 `START_RUN` 并开始接收新消息。\r\n**THEN**: 扩展的内存占用（Memory Footprint）不应出现阶梯式爆炸增长，且旧消息的渲染不应因为新消息的加入而触发全量重绘（Re-render）。",
+"type": "Acceptance Test",
+"Input": "",
+"acceptanceCriteria": "",
+"TestResults": ""
+},
+{
+"name": "高频 Tool-Call 事件的“节流”处理",
+"description": "**GIVEN**: 后端 AI 正在快速触发多个工具调用（例如：连续查询 10 个 ECU 状态，产生 10 个 `tool_call` 事件）。\r\n**WHEN**: 扩展后台监听到这些高频状态变更消息。\r\n**THEN**: 前端 UI 应通过“节流”或“防抖”机制更新“思考中”状态，避免每秒数十次的 DOM 变更导致浏览器 CPU 负载过高。",
+"type": "Acceptance Test",
+"Input": "",
+"acceptanceCriteria": "",
+"TestResults": ""
+},
+{
+"name": "人工追问事件（Question）的阻断性交互",
+"description": "**GIVEN**: Agent 输出流中下发了 `question` 类型事件，要求用户确认“是否继续执行高危漏洞补丁注入”。\r\n**WHEN**: 扩展监听到该事件并在 UI 上弹出追问表单。\r\n**THEN**: 扩展必须暂停当前的进度条显示，并在用户提交答案后，准确向 `POST /api/runs/{runId}/answers` 发送 `questionId` 和 `answer`。",
+"type": "Acceptance Test",
+"Input": "",
+"acceptanceCriteria": "",
+"TestResults": ""
+},
+{
+"name": "会话历史（History）的本地持久化读取",
+"description": "**GIVEN**: 用户曾在 `IndexedDB` 中保存了多条历史运行记录。\r\n**WHEN**: 用户在 Side Panel 中点击“历史会话”切换到一周前的某个 `runId`。\r\n**THEN**: 扩展应能即时（&lt;500ms）从本地加载完整的事件轨迹（Events）和最终结果，且 Markdown 渲染保持原样。",
+"type": "Acceptance Test",
+"Input": "",
+"acceptanceCriteria": "",
+"TestResults": ""
+},
+{
+"name": "诊断日志（Diagnostics）的导出完整性",
+"description": "**GIVEN**: 发生了一次渲染缓慢或 AI 返回错误的异常会话。\r\n**WHEN**: 用户在侧边栏点击“导出诊断日志”。\r\n**THEN**: 扩展应生成并下载一个 `.log` 文件，内容必须包含该次运行的原始事件流（Raw Events）、环境配置摘要及前端错误捕获堆栈（如有）。",
+"type": "Acceptance Test",
+"Input": "",
+"acceptanceCriteria": "",
+"TestResults": ""
+},
+{
+"name": "SSE 连接意外中断的容错处理",
+"description": "**GIVEN**: AI 正在流式输出时，`PYTHON_ADAPTER` 服务意外宕机导致 SSE 请求断开。\r\n**WHEN**: `CHROME_EXTENSION` 检测到请求非正常关闭。\r\n**THEN**: 扩展应停止“正在输入”的视觉动画，保留已接收到的部分内容，并向用户展示“连接中断，请重试”的警告提示，而不是持续转圈。",
+"type": "Acceptance Test",
+"Input": "",
+"acceptanceCriteria": "",
+"TestResults": ""
+},
+{
+"name": "域名授权与访问控制逻辑",
+"description": "**GIVEN**: 扩展设置中仅授权了 `*.company.com` 域名，用户当前位于 `www.google.com`。\r\n**WHEN**: 用户尝试通过快捷键唤起 AI 分析。\r\n**THEN**: 扩展应依据 `pageAccess.ts` 逻辑，提示“当前站点未授权采集”，并拒绝执行 `GET_ACTIVE_CONTEXT` 操作。",
+"type": "Acceptance Test",
+"Input": "",
+"acceptanceCriteria": "",
+"TestResults": ""
+}
+]
 },
 {
 "id": "{D4D0EE2F-3A48-45fa-9847-AF61F313D69E}",
