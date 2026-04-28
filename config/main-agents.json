@@ -33,6 +33,17 @@
         "threat_intel_analyst_test",
         "threat-intel-analyst-test"
       ]
+    },
+    {
+      "id": "ThreatIntelUnknownHuntPrimary",
+      "label": "ThreatIntelUnknownHuntPrimary",
+      "description": "可切换的备用主 AGENT",
+      "remoteAliases": [
+        "ThreatIntelUnknownHuntPrimary",
+        "threatintelunknownhuntprimary",
+        "threat_intel_unknown_hunt_primary",
+        "threat-intel-unknown-hunt-primary"
+      ]
     }
   ]
 }
