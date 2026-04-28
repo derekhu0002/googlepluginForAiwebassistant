@@ -228,9 +228,9 @@ async function getActiveContext(extensionFrame) {
   return await extensionFrame.evaluate(async () => await chrome.runtime.sendMessage({ type: "GET_ACTIVE_CONTEXT" }));
 }
 
-async function ensureSmokeRuleConfigured(serviceWorker) {
+async function ensureSmokeRuleConfiguredInExtensionPage(extensionFrame) {
   const rule = createSmokeRule();
-  await serviceWorker.evaluate(async ({ nextRule }) => {
+  await extensionFrame.evaluate(async ({ nextRule }) => {
     const storageKey = "ai-web-assistant-rules";
     const stored = await chrome.storage.local.get(storageKey);
     const currentRules = Array.isArray(stored?.[storageKey]) ? stored[storageKey] : [];
@@ -242,8 +242,8 @@ async function ensureSmokeRuleConfigured(serviceWorker) {
   }, { nextRule: rule });
 }
 
-async function resetSmokeState(serviceWorker) {
-  await serviceWorker.evaluate(async ({ stateKey, initialState }) => {
+async function resetSmokeStateInExtensionPage(extensionFrame) {
+  await extensionFrame.evaluate(async ({ stateKey, initialState }) => {
     await chrome.storage.local.set({ [stateKey]: initialState });
   }, {
     stateKey: STATE_KEY,
@@ -551,10 +551,6 @@ function hasTerminalEvidenceInState(state) {
   }
 
   const currentRun = state?.currentRun ?? null;
-  if (normalizeComparableText(currentRun?.finalOutput).length > 0) {
-    return true;
-  }
-
   if (currentRun?.status === "done" && normalizeComparableText(currentRun?.finalOutput).length > 0) {
     return true;
   }
@@ -757,6 +753,7 @@ async function createBrowserContext() {
   }
 
   const executablePath = await resolveChromiumExecutablePath();
+  logSmokeStep(`launch-browser executable=${executablePath ?? "<playwright-default>"}`);
   const profileDir = path.join(PROFILE_ROOT_DIR, `${Date.now()}-${process.pid}`);
   await mkdir(profileDir, { recursive: true });
 
@@ -778,18 +775,14 @@ async function createBrowserContext() {
 }
 
 async function resolveChromiumExecutablePath() {
-  if (CHROMIUM_EXECUTABLE) {
-    return CHROMIUM_EXECUTABLE;
-  }
-
   const playwrightRoot = path.join(process.env.LOCALAPPDATA ?? "", "ms-playwright");
   if (!playwrightRoot) {
-    return undefined;
+    return CHROMIUM_EXECUTABLE ?? undefined;
   }
 
   const entries = await readdir(playwrightRoot, { withFileTypes: true }).catch(() => []);
   const chromiumDirs = entries
-    .filter((entry) => entry.isDirectory() && /^chromium-\d+$/.test(entry.name))
+    .filter((entry) => entry.isDirectory() && /^chromium-\d+$/u.test(entry.name))
     .map((entry) => entry.name)
     .sort((left, right) => Number(right.slice("chromium-".length)) - Number(left.slice("chromium-".length)));
 
@@ -803,7 +796,7 @@ async function resolveChromiumExecutablePath() {
     }
   }
 
-  return undefined;
+  return CHROMIUM_EXECUTABLE ?? undefined;
 }
 
 async function waitFor(condition, options) {
@@ -832,7 +825,10 @@ function extractExtensionId(url) {
 
 async function getExtensionServiceWorker(context) {
   return await waitFor(() => {
-    const worker = context.serviceWorkers().find((candidate) => candidate.url().startsWith("chrome-extension://") && candidate.url().endsWith("/background.js"));
+    const worker = context.serviceWorkers().find((candidate) => {
+      const url = candidate.url();
+      return url.startsWith("chrome-extension://") && /\/background(?:\.js)?(?:\?.*)?$/u.test(url);
+    }) ?? context.serviceWorkers().find((candidate) => candidate.url().startsWith("chrome-extension://"));
     return worker ?? null;
   }, {
     timeoutMs: 20000,
@@ -852,6 +848,24 @@ async function ensureTestPage(context) {
 
   await page.waitForLoadState("networkidle").catch(() => undefined);
   return page;
+}
+
+async function waitForFloatingButton(page, context) {
+  return await waitFor(async () => {
+    const buttonCount = await page.locator("#ai-web-assistant-floating-button").count();
+    logSmokeStep(`floating-button-check url=${page.url()} count=${buttonCount} workers=${context.serviceWorkers().length}`);
+    if (buttonCount > 0) {
+      return true;
+    }
+
+    await page.reload({ waitUntil: "domcontentloaded" }).catch(() => undefined);
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    return null;
+  }, {
+    timeoutMs: 30000,
+    intervalMs: 1000,
+    errorMessage: "Timed out waiting for the embedded panel entry button to appear"
+  });
 }
 
 async function getActiveTabId(serviceWorker) {
@@ -916,12 +930,15 @@ async function waitForStableAssistantOutput(page, extensionId, options = {}) {
   const timeoutMs = options.timeoutMs ?? 120000;
   const intervalMs = options.intervalMs ?? 1000;
   const stablePollsRequired = options.stablePollsRequired ?? 4;
+  const terminalConvergenceGraceMs = options.terminalConvergenceGraceMs ?? 15000;
   const start = Date.now();
   let previousSignature = null;
   let stablePolls = 0;
   let latestSample = null;
+  let pollCount = 0;
 
   while (Date.now() - start <= timeoutMs) {
+    pollCount += 1;
     const state = await getExtensionState(page, extensionId);
     const snapshot = await readEmbeddedPanelSnapshot(page, extensionId).catch(() => null);
     const fallbackVisibleParts = buildVisiblePartsFromState(state);
@@ -935,19 +952,21 @@ async function waitForStableAssistantOutput(page, extensionId, options = {}) {
     const transportIdle = hasIdleEventInRunEntries(rawRunEntries);
     const terminalEvidence = hasTerminalEvidenceInState(state) || transportIdle;
     const finalOutputText = normalizeComparableText(state?.currentRun?.finalOutput);
+    const stateAssistantMessageIds = extractAssistantMessageIdsFromState(state);
+    const visibleAssistantMessageIds = extractVisibleAssistantMessageIds(visibleParts);
+    const summaryText = normalizeComparableText(visibleParts.find((part) => part.kind === "summary")?.text);
+    const completedSummaryVisible = summaryText.includes("已完成") && !summaryText.includes("进行中");
     const stableContentSignature = JSON.stringify({
       terminalEvidence,
       transportIdle,
       finalOutputText,
-      visibleAssistantText: normalizeComparableText(visibleParts.filter((part) => part.role === "assistant" && part.kind === "text").map((part) => part.text).join("\n\n")),
-      visibleTextLength: visibleText.length
+      stateAssistantMessageIds,
+      visibleAssistantMessageIds
     });
     const signature = terminalEvidence
       ? stableContentSignature
       : JSON.stringify({
         runEvents: Array.isArray(state?.runEvents) ? state.runEvents.length : 0,
-        lastUpdatedAt: state?.lastUpdatedAt ?? null,
-        currentRunUpdatedAt: state?.currentRun?.updatedAt ?? null,
         currentRunStatus: state?.currentRun?.status ?? null,
         streamStatus: state?.stream?.status ?? null,
         ...JSON.parse(stableContentSignature)
@@ -969,6 +988,20 @@ async function waitForStableAssistantOutput(page, extensionId, options = {}) {
     } else {
       stablePolls = 0;
       previousSignature = signature;
+    }
+
+    if (
+      terminalEvidence
+      && assistantTextCount > 0
+      && finalOutputText.length > 0
+      && completedSummaryVisible
+      && Date.now() - start >= terminalConvergenceGraceMs
+    ) {
+      return latestSample;
+    }
+
+    if (pollCount % 10 === 0) {
+      logSmokeStep(`assistant-output-poll stablePolls=${stablePolls} terminalEvidence=${terminalEvidence} runStatus=${state?.currentRun?.status ?? "null"} streamStatus=${state?.stream?.status ?? "null"} assistantTextCount=${assistantTextCount} completedSummaryVisible=${completedSummaryVisible}`);
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -1000,25 +1033,42 @@ async function main() {
 
   try {
     const { context } = browserSession;
+    logSmokeStep(`browser-context-diagnostics pages=${context.pages().length} workers=${context.serviceWorkers().length}`);
 
-    const serviceWorker = await getExtensionServiceWorker(context);
-    const extensionId = extractExtensionId(serviceWorker.url());
-    logSmokeStep(`service-worker-ready extensionId=${extensionId}`);
-    await resetSmokeState(serviceWorker);
     const page = await ensureTestPage(context);
-    await ensureSmokeRuleConfigured(serviceWorker);
-    logSmokeStep("page-and-rule-ready");
+    logSmokeStep("test-page-ready");
 
-    await page.waitForSelector("#ai-web-assistant-floating-button", { timeout: 20000 });
-    const floatingButtonText = (await page.locator("#ai-web-assistant-floating-button").textContent())?.trim() ?? "";
-
-    const tabId = await getActiveTabId(serviceWorker);
-    await toggleEmbeddedPanel(serviceWorker, tabId);
+    await waitForFloatingButton(page, context);
+    logSmokeStep("panel-open-requested");
 
     const panelSelector = "#ai-web-assistant-embedded-panel iframe[title='AI Web Assistant']";
-    await page.waitForSelector(panelSelector, { timeout: 20000 });
-    const frame = await getExtensionFrame(page, extensionId);
-    const extensionFrame = frame;
+    const openPanel = async () => {
+      await page.locator("#ai-web-assistant-floating-button").click();
+      await page.waitForSelector(panelSelector, { timeout: 20000 });
+    };
+
+    await openPanel();
+    const panelUrl = await page.locator(panelSelector).getAttribute("src");
+    if (!panelUrl) {
+      throw new Error("Embedded panel iframe did not expose a src URL");
+    }
+
+    const extensionId = extractExtensionId(panelUrl);
+    let frame = await getExtensionFrame(page, extensionId);
+    let extensionFrame = frame;
+    logSmokeStep(`extension-frame-ready extensionId=${extensionId}`);
+
+    await resetSmokeStateInExtensionPage(extensionFrame);
+    await ensureSmokeRuleConfiguredInExtensionPage(extensionFrame);
+    await extensionFrame.evaluate(() => {
+      window.location.reload();
+    });
+    frame = await getExtensionFrame(page, extensionId);
+    extensionFrame = frame;
+    logSmokeStep("page-and-rule-ready");
+
+    const floatingButtonText = (await page.locator("#ai-web-assistant-floating-button").textContent())?.trim() ?? "";
+
     await frame.locator("textarea").waitFor({ timeout: 20000 });
     await frame.locator("button[aria-label='发送消息']").waitFor({ timeout: 20000 });
     await waitForMatchedRule(extensionFrame, {
@@ -1232,7 +1282,10 @@ async function main() {
     }
     logSmokeStep("completed-successfully");
   } finally {
-    await browserSession.close();
+    await Promise.race([
+      browserSession.close(),
+      new Promise((resolve) => setTimeout(resolve, 5000))
+    ]);
   }
 }
 

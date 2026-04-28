@@ -2,6 +2,7 @@ import { assertCompletedSummaryAfterTerminalEvidence, assertRunControlsTransitio
 
 const artifacts = await runSmokeAndLoadArtifacts({
   env: {
+    EXTENSION_SMOKE_PROMPT: "请用一句话总结当前风险。",
     REAL_SMOKE_ENFORCE_TEXT_COMPARISON: "0",
     REAL_SMOKE_CAPTURE_PROGRESS_CHECKPOINT: "1"
   }

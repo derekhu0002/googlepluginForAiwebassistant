@@ -70,10 +70,6 @@ function hasTerminalEvidenceInState(extensionState) {
   }
 
   const currentRun = extensionState?.currentRun ?? null;
-  if (normalizeText(currentRun?.finalOutput).length > 0) {
-    return true;
-  }
-
   if (currentRun?.status === "done" && normalizeText(currentRun?.finalOutput).length > 0) {
     return true;
   }

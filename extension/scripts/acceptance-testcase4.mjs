@@ -2,6 +2,7 @@ import { assertCapturedContextVisibleInTranscript, runSmokeAndLoadArtifacts } fr
 
 const artifacts = await runSmokeAndLoadArtifacts({
   env: {
+    EXTENSION_SMOKE_PROMPT: "请用一句话总结当前风险。",
     REAL_SMOKE_CAPTURE_BEFORE_SEND: "1",
     REAL_SMOKE_ENFORCE_SEQUENCE_COMPARISON: "0"
   }

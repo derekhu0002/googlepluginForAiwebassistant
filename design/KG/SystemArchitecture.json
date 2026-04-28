@@ -60,73 +60,73 @@
 "name": "流式消息渲染的 UI 线程隔离 (防止卡死)",
 "description": "**GIVEN**: Side Panel 已连接到 `PYTHON_ADAPTER`，并开始接收高频的 SSE 流式 `result` 事件（模拟 AI 极速吐字）。\r\n**WHEN**: 在消息持续滚动渲染的同时，用户尝试在输入框内快速输入文字，或在 Side Panel 内点击切换“主 Agent”。\r\n**THEN**: 输入框字符出现不应有延迟，下拉菜单响应应即时，UI 帧率（FPS）应保持在 50+，证明 Markdown 渲染未阻塞主线程。",
 "type": "Acceptance Test",
-"Input": "",
-"acceptanceCriteria": "",
-"TestResults": ""
+"Input": "向 sidepanel transcript 注入高频 thinking/result 事件流，并在渲染期间同时触发输入框编辑与主 Agent 切换交互。",
+"acceptanceCriteria": "extension\\scripts\\acceptance-ui-thread-isolation.mjs",
+"TestResults": "PASS。已补齐 testcase 对象并执行 extension/scripts/acceptance-ui-thread-isolation.mjs；Vitest 定向用例通过，验证高频流式渲染下输入与交互未被阻塞。"
 },
 {
 "name": "大数据量 Markdown 解析性能基准",
 "description": "**GIVEN**: AI 返回的消息包含极端复杂的 Markdown 内容（例如：50行&#215;10列的漏洞列表表格，或包含 1000 行代码的 T-Box 固件日志）。\r\n**WHEN**: 扩展将该片段从 `thinking` 状态转换为最终 `result` 渲染时。\r\n**THEN**: 侧边栏不应出现超过 200ms 的视觉冻结，且表格应支持平滑横向滚动，不影响纵向会话滚动。",
 "type": "Acceptance Test",
-"Input": "",
-"acceptanceCriteria": "",
-"TestResults": ""
+"Input": "构造包含超大 Markdown 表格与长代码块的 transcript payload，并执行从 thinking 到 result 的真实渲染切换。",
+"acceptanceCriteria": "extension\\scripts\\acceptance-large-markdown-performance.mjs",
+"TestResults": "PASS。已补齐 testcase 对象并执行 extension/scripts/acceptance-large-markdown-performance.mjs；Vitest 定向用例通过，覆盖大体量 Markdown 渲染与滚动可用性。"
 },
 {
 "name": "长会话内存管理与 DOM 负载优化",
 "description": "**GIVEN**: 当前会话（Session）已积累超过 40 条历史运行记录，每条记录包含大量的事件（Events）和分析结论。\r\n**WHEN**: 用户发起第 41 次 `START_RUN` 并开始接收新消息。\r\n**THEN**: 扩展的内存占用（Memory Footprint）不应出现阶梯式爆炸增长，且旧消息的渲染不应因为新消息的加入而触发全量重绘（Re-render）。",
 "type": "Acceptance Test",
-"Input": "",
-"acceptanceCriteria": "",
-"TestResults": ""
+"Input": "预置 40+ 条历史 run 与大量 transcript/event 数据，再追加第 41 次运行消息，观察增量渲染与历史节点稳定性。",
+"acceptanceCriteria": "extension\\scripts\\acceptance-long-session-memory.mjs",
+"TestResults": "PASS。已补齐 testcase 对象并执行 extension/scripts/acceptance-long-session-memory.mjs；Vitest 定向用例通过，验证长会话下 DOM 负载与增量更新行为。"
 },
 {
 "name": "高频 Tool-Call 事件的“节流”处理",
 "description": "**GIVEN**: 后端 AI 正在快速触发多个工具调用（例如：连续查询 10 个 ECU 状态，产生 10 个 `tool_call` 事件）。\r\n**WHEN**: 扩展后台监听到这些高频状态变更消息。\r\n**THEN**: 前端 UI 应通过“节流”或“防抖”机制更新“思考中”状态，避免每秒数十次的 DOM 变更导致浏览器 CPU 负载过高。",
 "type": "Acceptance Test",
-"Input": "",
-"acceptanceCriteria": "",
-"TestResults": ""
+"Input": "向 reasoning timeline 连续注入高频 tool_call / thinking 事件，验证 UI 仅以受控频率更新思考态与相关 DOM。",
+"acceptanceCriteria": "extension\\scripts\\acceptance-tool-call-throttle.mjs",
+"TestResults": "PASS。已补齐 testcase 对象并执行 extension/scripts/acceptance-tool-call-throttle.mjs；Vitest 定向用例通过，验证高频 tool-call 下的节流渲染行为。"
 },
 {
 "name": "人工追问事件（Question）的阻断性交互",
 "description": "**GIVEN**: Agent 输出流中下发了 `question` 类型事件，要求用户确认“是否继续执行高危漏洞补丁注入”。\r\n**WHEN**: 扩展监听到该事件并在 UI 上弹出追问表单。\r\n**THEN**: 扩展必须暂停当前的进度条显示，并在用户提交答案后，准确向 `POST /api/runs/{runId}/answers` 发送 `questionId` 和 `answer`。",
 "type": "Acceptance Test",
-"Input": "",
-"acceptanceCriteria": "",
-"TestResults": ""
+"Input": "模拟 question 事件进入 sidepanel controller，要求用户在阻断态回答问题，并检查 answers API 载荷。",
+"acceptanceCriteria": "extension\\scripts\\acceptance-question-blocking.mjs",
+"TestResults": "PASS。已补齐 testcase 对象并执行 extension/scripts/acceptance-question-blocking.mjs；定向测试通过，验证 questionId/answer 提交与阻断交互切换。"
 },
 {
 "name": "会话历史（History）的本地持久化读取",
 "description": "**GIVEN**: 用户曾在 `IndexedDB` 中保存了多条历史运行记录。\r\n**WHEN**: 用户在 Side Panel 中点击“历史会话”切换到一周前的某个 `runId`。\r\n**THEN**: 扩展应能即时（&lt;500ms）从本地加载完整的事件轨迹（Events）和最终结果，且 Markdown 渲染保持原样。",
 "type": "Acceptance Test",
-"Input": "",
-"acceptanceCriteria": "",
-"TestResults": ""
+"Input": "预写入 IndexedDB/history 存储中的历史 run 记录，再切换到旧 runId 并检查事件轨迹与 Markdown 恢复结果。",
+"acceptanceCriteria": "extension\\scripts\\acceptance-history-persistence.mjs",
+"TestResults": "PASS。已补齐 testcase 对象并执行 extension/scripts/acceptance-history-persistence.mjs；定向测试通过，验证历史 run 本地读取与渲染恢复。"
 },
 {
 "name": "诊断日志（Diagnostics）的导出完整性",
 "description": "**GIVEN**: 发生了一次渲染缓慢或 AI 返回错误的异常会话。\r\n**WHEN**: 用户在侧边栏点击“导出诊断日志”。\r\n**THEN**: 扩展应生成并下载一个 `.log` 文件，内容必须包含该次运行的原始事件流（Raw Events）、环境配置摘要及前端错误捕获堆栈（如有）。",
 "type": "Acceptance Test",
-"Input": "",
-"acceptanceCriteria": "",
-"TestResults": ""
+"Input": "准备包含 raw events、环境摘要与前端异常信息的诊断数据，然后触发 sidepanel 导出诊断日志动作。",
+"acceptanceCriteria": "extension\\scripts\\acceptance-diagnostics-export.mjs",
+"TestResults": "PASS。已补齐 testcase 对象并执行 extension/scripts/acceptance-diagnostics-export.mjs；定向测试通过，验证诊断导出内容完整性。"
 },
 {
 "name": "SSE 连接意外中断的容错处理",
 "description": "**GIVEN**: AI 正在流式输出时，`PYTHON_ADAPTER` 服务意外宕机导致 SSE 请求断开。\r\n**WHEN**: `CHROME_EXTENSION` 检测到请求非正常关闭。\r\n**THEN**: 扩展应停止“正在输入”的视觉动画，保留已接收到的部分内容，并向用户展示“连接中断，请重试”的警告提示，而不是持续转圈。",
 "type": "Acceptance Test",
-"Input": "",
-"acceptanceCriteria": "",
-"TestResults": ""
+"Input": "在流式输出过程中人为终止/中断 SSE 数据源，检查 sidepanel 对部分内容保留、动画停止与警告提示的回退行为。",
+"acceptanceCriteria": "extension\\scripts\\acceptance-sse-interruption.mjs",
+"TestResults": "PASS。已补齐 testcase 对象并执行 extension/scripts/acceptance-sse-interruption.mjs；定向测试通过，验证 SSE 异常中断时的容错显示。"
 },
 {
 "name": "域名授权与访问控制逻辑",
 "description": "**GIVEN**: 扩展设置中仅授权了 `*.company.com` 域名，用户当前位于 `www.google.com`。\r\n**WHEN**: 用户尝试通过快捷键唤起 AI 分析。\r\n**THEN**: 扩展应依据 `pageAccess.ts` 逻辑，提示“当前站点未授权采集”，并拒绝执行 `GET_ACTIVE_CONTEXT` 操作。",
 "type": "Acceptance Test",
-"Input": "",
-"acceptanceCriteria": "",
-"TestResults": ""
+"Input": "配置仅允许 company.com 域名后，在未授权站点触发 AI 入口与 GET_ACTIVE_CONTEXT 相关链路。",
+"acceptanceCriteria": "extension\\scripts\\acceptance-domain-access.mjs",
+"TestResults": "PASS。已补齐 testcase 对象并执行 extension/scripts/acceptance-domain-access.mjs；定向测试通过，验证 pageAccess 授权拦截与未授权提示。"
 }
 ]
 },

@@ -1,6 +1,10 @@
 import { assertToolTranscriptHidden, runSmokeAndLoadArtifacts } from "./real-smoke-assertions.mjs";
 
-const artifacts = await runSmokeAndLoadArtifacts();
+const artifacts = await runSmokeAndLoadArtifacts({
+  env: {
+    EXTENSION_SMOKE_PROMPT: "请用一句话总结当前风险。"
+  }
+});
 assertToolTranscriptHidden(artifacts);
 console.log(JSON.stringify({
   testcase: "TestCase2",
