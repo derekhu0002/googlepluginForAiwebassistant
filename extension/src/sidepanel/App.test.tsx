@@ -1700,7 +1700,7 @@ describe("side panel host permission request flow", () => {
     expect(container.textContent).toContain("运行");
   });
 
-  it("renders current main agent control and switches future-run preference only", async () => {
+  it("renders current main agent control for the configured single agent", async () => {
     const { runtimeSendMessage } = setupChromeStub({
       contexts: [createContext({ permissionGranted: true, message: "当前页面已命中规则，可直接采集。" })],
       getStateResponse: createAssistantState({
@@ -1720,21 +1720,7 @@ describe("side panel host permission request flow", () => {
 
     expect(container.textContent).toContain(`主 AGENT：${DEFAULT_MAIN_AGENT}`);
     expect(container.textContent).toContain(`后续新 run 将显式使用 ${DEFAULT_MAIN_AGENT}`);
-
-    const trigger = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes(`主 AGENT：${DEFAULT_MAIN_AGENT}`));
-    await act(async () => {
-      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flushUi();
-
-    const option = Array.from(container.querySelectorAll("button")).find((node) => node.textContent?.includes("ThreatIntelliganceCommander"));
-    await act(async () => {
-      option?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await flushUi();
-
-    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: "SET_MAIN_AGENT", payload: { selectedAgent: "ThreatIntelliganceCommander" } });
-    expect(container.textContent).toContain("当前 run 继续使用 TARA_analyst；切换只影响后续新 run。");
+    expect(runtimeSendMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: "SET_MAIN_AGENT" }));
   });
 
   it("shows the main agent menu in an overlay and closes after selection", async () => {
@@ -1765,15 +1751,13 @@ describe("side panel host permission request flow", () => {
 
     const menu = document.body.querySelector(".main-agent-menu");
     expect(menu).toBeTruthy();
-    expect(menu?.textContent).toContain("TARA_analyst");
-    expect(menu?.textContent).toContain("ThreatIntelliganceCommander");
-    expect(menu?.textContent).toContain("Xagent");
+    expect(menu?.textContent).toContain("ThreatIntelAnalyst");
 
     const options = Array.from(menu?.querySelectorAll("button") ?? []);
     expect(options).toHaveLength(MAIN_AGENTS.length);
 
     await act(async () => {
-      options[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      options[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flushUi();
 

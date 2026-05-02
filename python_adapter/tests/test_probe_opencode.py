@@ -15,7 +15,7 @@ def test_probe_accepts_json_health_payload() -> None:
 
 
 def test_probe_accepts_agent_catalog_payload() -> None:
-    payload = json.dumps({"agents": [{"id": "TARA_analyst"}]})
+    payload = json.dumps({"agents": [{"id": "ThreatIntelAnalyst"}]})
     assert is_valid_agent_response(payload) is True
 
 
@@ -80,7 +80,7 @@ def test_probe_main_accepts_health_and_agent_checks(monkeypatch, capsys) -> None
         if url == "http://opencode.test/global/health":
             return _FakeResponse(200, json.dumps({"status": "ok"}))
         if url == "http://opencode.test/agent?directory=%2Frepo&workspace=wk":
-            return _FakeResponse(200, json.dumps({"agents": [{"id": "TARA_analyst"}]}))
+            return _FakeResponse(200, json.dumps({"agents": [{"id": "ThreatIntelAnalyst"}]}))
         if url == "http://opencode.test/":
             return _FakeResponse(200, "root ok", "text/plain")
         raise AssertionError(f"unexpected url: {url}")

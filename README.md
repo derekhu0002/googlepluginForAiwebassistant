@@ -257,7 +257,7 @@ npm run build --workspace extension
 
 ### 发送后出现 `prompt_async failed` 或 `session.error`
 
-先确认远端 `GET /agent?directory=<repo>[&workspace=...]` 能返回合法 agent catalog，并且其中存在唯一 analyst alias：`TARA_Analyst`、`TARA_analyst`、`tara-analyst` 之一。
+先确认远端 `GET /agent?directory=<repo>[&workspace=...]` 能返回合法 agent catalog，并且其中能唯一解析当前主 AGENT `ThreatIntelAnalyst`；若历史状态仍保存旧值，adapter 也会把 `TARA_analyst` 一类旧别名兼容映射回该主 AGENT。
 
 当前 adapter 已不再读取本机 `.opencode/opencode.json` 或 `TARA_analyst.md` 作为 admission gate，而是以远端 `/agent` 的能力发现结果作为真源。如果真实事件或消息显示会话实际落到其他 agent，adapter 会直接报 mismatch。
 

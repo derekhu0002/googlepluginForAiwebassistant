@@ -1,48 +1,19 @@
 {
-  "defaultMainAgent": "TARA_analyst",
+  "defaultMainAgent": "ThreatIntelAnalyst",
   "mainAgents": [
     {
-      "id": "TARA_analyst",
-      "label": "TARA_analyst",
-      "description": "默认主 AGENT",
+      "id": "ThreatIntelAnalyst",
+      "label": "ThreatIntelAnalyst",
+      "description": "唯一主 AGENT",
       "remoteAliases": [
+        "ThreatIntelAnalyst",
+        "threatintelanalyst",
+        "threat_intel_analyst",
+        "threat-intel-analyst",
         "TARA_analyst",
         "TARA-analyst",
         "tara_analyst",
         "tara-analyst"
-      ]
-    },
-    {
-      "id": "ThreatIntelliganceCommander",
-      "label": "ThreatIntelliganceCommander",
-      "description": "可切换的备用主 AGENT",
-      "remoteAliases": [
-        "ThreatIntelliganceCommander",
-        "threatintelligancecommander",
-        "threat_intelligance_commander",
-        "threat-intelligance-commander"
-      ]
-    },
-    {
-      "id": "ThreatIntelAnalyst_test",
-      "label": "ThreatIntelAnalyst_test",
-      "description": "可切换的备用主 AGENT",
-      "remoteAliases": [
-        "ThreatIntelAnalyst_test",
-        "threatintelanalyst_test",
-        "threat_intel_analyst_test",
-        "threat-intel-analyst-test"
-      ]
-    },
-    {
-      "id": "ThreatIntelUnknownHuntPrimary",
-      "label": "ThreatIntelUnknownHuntPrimary",
-      "description": "可切换的备用主 AGENT",
-      "remoteAliases": [
-        "ThreatIntelUnknownHuntPrimary",
-        "threatintelunknownhuntprimary",
-        "threat_intel_unknown_hunt_primary",
-        "threat-intel-unknown-hunt-primary"
       ]
     }
   ]

@@ -11,7 +11,7 @@ from uuid import uuid4
 import httpx
 
 from .config import Settings
-from .main_agents import ALLOWED_MAIN_AGENTS, DEFAULT_MAIN_AGENT, REMOTE_AGENT_WHITELIST
+from .main_agents import ALLOWED_MAIN_AGENTS, DEFAULT_MAIN_AGENT, REMOTE_AGENT_WHITELIST, resolve_configured_main_agent_by_alias
 from .models import (
     MainAgent,
     NormalizedRunEvent,
@@ -150,6 +150,13 @@ class OpencodeAdapter:
         return agent_name.strip().lower().replace("-", "_")
 
     def _validate_requested_agent(self, selected_agent: str) -> MainAgent:
+        if selected_agent in ALLOWED_MAIN_AGENTS:
+            return selected_agent  # type: ignore[return-value]
+
+        resolved_agent = resolve_configured_main_agent_by_alias(selected_agent)
+        if resolved_agent is not None:
+            return resolved_agent
+
         if selected_agent not in ALLOWED_MAIN_AGENTS:
             raise RuntimeError(
                 "Requested main agent is not allowed: "

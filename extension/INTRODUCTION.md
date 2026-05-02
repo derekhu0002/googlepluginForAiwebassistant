@@ -169,12 +169,12 @@
 核心能力：
 
 - 扩展从 `config/main-agents.json` 读取主 Agent 目录。
-- 当前可见配置包括 `TARA_analyst`、`ThreatIntelliganceCommander`、`ThreatIntelAnalyst_test`。
+- 当前目录仅保留一个主 Agent：`ThreatIntelAnalyst`。
 - 每个 Agent 可配置多个远端别名，用于别名归一化。
 
 业务价值：
 
-- 允许在扩展 UI 内切换不同主分析代理，而不改动业务代码。
+- 通过共享配置统一前后端使用的主分析代理标识，并兼容历史别名映射。
 
 边界：
 

@@ -610,7 +610,7 @@ describe("background rule-driven capture flow", () => {
 
     const listenerRegistry: { handler?: (message: unknown, sender: unknown, sendResponse: (value: unknown) => void) => boolean } = {};
     const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-agent", sessionId: "ses-agent", selectedAgent: "ThreatIntelliganceCommander" } })
+      json: async () => ({ ok: true, data: { runId: "run-agent", sessionId: "ses-agent", selectedAgent: DEFAULT_MAIN_AGENT } })
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -648,19 +648,19 @@ describe("background rule-driven capture flow", () => {
     await import("./index");
 
     const setResponse = await new Promise<unknown>((resolve) => {
-      listenerRegistry.handler?.({ type: "SET_MAIN_AGENT", payload: { selectedAgent: "ThreatIntelliganceCommander" } }, {}, resolve);
+      listenerRegistry.handler?.({ type: "SET_MAIN_AGENT", payload: { selectedAgent: DEFAULT_MAIN_AGENT } }, {}, resolve);
     }) as { ok: boolean };
 
     expect(setResponse.ok).toBe(true);
 
     const startResponse = await new Promise<unknown>((resolve) => {
-      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", selectedAgent: "ThreatIntelliganceCommander", capturePageData: false } }, {}, resolve);
+      listenerRegistry.handler?.({ type: "START_RUN", payload: { prompt: "hello", selectedAgent: DEFAULT_MAIN_AGENT, capturePageData: false } }, {}, resolve);
     }) as { ok: boolean; data: { currentRun: { selectedAgent: string } } };
 
     expect(startResponse.ok).toBe(true);
-    expect(startResponse.data.currentRun.selectedAgent).toBe("ThreatIntelliganceCommander");
-    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({ selectedAgent: "ThreatIntelliganceCommander" });
-    expect((storageState["ai-web-assistant-state"] as { mainAgentPreference: string }).mainAgentPreference).toBe("ThreatIntelliganceCommander");
+    expect(startResponse.data.currentRun.selectedAgent).toBe(DEFAULT_MAIN_AGENT);
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({ selectedAgent: DEFAULT_MAIN_AGENT });
+    expect((storageState["ai-web-assistant-state"] as { mainAgentPreference: string }).mainAgentPreference).toBe(DEFAULT_MAIN_AGENT);
   });
 
   it("clears active session when CLEAR_RESULT is triggered", async () => {

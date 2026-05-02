@@ -48,7 +48,7 @@ describe("streaming api client", () => {
     vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-1", sessionId: "ses-1", selectedAgent: "TARA_analyst" } })
+      json: async () => ({ ok: true, data: { runId: "run-1", sessionId: "ses-1", selectedAgent: "ThreatIntelAnalyst" } })
     });
     global.fetch = fetchMock as typeof fetch;
 
@@ -61,9 +61,9 @@ describe("streaming api client", () => {
       selectedText: "picked",
       software_version: "v1",
       selected_sr: "SR-1"
-    }, { username: "alice", usernameSource: "dom_text" }, "TARA_analyst", "ses-0");
+    }, { username: "alice", usernameSource: "dom_text" }, "ThreatIntelAnalyst", "ses-0");
 
-    expect(result).toEqual({ ok: true, data: { runId: "run-1", sessionId: "ses-1", selectedAgent: "TARA_analyst" } });
+    expect(result).toEqual({ ok: true, data: { runId: "run-1", sessionId: "ses-1", selectedAgent: "ThreatIntelAnalyst" } });
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8030/api/runs",
       expect.objectContaining({ method: "POST" })
@@ -71,7 +71,7 @@ describe("streaming api client", () => {
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
       prompt: "hello",
       sessionId: "ses-0",
-      selectedAgent: "TARA_analyst",
+      selectedAgent: "ThreatIntelAnalyst",
       capture: expect.objectContaining({
         pageTitle: "Example",
         selected_sr: "SR-1"
@@ -105,18 +105,18 @@ describe("streaming api client", () => {
     vi.stubEnv("VITE_API_BASE_URL", "http://localhost:8030");
 
     const fetchMock = vi.fn().mockResolvedValue({
-      json: async () => ({ ok: true, data: { runId: "run-no-capture", selectedAgent: "ThreatIntelliganceCommander" } })
+      json: async () => ({ ok: true, data: { runId: "run-no-capture", selectedAgent: "ThreatIntelAnalyst" } })
     });
     global.fetch = fetchMock as typeof fetch;
 
     const { startRun } = await import("./api");
-    const result = await startRun("hello", null, { username: "unknown", usernameSource: "unresolved_login_state" }, "ThreatIntelliganceCommander");
+    const result = await startRun("hello", null, { username: "unknown", usernameSource: "unresolved_login_state" }, "ThreatIntelAnalyst");
 
-    expect(result).toEqual({ ok: true, data: { runId: "run-no-capture", selectedAgent: "ThreatIntelliganceCommander" } });
+    expect(result).toEqual({ ok: true, data: { runId: "run-no-capture", selectedAgent: "ThreatIntelAnalyst" } });
     const requestBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
     expect(requestBody).toMatchObject({
       prompt: "hello",
-      selectedAgent: "ThreatIntelliganceCommander",
+      selectedAgent: "ThreatIntelAnalyst",
       context: {
         username: "unknown",
         usernameSource: "unresolved_login_state"

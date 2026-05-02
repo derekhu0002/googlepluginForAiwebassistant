@@ -10,10 +10,15 @@ from python_adapter.app.models import QuestionAnswerRequest, RunContext, RunStar
 from python_adapter.app.opencode_adapter import OpencodeAdapter, RunNotFoundError
 
 
+PRIMARY_AGENT = "ThreatIntelAnalyst"
+PRIMARY_AGENT_LEGACY_ALIAS = "TARA_analyst"
+PRIMARY_AGENT_KEBAB_ALIAS = "threat-intel-analyst"
+
+
 def create_request() -> RunStartRequest:
     return RunStartRequest(
         prompt="hello from adapter",
-        selectedAgent="TARA_analyst",
+        selectedAgent=PRIMARY_AGENT,
         capture={
             "pageTitle": "Example",
             "pageUrl": "https://example.com",
@@ -34,7 +39,7 @@ def create_request() -> RunStartRequest:
 def create_request_without_capture() -> RunStartRequest:
     return RunStartRequest(
         prompt="hello from adapter",
-        selectedAgent="TARA_analyst",
+        selectedAgent=PRIMARY_AGENT,
         context=RunContext(
             source="chrome-extension",
             capturedAt="2026-04-01T00:00:00.000Z",
@@ -730,12 +735,12 @@ def test_tool_call_messages_are_simplified_for_users() -> None:
 def test_remote_agent_alias_is_canonicalized_from_supported_catalog() -> None:
     async def scenario() -> None:
         adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=lambda _timeout: FakeAsyncClient([
-            ("GET", "/agent", make_agent_catalog_response("tara-analyst", "other_agent")),
+            ("GET", "/agent", make_agent_catalog_response(PRIMARY_AGENT_KEBAB_ALIAS, "other_agent")),
         ]))
 
-        selected = await adapter._discover_canonical_remote_agent("TARA_analyst")
+        selected = await adapter._discover_canonical_remote_agent(PRIMARY_AGENT)
 
-        assert selected == "tara-analyst"
+        assert selected == PRIMARY_AGENT_KEBAB_ALIAS
 
     anyio.run(scenario)
 
@@ -743,11 +748,11 @@ def test_remote_agent_alias_is_canonicalized_from_supported_catalog() -> None:
 def test_remote_agent_discovery_rejects_ambiguous_alias_matches() -> None:
     async def scenario() -> None:
         adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=lambda _timeout: FakeAsyncClient([
-            ("GET", "/agent", make_agent_catalog_response("TARA_Analyst", "tara-analyst")),
+            ("GET", "/agent", make_agent_catalog_response(PRIMARY_AGENT, PRIMARY_AGENT_KEBAB_ALIAS)),
         ]))
 
         with pytest.raises(RuntimeError, match="ambiguous requested agent aliases"):
-            await adapter._discover_canonical_remote_agent("TARA_analyst")
+            await adapter._discover_canonical_remote_agent(PRIMARY_AGENT)
 
     anyio.run(scenario)
 
@@ -759,7 +764,7 @@ def test_remote_agent_discovery_rejects_missing_target_agent() -> None:
         ]))
 
         with pytest.raises(RuntimeError, match="requested agent is unavailable in remote catalog"):
-            await adapter._discover_canonical_remote_agent("TARA_analyst")
+            await adapter._discover_canonical_remote_agent(PRIMARY_AGENT)
 
     anyio.run(scenario)
 
@@ -771,7 +776,7 @@ def test_remote_agent_discovery_rejects_invalid_payload() -> None:
         ]))
 
         with pytest.raises(RuntimeError, match="invalid /agent response payload"):
-            await adapter._discover_canonical_remote_agent("TARA_analyst")
+            await adapter._discover_canonical_remote_agent(PRIMARY_AGENT)
 
     anyio.run(scenario)
 
@@ -801,26 +806,19 @@ def test_start_run_raises_when_selected_agent_is_not_whitelisted() -> None:
     anyio.run(scenario)
 
 
-def test_remote_agent_discovery_resolves_second_allowed_agent_without_ui_catalog_expansion() -> None:
-    async def scenario() -> None:
-        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=lambda _timeout: FakeAsyncClient([
-            ("GET", "/agent", make_agent_catalog_response("ThreatIntelliganceCommander", "other_agent")),
-        ]))
+def test_requested_agent_validation_accepts_legacy_alias_for_single_agent_catalog() -> None:
+    adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"))
 
-        selected = await adapter._discover_canonical_remote_agent("ThreatIntelliganceCommander")
-
-        assert selected == "ThreatIntelliganceCommander"
-
-    anyio.run(scenario)
+    assert adapter._validate_requested_agent(PRIMARY_AGENT_LEGACY_ALIAS) == PRIMARY_AGENT
 
 
 def test_start_run_fails_explicitly_when_requested_agent_not_supported_by_remote() -> None:
     async def scenario() -> None:
         adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=lambda _timeout: FakeAsyncClient([
-            ("GET", "/agent", make_agent_catalog_response("TARA_analyst")),
+            ("GET", "/agent", make_agent_catalog_response("other_agent")),
         ]))
 
-        request = create_request().model_copy(update={"selectedAgent": "ThreatIntelliganceCommander"})
+        request = create_request().model_copy(update={"selectedAgent": PRIMARY_AGENT})
 
         with pytest.raises(RuntimeError, match="requested agent is unavailable in remote catalog"):
             await adapter.start_run(request)
@@ -841,7 +839,7 @@ def test_real_contract_allows_session_payload_without_agent_confirmation() -> No
 
     clients: list[FakeAsyncClient] = []
     response_sets = [
-        [("GET", "/agent", make_agent_catalog_response("TARA_Analyst"))],
+        [("GET", "/agent", make_agent_catalog_response(PRIMARY_AGENT_LEGACY_ALIAS))],
         [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
         [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
     ]
@@ -859,7 +857,7 @@ def test_real_contract_allows_session_payload_without_agent_confirmation() -> No
         assert clients[0].calls == [("GET", "/agent", {"directory": adapter.settings.opencode_directory}, None)]
         assert clients[1].calls == [("POST", "/session", {"directory": adapter.settings.opencode_directory}, {"title": "SR SR-1"})]
         assert clients[2].calls[0][1] == "/session/ses-1/prompt_async"
-        assert clients[2].calls[0][3]["agent"] == "TARA_Analyst"
+        assert clients[2].calls[0][3]["agent"] == PRIMARY_AGENT_LEGACY_ALIAS
         assert clients[2].calls[0][3]["parts"] == [
             {"type": "text", "text": "hello from adapter"},
             {"type": "text", "text": "[capture]\n{\"pageTitle\": \"Example\", \"pageUrl\": \"https://example.com\", \"software_version\": \"v1.0.0\", \"selected_sr\": \"SR-1\"}"},

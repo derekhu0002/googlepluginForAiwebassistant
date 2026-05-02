@@ -57,9 +57,8 @@ function renderTimeline(container: HTMLDivElement, model: TranscriptReadModel, r
         </label>
         <label>
           <span>agent</span>
-          <select aria-label="main-agent-picker" defaultValue="TARA_analyst">
-            <option value="TARA_analyst">TARA_analyst</option>
-            <option value="ThreatIntelSecOps">ThreatIntelSecOps</option>
+          <select aria-label="main-agent-picker" defaultValue="ThreatIntelAnalyst">
+            <option value="ThreatIntelAnalyst">ThreatIntelAnalyst</option>
           </select>
         </label>
         <ReasoningTimeline

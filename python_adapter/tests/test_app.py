@@ -11,6 +11,7 @@ from python_adapter.app.main import app
 
 
 client = TestClient(app)
+PRIMARY_AGENT = "ThreatIntelAnalyst"
 
 
 # @ArchitectureID: ELM-FUNC-PY-ACCEPT-CAPTURE-RUNSTART
@@ -52,7 +53,7 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
 
     async def fake_start_run(request):
         captured_request["request"] = request
-        main.adapter._runs["run-1"] = {"session_id": "ses-1", "selected_agent": "TARA_analyst"}
+        main.adapter._runs["run-1"] = {"session_id": "ses-1", "selected_agent": PRIMARY_AGENT}
         return "run-1"
 
     monkeypatch.setattr(main.adapter, "start_run", fake_start_run)
@@ -63,7 +64,7 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
         "/api/runs",
         json={
             "prompt": "hello",
-            "selectedAgent": "TARA_analyst",
+            "selectedAgent": PRIMARY_AGENT,
             "sessionId": "ses-1",
             "capture": {
                 "pageTitle": "Example",
@@ -84,7 +85,7 @@ def test_start_run_and_answer_flow(monkeypatch) -> None:
     assert response.status_code == 200
     run_id = response.json()["data"]["runId"]
     assert response.json()["data"]["sessionId"] == "ses-1"
-    assert response.json()["data"]["selectedAgent"] == "TARA_analyst"
+    assert response.json()["data"]["selectedAgent"] == PRIMARY_AGENT
     request = captured_request["request"]
     assert request.prompt == "hello"
     assert request.capture["pageTitle"] == "Example"
@@ -148,7 +149,7 @@ def test_start_run_returns_active_session_id(monkeypatch) -> None:
         "/api/runs",
         json={
             "prompt": "hello",
-            "selectedAgent": "TARA_analyst",
+            "selectedAgent": PRIMARY_AGENT,
             "sessionId": "ses-active",
             "capture": {},
             "context": {
@@ -161,17 +162,17 @@ def test_start_run_returns_active_session_id(monkeypatch) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["data"] == {"runId": "run-1", "sessionId": "ses-active", "selectedAgent": "TARA_analyst"}
+    assert response.json()["data"] == {"runId": "run-1", "sessionId": "ses-active", "selectedAgent": PRIMARY_AGENT}
 
 
 def test_start_run_surfaces_session_agent_enforcement_error(monkeypatch) -> None:
-    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote canonical agent mismatch: remote session reported agent 'other_agent', expected canonical remote agent 'TARA_analyst'")))
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote canonical agent mismatch: remote session reported agent 'other_agent', expected canonical remote agent 'ThreatIntelAnalyst'")))
 
     response = client.post(
         "/api/runs",
         json={
             "prompt": "hello",
-            "selectedAgent": "TARA_analyst",
+            "selectedAgent": PRIMARY_AGENT,
             "capture": {
                 "pageTitle": "Example",
                 "pageUrl": "https://example.com",
@@ -216,13 +217,13 @@ def test_health_exposes_runtime_defaults(monkeypatch) -> None:
 
 
 def test_start_run_returns_explicit_error_when_remote_agent_discovery_fails(monkeypatch) -> None:
-    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote /agent discovery failed: requested agent is unavailable in remote catalog; requested='TARA_analyst'; got []")))
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote /agent discovery failed: requested agent is unavailable in remote catalog; requested='ThreatIntelAnalyst'; got []")))
 
     response = client.post(
         "/api/runs",
         json={
             "prompt": "hello",
-            "selectedAgent": "TARA_analyst",
+            "selectedAgent": PRIMARY_AGENT,
             "capture": {
                 "pageTitle": "Example",
                 "pageUrl": "https://example.com",
@@ -245,7 +246,7 @@ def test_start_run_returns_explicit_error_when_remote_agent_discovery_fails(monk
     assert payload["ok"] is False
     assert payload["error"]["code"] == "ANALYSIS_ERROR"
     assert "远端 /agent 未提供用户所选主 AGENT" in payload["error"]["message"]
-    assert "requested='TARA_analyst'" in payload["error"]["message"]
+    assert "requested='ThreatIntelAnalyst'" in payload["error"]["message"]
 
 
 def test_start_run_keeps_unexpected_runtime_errors_as_internal_server_error(monkeypatch) -> None:
@@ -255,7 +256,7 @@ def test_start_run_keeps_unexpected_runtime_errors_as_internal_server_error(monk
         "/api/runs",
         json={
             "prompt": "hello",
-            "selectedAgent": "TARA_analyst",
+            "selectedAgent": PRIMARY_AGENT,
             "capture": {
                 "pageTitle": "Example",
                 "pageUrl": "https://example.com",
@@ -284,7 +285,7 @@ def test_start_run_keeps_unexpected_runtime_errors_as_internal_server_error(monk
 
 
 def test_start_run_rejects_disallowed_selected_agent(monkeypatch) -> None:
-    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Requested main agent is not allowed: 'OtherAgent'; allowed=['TARA_analyst', 'ThreatIntelliganceCommander']")))
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Requested main agent is not allowed: 'OtherAgent'; allowed=['ThreatIntelAnalyst']")))
 
     response = client.post(
         "/api/runs",
@@ -306,13 +307,13 @@ def test_start_run_rejects_disallowed_selected_agent(monkeypatch) -> None:
 
 
 def test_start_run_rejects_when_requested_agent_missing_from_remote_catalog(monkeypatch) -> None:
-    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote /agent discovery failed: requested agent is unavailable in remote catalog; requested='ThreatIntelliganceCommander'; got ['TARA_analyst']")))
+    monkeypatch.setattr(main.adapter, "start_run", AsyncMock(side_effect=RuntimeError("Remote /agent discovery failed: requested agent is unavailable in remote catalog; requested='ThreatIntelAnalyst'; got ['other_agent']")))
 
     response = client.post(
         "/api/runs",
         json={
             "prompt": "hello",
-            "selectedAgent": "ThreatIntelliganceCommander",
+            "selectedAgent": PRIMARY_AGENT,
             "capture": {},
             "context": {
                 "source": "chrome-extension",

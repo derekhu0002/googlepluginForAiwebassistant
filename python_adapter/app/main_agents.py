@@ -73,3 +73,12 @@ REMOTE_AGENT_WHITELIST: dict[MainAgent, frozenset[str]] = {
     str(agent["id"]): frozenset(_normalize_main_agent_alias(alias) for alias in list(agent["remoteAliases"]))
     for agent in MAIN_AGENT_CONFIGS
 }
+CONFIGURED_MAIN_AGENT_BY_ALIAS: dict[str, MainAgent] = {
+    normalized_alias: agent_id
+    for agent_id, aliases in REMOTE_AGENT_WHITELIST.items()
+    for normalized_alias in aliases
+}
+
+
+def resolve_configured_main_agent_by_alias(alias: str) -> MainAgent | None:
+    return CONFIGURED_MAIN_AGENT_BY_ALIAS.get(_normalize_main_agent_alias(alias))
