@@ -4,7 +4,7 @@
     {
       "id": "ThreatIntelAnalyst",
       "label": "ThreatIntelAnalyst",
-      "description": "唯一主 AGENT",
+      "description": "威胁情报分析 AGENT",
       "remoteAliases": [
         "ThreatIntelAnalyst",
         "threatintelanalyst",
@@ -14,6 +14,21 @@
         "TARA-analyst",
         "tara_analyst",
         "tara-analyst"
+      ]
+    },
+    {
+      "id": "ThreatIntelAttributionAnalyst",
+      "label": "ThreatIntelAttributionAnalyst",
+      "description": "威胁溯源 AGENT",
+      "remoteAliases": [
+        "ThreatIntelAttributionAnalyst",
+        "threatintelattributionanalyst",
+        "threat_intel_attribution_analyst",
+        "threat-intel-attribution-analyst",
+        "TARA_attribution_analyst",
+        "TARA-attribution-analyst",
+        "tara_attribution_analyst",
+        "tara-attribution-analyst"
       ]
     }
   ]
