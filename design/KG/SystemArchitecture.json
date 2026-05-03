@@ -1,445 +1,445 @@
 {
-"name": "System",
-"description": "",
-"elements": [
-{
-"id": "1207",
-"name": "StrategyLayerAndMotivationAspect",
-"type": "ArchiMate_Assessment",
-"browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect",
-"subdiagram_views": [
-{
-"view_id": "159",
-"view_name": "StrategyLayerAndMotivationAspect"
-}
-]
-},
-{
-"id": "1208",
-"name": "BusinessLayer",
-"type": "ArchiMate_Assessment",
-"browser_path": "Model/System/BusinessLayer/BusinessLayer",
-"subdiagram_views": [
-{
-"view_id": "160",
-"view_name": "BusinessLayer"
-}
-]
-},
-{
-"id": "1209",
-"name": "ApplicationLayer",
-"type": "ArchiMate_Assessment",
-"browser_path": "Model/System/ApplicationLayer/ApplicationLayer",
-"subdiagram_views": [
-{
-"view_id": "161",
-"view_name": "ApplicationLayer"
-}
-]
-},
-{
-"id": "1210",
-"name": "TechnologyLayer",
-"type": "ArchiMate_Assessment",
-"browser_path": "Model/System/TechnologyLayer/TechnologyLayer",
-"subdiagram_views": [
-{
-"view_id": "162",
-"view_name": "TechnologyLayer"
-}
-]
-},
-{
-"id": "2242",
-"name": "CHROME EXTENSION 正常显示",
-"type": "ArchiMate_ApplicationFunction",
-"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/CHROME EXTENSION/CHROME EXTENSION 正常显示",
-"testcases": [
-{
-"name": "TestCase1",
-"description": "真实端到端 SMOKE：使用精确 prompt“请总结当前 SR 的风险与建议下一步动作。”，校验界面显示消息与 OPENCODE SERVER 接收消息一致，不重复、不遗漏、不乱序；同时该 smoke 必须继续复用 extension/scripts/real-extension-smoke.mjs 与 extension/scripts/real-smoke-assertions.mjs 产出的 assistant message sequence comparison、status checkpoints、visible transcript artifact，作为流式渲染、状态收敛、summary 完成态与消息序列比较的系统级护栏，而不是只验证最终页面出现了一段文本。\\r\\n\\r\\n\\\"RuntimeView\\\": {\\r\\n\\\"coveredComponents\\\": [\\r\\n\\\"test_site 页面\\\",\\r\\n\\\"extension content script / 浮动 AI 入口\\\",\\r\\n\\\"embedded side panel iframe\\\",\\r\\n\\\"sidepanel App + useSidepanelController\\\",\\r\\n\\\"reasoningTimeline / reasoningTimelineView\\\",\\r\\n\\\"extension shared api SSE 客户端\\\",\\r\\n\\\"python_adapter FastAPI\\\",\\r\\n\\\"opencode serve\\\",\\r\\n\\\"python_adapter/logs/invocations.jsonl\\\",\\r\\n\\\"Playwright smoke driver\\\"\\r\\n],\\r\\n\\\"interactionFlow\\\": [\\r\\n\\\"Playwright smoke driver 打开 test_site 页面并通过 content script 唤起 embedded side panel iframe\\\",\\r\\n\\\"side panel 通过 shared api 向 python_adapter POST /api/runs 发起 run，并建立 /api/runs/{runId}/events 或 raw events SSE 连接\\\",\\r\\n\\\"python_adapter 创建或复用 opencode session，转发 prompt 到 opencode serve，并持续代理上游流式事件\\\",\\r\\n\\\"sidepanel controller 接收 adapter 事件，投影为 transcriptReadModel，再由 reasoningTimelineView 渲染主舞台消息\\\",\\r\\n\\\"smoke 脚本同时读取 python_adapter/logs/invocations.jsonl、extension state、comparison artifact 和最终可见 transcript，校验最终可见 assistant 消息与 canonical state 收敛一致，并保留 in-progress / completed checkpoint 以发现性能优化引入的回归\\\"\\r\\n]}",
-"type": "Acceptance Test",
-"Input": "以 `extension\\\\scripts\\\\real-extension-smoke.mjs` 为真实系统级入口，复用 `extension\\\\scripts\\\\real-smoke-assertions.mjs` 的 assistant message sequence comparison、status checkpoints 与 visible transcript artifact，作为性能优化后最外层护栏。",
-"acceptanceCriteria": "extension\\scripts\\real-extension-smoke.mjs",
-"TestResults": ""
-},
-{
-"name": "TestCase2",
-"description": "会话界面隐藏 tool transcript：验证主舞台 transcript 不显示 transcript-part-tool 类型消息，仅保留用户消息、assistant 正文和 summary；该用例属于显示与可见 transcript 收敛能力，不属于页面采集发送能力。\\r\\n\\r\\n\"RuntimeView\": {\\r\\n\"coveredComponents\": [\\r\\n\"Playwright smoke driver\",\\r\\n\"embedded side panel iframe\",\\r\\n\"sidepanel App + useSidepanelController\",\\r\\n\"opencodeRawEventProjector / run event state\",\\r\\n\"reasoningTimeline\",\\r\\n\"MainStage\",\\r\\n\"reasoningTimelineView\",\\r\\n\"python_adapter FastAPI\",\\r\\n\"opencode serve\"\\r\\n],\\r\\n\"interactionFlow\": [\\r\\n\"真实 smoke 触发一次带工具调用和 assistant 输出的 run，adapter 将 opencode 事件流转发给 sidepanel\",\\r\\n\"controller 和 projector 将 reasoning、tool_call、assistant_text 等事件归一化为 transcriptReadModel\",\\r\\n\"reasoningTimeline 在 includeToolCallParts=false 的主舞台视图中仅保留 prompt、assistant 正文和 summary，不把 tool transcript 放入最终可见 transcript\",\\r\\n\"MainStage / reasoningTimelineView 渲染最终主舞台 DOM，smoke 只从可见 transcript 采样 part kind，确认 tool part 没有泄漏到用户会话界面\"\\r\\n]\\r\\n}",
-"type": "Acceptance Test",
-"Input": "复用 `extension\\scripts\\acceptance-testcase2.mjs` 作为真实 smoke wrapper，并继续依赖 `extension\\scripts\\real-smoke-assertions.mjs` 对 visible transcript part kind 与 sequence comparison 的断言。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-testcase2.mjs",
-"TestResults": ""
-},
-{
-"name": "TestCase3",
-"description": "完成态显示正确：1、会话开始时一直到会话结束前页面的 transcript-part-summary-copy 状态都应该是“进行中”，且“新会话”按钮不可点击，且对话框不可发起新消息；2、会话结束后 transcript-part-summary-copy 需要显示“已完成”，且“新会话”按钮可点击，且对话框可发起新消息；3、该用例属于显示收敛与交互控件启停能力，必须在真实 SMOKE 环境测试，不可 MOCK。\\r\\n\\r\\n\"RuntimeView\": {\\r\\n\"coveredComponents\": [\\r\\n\"Playwright smoke driver\",\\r\\n\"embedded side panel iframe\",\\r\\n\"sidepanel App + useSidepanelController\",\\r\\n\"currentRun / stream UI state\",\\r\\n\"reasoningTimeline summary part\",\\r\\n\"发送按钮与输入框\",\\r\\n\"新会话按钮\",\\r\\n\"python_adapter FastAPI\",\\r\\n\"opencode serve\"\\r\\n],\\r\\n\"interactionFlow\": [\\r\\n\"真实 smoke 发起 run 后，sidepanel controller 根据 adapter 流式事件驱动 currentRun、stream 和 transcript summary 的进行中状态\",\\r\\n\"run 进行中阶段，reasoningTimeline summary copy 呈现进行中，同时发送按钮与新会话按钮被禁用，避免会话尚未收敛时再次发起交互\",\\r\\n\"当 adapter 侧出现 terminal evidence 且 transcript 收敛后，UI summary 切换为已完成，发送按钮和新会话按钮重新可用\",\\r\\n\"smoke 脚本在 in-progress 和 completed 两个 checkpoint 分别采样 summary 文案、按钮 disabled 状态和最终 transcript，以验证完整状态转换链路\"\\r\\n]\\r\\n}",
-"type": "Acceptance Test",
-"Input": "复用 `extension\\scripts\\acceptance-testcase3.mjs` 作为真实 smoke wrapper，要求保留 in-progress 与 completed 两个 checkpoint 的 UI 状态采样。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-testcase3.mjs",
-"TestResults": ""
-},
-{
-"name": "从 streaming 降级态收敛到最终 Markdown 后，语义与交互不变",
-"description": "Given：assistant 消息在 streaming 阶段经历了降级渲染。When：run 进入稳定或终态并切换为完整 Markdown 渲染。Then：最终 transcript 的文本顺序、消息分组、copy、feedback、summary 收敛状态必须与 canonical transcript 一致；不得出现重复追加、内容回滚或消息拆分错误。测试环境要求：最小可运行环境为 extension Vitest + jsdom sidepanel transcript path；测试必须经过 opencode raw event projector、stable transcript projection 与 ReasoningTimeline 渲染链路，不允许只比较字符串拼接结果。",
-"type": "Acceptance Test",
-"Input": "以未闭合代码块 delta、part.updated 文本快照与 terminal result 组成单轮 run，验证 streaming 降级态到最终 Markdown 的单消息收敛、无重复 part、无顺序回滚。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-streaming-markdown-convergence.mjs",
-"TestResults": ""
-},
-{
-"name": "最终大 Markdown 终态保真",
-"description": "Given：assistant 最终返回大体量 Markdown，包含 tables、code fences、lists、headings、block quotes、inline code 和 links。When：run 完成后在主舞台展示最终 assistant 消息。Then：这些结构必须正确渲染；表格必须可横向滚动且不破坏纵向会话滚动；raw HTML 继续保持不支持并按现有策略处理。测试环境要求：最小可运行环境为 extension Vitest + jsdom；必须走真实 ReasoningTimeline Markdown 渲染路径，不允许 mock ReactMarkdown。",
-"type": "Acceptance Test",
-"Input": "构造包含 heading、blockquote、list、table、code fence、inline code、link 与 raw HTML 字面量的大 Markdown result，验证主舞台 DOM 结构与 raw HTML 保守策略。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-final-markdown-fidelity.mjs",
-"TestResults": ""
-}
-]
-},
-{
-"id": "2243",
-"name": "扩展可正常抓取页面内容并发送到PROMPT",
-"type": "ArchiMate_ApplicationFunction",
-"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/CHROME EXTENSION/扩展可正常抓取页面内容并发送到PROMPT",
-"testcases": [
-{
-"name": "TestCase4",
-"description": "扩展可见采集上下文的真实端到端用例，不允许 mock 页面采集、权限链路或 run 主链路：用户先在扩展侧执行页面采集，再发送问题后，主舞台 transcript 必须额外出现一条用户侧 capture 摘要，而不只是 prompt 与 assistant 回答。该摘要必须展示 selected_sr、software_version、pageTitle、pageUrl 等已采集字段；同时发送动作本身不能再次触发页面采集，而应复用上一次已采集字段进入本轮 run，确保主会话界面中显示的 capture 内容就是本次真实发送携带的上下文；该用例继续以 extension/scripts/acceptance-testcase4.mjs 为真实 smoke wrapper。\\r\\n\\r\\n\\\"RuntimeView\\\": {\\r\\n\\\"coveredComponents\\\": [\\r\\n\\\"Playwright smoke driver\\\",\\r\\n\\\"extension sidepanel Composer / 采集页面按钮\\\",\\r\\n\\\"background START_RUN orchestration\\\",\\r\\n\\\"stored capturedFields state\\\",\\r\\n\\\"RunRecord capture metadata\\\",\\r\\n\\\"sidepanel App + useSidepanelController\\\",\\r\\n\\\"reasoningTimeline / reasoningTimelineView\\\",\\r\\n\\\"embedded side panel iframe\\\",\\r\\n\\\"python_adapter FastAPI\\\",\\r\\n\\\"opencode serve\\\"\\r\\n],\\r\\n\\\"interactionFlow\\\": [\\r\\n\\\"测试入口脚本先为 127.0.0.1 页面自动写入可命中的规则，并在 sidepanel 中完成当前域名授权，再触发页面采集\\\",\\r\\n\\\"真实 smoke 在 embedded side panel 中点击采集页面，等待 capturedFields 写入扩展状态\\\",\\r\\n\\\"随后用户点击发送消息，background 不重新抓取页面，但复用已存在 capturedFields 组装本轮 run request 与 RunRecord\\\",\\r\\n\\\"sidepanel controller 将 run 上的 capture metadata 投影成主舞台 transcript 中的一条用户 capture part，并与 prompt、assistant 输出、summary 一起渲染\\\",\\r\\n\\\"真实 smoke 从最终可见 transcript 采样 data-part-kind，确认 capture part 存在且字段值完整，并校验 currentRun 中记录的是同一组 capture 字段\\\"\\r\\n]\\r\\n}",
-"type": "Acceptance Test",
-"Input": "用户在 test_site 页面先点击一次采集页面，得到 selected_sr、software_version、pageTitle、pageUrl 等字段；随后在同一扩展会话中发送分析问题。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-testcase4.mjs",
-"TestResults": ""
-}
-]
-},
-{
-"id": "2253",
-"name": "PYTHON ADAPTER",
-"type": "ArchiMate_ApplicationComponent",
-"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/PYTHON ADAPTER",
-"attributes": [
-{
-"name": "INTRODUCTION",
-"description": "D:\\Projects\\googlepluginForAiwebassistant\\python_adapter\\INTRODUCTION.md"
-}
-],
-"testcases": [
-{
-"name": "Adapter run-answer-raw-stream 契约闭环",
-"description": "验证 python adapter 在 run 主链路中的真实契约编排：POST /api/runs 接收 capture/context 与 selectedAgent，创建或复用 session；GET /api/runs/{runId}/events 输出 thinking / question 等归一化事件；POST /api/runs/{runId}/answers 继续回答阻断问题；GET /api/runs/{runId}/events/raw 输出上游 raw envelope。该用例属于 adapter 组件边界的 integration/system 证据，不直接替代 extension 侧 acceptance。",
-"type": "Integration Test",
-"Input": "复用 `python_adapter/tests/test_app.py` 中的 TestClient 场景，覆盖 start_run、events、answers、raw events 四条 HTTP 边界。",
-"acceptanceCriteria": "python_adapter/tests/test_app.py",
-"TestResults": ""
-},
-{
-"name": "Adapter 对 opencode session contract 与 agent 约束保持一致",
-"description": "验证 python adapter 对远端 opencode contract 的适配不漂移：start_run 必须把 capture/context 打包进 prompt_async；question reply 必须调用远端 question/reply；session message 若仅有 reasoning 不得误当最终 answer；agent discovery 与 canonical agent mismatch 必须显式报错。该用例为 adapter 与远端协议的 integration guard。",
-"type": "Integration Test",
-"Input": "复用 `python_adapter/tests/test_opencode_adapter.py` 中的 fake httpx client 契约测试，覆盖 /agent、/session、/session/{id}/prompt_async、/global/event、/question/{id}/reply、/session/{id}/message。",
-"acceptanceCriteria": "python_adapter/tests/test_opencode_adapter.py",
-"TestResults": ""
-}
-]
-},
-{
-"id": "2254",
-"name": "CHROME EXTENSION",
-"type": "ArchiMate_ApplicationComponent",
-"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/CHROME EXTENSION",
-"testcases": [
-{
-"name": "流式消息渲染的 UI 线程隔离 (防止卡死)",
-"description": "**GIVEN**: Side Panel 已连接到 `PYTHON_ADAPTER`，并开始接收高频的 SSE 流式 `thinking` / `result` 事件（模拟 AI 极速吐字）。\\r\\n**WHEN**: 在消息持续滚动渲染的同时，用户尝试在输入框内快速输入文字，或在 Side Panel 内点击切换“主 Agent”。\\r\\n**THEN**: 输入框字符出现不应有可感知延迟，下拉菜单响应应即时，UI 帧率（FPS）应保持在 50+；并且该用例必须走真实 sidepanel transcript 渲染路径，不允许通过 mock `ReactMarkdown`、跳过 `reasoningTimelineView` 或直接断言字符串拼接来伪造通过。",
-"type": "Acceptance Test",
-"Input": "复用 `extension\\\\src\\\\sidepanel\\\\missingCriteria.acceptance.test.tsx` 与 `extension\\\\scripts\\\\acceptance-ui-thread-isolation.mjs` 作为最小入口：连续注入高频 assistant delta 事件，同时驱动 textarea 输入与主 Agent 下拉切换。后续应扩展到 `extension\\\\scripts\\\\real-extension-smoke.mjs`，在真实浏览器 sidepanel 中采样输入响应、主 Agent 切换和主舞台可见 transcript。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-ui-thread-isolation.mjs",
-"TestResults": ""
-},
-{
-"name": "大数据量 Markdown 解析性能基准",
-"description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-large-markdown-performance.mjs。当前入口实际只包装仓内 Vitest 切片验证，尚不能独立证明真实浏览器或真实 sidepanel 下的大 Markdown 验收闭环。**GIVEN**: AI 返回的消息包含极端复杂的 Markdown 内容（例如：50行&#215;10列的漏洞列表表格，或包含 1000 行代码的 T-Box 固件日志）。\r\n**WHEN**: 扩展将该片段在页面进行渲染时。\r\n**THEN**: 侧边栏不应出现超过 200ms 的视觉冻结，且表格应支持平滑横向滚动，不影响纵向会话滚动。",
-"type": "Acceptance Test",
-"Input": "复用 `extension\\\\src\\\\sidepanel\\\\missingCriteria.acceptance.test.tsx` 中的大 Markdown payload 生成方式，覆盖大表格 + 长代码块 + 从 delta 到 terminal result 的切换；最小可执行入口为 `extension\\\\scripts\\\\acceptance-large-markdown-performance.mjs`，后续应并入 `extension\\\\scripts\\\\real-extension-smoke.mjs`，对比最终可见 transcript、extension state 与 comparison artifact。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-large-markdown-performance.mjs",
-"TestResults": ""
-},
-{
-"name": "长会话内存管理与 DOM 负载优化",
-"description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-long-session-memory.mjs。当前入口实际只包装仓内 Vitest 切片验证，尚不能独立证明真实浏览器下的长会话内存与 DOM 负载闭环。**GIVEN**: 当前会话（Session）已积累超过 40 条历史运行记录，每条记录包含大量的事件（Events）和分析结论。\\r\\n**WHEN**: 用户发起第 41 次 `START_RUN` 并开始接收新消息。\\r\\n**THEN**: 扩展的内存占用（Memory Footprint）不应出现阶梯式爆炸增长，且旧消息的渲染不应因为新消息的加入而触发全量重绘（Re-render）；必须验证 `historicalMessages` / `historicalParts` 与历史 DOM 节点复用仍成立，而不是只比较最终文本包含关系。",
-"type": "Acceptance Test",
-"Input": "复用 `extension\\\\src\\\\sidepanel\\\\missingCriteria.acceptance.test.tsx` 中 40 条历史 run + 1 条 live run 的构造方式，并与 `extension\\\\src\\\\sidepanel\\\\reasoningTimelineView.test.tsx` 的历史节点 identity 复用断言保持一致；入口为 `extension\\\\scripts\\\\acceptance-long-session-memory.mjs`。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-long-session-memory.mjs",
-"TestResults": ""
-},
-{
-"name": "高频 Tool-Call 事件的“节流”处理",
-"description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-tool-call-throttle.mjs。当前入口实际只包装仓内 Vitest 切片验证，尚不能独立证明真实浏览器与真实事件风暴下的节流护栏。**GIVEN**: 后端 AI 正在快速触发多个工具调用（例如：连续查询 10 个 ECU 状态，产生 10 个 `tool_call` 事件）。\\r\\n**WHEN**: 扩展后台监听到这些高频状态变更消息。\\r\\n**THEN**: 前端 UI 应通过受控频率更新“思考中”状态，避免每秒数十次的 DOM 变更导致浏览器 CPU 负载过高；同时主舞台对用户可见的 transcript 仍应隐藏 tool transcript，不得因节流策略改动而泄漏 `transcript-part-tool`。",
-"type": "Acceptance Test",
-"Input": "复用 `extension\\\\src\\\\sidepanel\\\\missingCriteria.acceptance.test.tsx` 的高频 tool burst 构造方式，并与 `extension\\\\src\\\\sidepanel\\\\architecture.acceptance.test.tsx` 中 TestCase2 的 visible transcript 约束联动验证；入口为 `extension\\\\scripts\\\\acceptance-tool-call-throttle.mjs`。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-tool-call-throttle.mjs",
-"TestResults": ""
-},
-{
-"name": "人工追问事件（Question）的阻断性交互",
-"description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-question-blocking.mjs。当前入口实际只包装 src/shared/api.test.ts 与 src/sidepanel/App.test.tsx 的窄切面断言，尚不能独立证明真实 question 阻断交互闭环。**GIVEN**: Agent 输出流中下发了 `question` 类型事件，要求用户确认“是否继续执行高危漏洞补丁注入”。\r\n**WHEN**: 扩展监听到该事件并在 UI 上弹出追问表单。\r\n**THEN**: 扩展必须暂停当前的进度条显示，并在用户提交答案后，准确向 `POST /api/runs/{runId}/answers` 发送 `questionId` 和 `answer`。",
-"type": "Acceptance Test",
-"Input": "以单轮 pendingQuestion run 渲染 ReasoningTimeline，并在同一脚本内复用 shared/api 与 App 侧现有问答断言，验证等待补充 summary、inline question UI 与 answer payload。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-question-blocking.mjs",
-"TestResults": ""
-},
-{
-"name": "会话历史（History）的本地持久化读取",
-"description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-history-persistence.mjs。当前入口实际只包装 IndexedDB store 与 App history detail 的窄切面断言，尚不能独立证明真实历史切换场景闭环。**GIVEN**: 用户曾在 `IndexedDB` 中保存了多条历史运行记录。\r\n**WHEN**: 用户在 Side Panel 中点击“历史会话”切换到一周前的某个 `runId`。\r\n**THEN**: 扩展应能即时（&lt;500ms）从本地加载完整的事件轨迹（Events）和最终结果，且 Markdown 渲染保持原样。",
-"type": "Acceptance Test",
-"Input": "先向 IndexedDB 写入完整 run/detail，再在单一脚本里读取 detail 并走 transcript projection + ReasoningTimeline 渲染，验证读取时延与 Markdown 保真。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-history-persistence.mjs",
-"TestResults": ""
-},
-{
-"name": "诊断日志（Diagnostics）的导出完整性",
-"description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-diagnostics-export.mjs。当前入口实际只包装 diagnostics snapshot formatting 与 App 导出动作的窄切面断言，尚不能独立证明真实异常会话导出闭环。**GIVEN**: 发生了一次渲染缓慢或 AI 返回错误的异常会话。\r\n**WHEN**: 用户在侧边栏点击“导出诊断日志”。\r\n**THEN**: 扩展应生成并下载一个 `.log` 文件，内容必须包含该次运行的原始事件流（Raw Events）、环境配置摘要及前端错误捕获堆栈（如有）。",
-"type": "Acceptance Test",
-"Input": "构造包含 transport trace、render trace、error event 的异常 run，生成 diagnostics snapshot 与导出日志，校验日志包含原始事件标识、环境摘要与前端堆栈片段。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-diagnostics-export.mjs",
-"TestResults": ""
-},
-{
-"name": "SSE 连接意外中断的容错处理",
-"description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-sse-interruption.mjs。当前入口实际只包装 shared/api EventSource 状态机的窄切面断言，尚不能独立证明真实 sidepanel 在 SSE 中断后的保留内容、停止动画、提示重试闭环。**GIVEN**: AI 正在流式输出时，`PYTHON_ADAPTER` 服务意外宕机导致 SSE 请求断开。\\r\\n**WHEN**: `CHROME_EXTENSION` 检测到请求非正常关闭。\\r\\n**THEN**: 扩展应停止“正在输入”的视觉动画，保留已接收到的部分内容，并向用户展示“连接中断，请重试”的警告提示，而不是持续转圈；同时不得回滚或清空已显示的 assistant Markdown。",
-"type": "Acceptance Test",
-"Input": "在流式输出过程中人为终止或中断 SSE 数据源，检查 sidepanel 对部分 Markdown 内容保留、动画停止、summary / 错误提示切换与重试入口的回退行为；入口为 `extension\\\\scripts\\\\acceptance-sse-interruption.mjs`，后续应复用 `extension\\\\scripts\\\\real-extension-smoke.mjs` 的 checkpoint 采样。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-sse-interruption.mjs",
-"TestResults": ""
-},
-{
-"name": "真实 Question 阻断交互闭环",
-"description": "真实场景下的 question acceptance：当 adapter/opencode 下发 `question` 事件时，sidepanel 必须进入 waiting_for_answer 阻断态，暂停当前 run 的继续交互，在用户提交答案后真实调用 POST /api/runs/{runId}/answers，并在答案提交后清除 pendingQuestionId、恢复流式处理。该用例必须走真实 sidepanel、真实 adapter、真实 run 主链路，不允许只靠模块级 mock 通过。",
-"type": "Scenario Test",
-"Input": "以 `extension\\scripts\\real-extension-smoke.mjs` 为基座，补充 question checkpoint：制造真实 question 事件，采样 visible transcript、waiting_for_answer UI 状态、POST /api/runs/{runId}/answers 请求证据与回答后继续流转的 run state。",
-"acceptanceCriteria": "extension\\scripts\\real-extension-smoke.mjs",
-"TestResults": ""
-},
-{
-"name": "真实域名授权拒绝与访问控制闭环",
-"description": "真实场景下的域名授权与访问控制：当当前页面未命中授权或用户未授予当前域名权限时，扩展必须在 sidepanel 或唤起入口明确提示“当前站点未授权采集”，并拒绝执行 GET_ACTIVE_CONTEXT / capture-bearing START_RUN，而不是仅在 pageAccess.ts 层返回错误。该用例必须覆盖用户可见提示、background orchestration 拒绝路径与最终未创建 run 的外部结果。",
-"type": "Scenario Test",
-"Input": "优先复用 `extension\\scripts\\acceptance-domain-access-control.mjs` 作为真实浏览器入口；若脚本需补强，则在同一入口中同时采样页面授权提示、runtime message 拒绝结果与 extension state 中 currentRun 仍为空的状态。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-domain-access-control.mjs",
-"TestResults": ""
-},
-{
-"name": "真实 SSE 中断后保留已收内容并切换可观察终态",
-"description": "真实场景下的 SSE interruption acceptance：当 assistant 正在流式输出时，python adapter 或上游 SSE 意外中断，sidepanel 必须保留中断前已显示的 assistant Markdown，停止正在输入动画，并向用户暴露可观察的连接中断提示与重试路径；不得回滚、清空或继续无限忙碌。该用例必须走真实 sidepanel 与真实 adapter 连接，不允许仅通过 EventSource mock 通过。",
-"type": "Scenario Test",
-"Input": "以 `extension\\scripts\\real-extension-smoke.mjs` 为基座，注入中断 checkpoint：在 assistant 文本增长中途断开 SSE，再同时采样 visible transcript、summary 文案、错误提示、busy 状态和 extension state。",
-"acceptanceCriteria": "extension\\scripts\\real-extension-smoke.mjs",
-"TestResults": ""
-},
-{
-"name": "真实浏览器下的大 Markdown 流式交互无卡死",
-"description": "Given：assistant 持续流式输出超大 Markdown，内容包含大表格和长代码块。When：Side Panel 在真实浏览器中持续接收增量内容，同时用户在输入框快速输入并切换主 Agent。Then：UI 不得出现超过 200ms 的可感知冻结；输入和主 Agent 切换必须持续可操作；主舞台 transcript 最终内容与 canonical state 收敛一致。测试环境要求：当前最小可运行入口为 extension Vitest + jsdom sidepanel harness，同一脚本验证大 Markdown 流式渲染、交互控件可操作性与最终 transcript 收敛；后续可在保持脚本路径不变的前提下升级为真实 Playwright smoke。",
-"type": "Acceptance Test",
-"Input": "连续注入大 Markdown delta 与 terminal result，同时保留 prompt 输入框和主 Agent 选择器交互断言，验证最终 answer part 收敛且控件未被冻结。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-real-large-markdown-streaming.mjs",
-"TestResults": ""
-},
-{
-"name": "域名授权与访问控制逻辑",
-"description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-domain-access.mjs。当前入口实际只包装 pageAccess 与 background permission error 的窄切面断言，尚不能独立证明真实授权拒绝场景。**GIVEN**: 扩展设置中仅授权了 `*.company.com` 域名，用户当前位于 `www.google.com`。\r\n**WHEN**: 用户尝试通过快捷键唤起 AI 分析。\r\n**THEN**: 扩展应依据 `pageAccess.ts` 逻辑，提示“当前站点未授权采集”，并拒绝执行 `GET_ACTIVE_CONTEXT` 操作。",
-"type": "Acceptance Test",
-"Input": "在同一脚本里同时执行 pageAccess guard、background permission error 与 sidepanel acceptance copy 断言，验证拒绝结果和用户可见文案一致。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-domain-access.mjs",
-"TestResults": ""
-},
-{
-"name": "用户主动停止后保留已收内容且不再继续增长",
-"description": "真实场景下的 stop acceptance：**GIVEN**: Side Panel 正在持续接收 assistant 的流式 Markdown 输出，且已有部分内容显示在主舞台 transcript。\\r\\n**WHEN**: 用户在当前会话中触发停止，或上游事件以 `finish=stop` / 等价 terminal evidence 收敛。\\r\\n**THEN**: 扩展必须立即停止后续内容增长，保留停止前已收到且已展示的 assistant Markdown，不得出现内容回滚、重复追加或无限忙碌态；summary / 状态文案应切换到可观察的终态，后续“新会话”与发送控件恢复到设计允许的状态。该用例必须复用真实 smoke 基座，并把 stop checkpoint 作为独立验收目标，而不是只把 finish=stop 当作已有完成态的顺带情况。",
-"type": "Acceptance Test",
-"Input": "复用 `extension\\\\scripts\\\\real-extension-smoke.mjs` 作为真实浏览器入口，增加 stop checkpoint：在 assistant 文本持续增长阶段触发停止，再同时采样 visible transcript、extension state、status checkpoints 与 adapter / opencode terminal evidence。若短期内无独立 stop 入口，则至少覆盖上游 `finish=stop` 收敛语义。",
-"acceptanceCriteria": "extension\\scripts\\real-extension-smoke.mjs",
-"TestResults": ""
-},
-{
-"name": "未完成 Markdown 在 streaming 阶段的降级渲染策略",
-"description": "Given：assistant 正在流式输出一个尚未闭合的代码块、表格或列表。When：当前 Markdown 语法仍未稳定。Then：主舞台允许以 plain text 或最小格式降级显示该 live tail，但不得阻塞 UI，不得打乱文本顺序；一旦语法稳定或 run 结束，必须收敛为正确的最终 Markdown。测试环境要求：最小可运行环境为 extension Vitest + jsdom transcript harness；同一脚本必须同时验证 streaming 阶段的保守展示与终态 Markdown 收敛。",
-"type": "Acceptance Test",
-"Input": "先构造未闭合 code fence 的 live tail，再附加 terminal result 中的完整 code fence 与 table，验证 streaming 阶段不阻塞、终态阶段正确渲染。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-streaming-markdown-degradation.mjs",
-"TestResults": ""
-}
-]
-},
-{
-"id": "2255",
-"name": "REMOTE OPENCODE SERVER",
-"type": "ArchiMate_ApplicationComponent",
-"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/REMOTE OPENCODE SERVER",
-"attributes": [
-{
-"name": "INTRODUCTION",
-"description": "D:\\Projects\\ThreatIntelliganceAgent\\INTRODUCTION.md"
-}
-]
-},
-{
-"id": "2256",
-"name": "提供一个用户和AI会话的途径",
-"type": "ArchiMate_Outcome",
-"browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect/提供一个用户和AI会话的途径",
-"description": "1、通过CHROME扩展的方式提供；\r\n2、用户可以选择使用哪个业务AGENT；\r\n3、会话过程中，AI输出的消息以流式逐步显示在会话窗口，并进行MARKDOWN渲染；\r\n4、用户可以设置需要抓取当前页面哪些内容，并可预抓取；\r\n5、在用户发起会话时，预抓取的页面内容会随着用户输入的内容一起发送给AI；"
-},
-{
-"id": "2257",
-"name": "人类用户",
-"type": "ArchiMate_BusinessActor",
-"browser_path": "Model/System/BusinessLayer/BusinessLayer/人类用户"
-},
-{
-"id": "2258",
-"name": "AI辅助XX业务",
-"type": "ArchiMate_BusinessProcess",
-"browser_path": "Model/System/BusinessLayer/BusinessLayer/AI辅助XX业务"
-},
-{
-"id": "2259",
-"name": "AI辅助XX业务服务",
-"type": "ArchiMate_BusinessService",
-"browser_path": "Model/System/BusinessLayer/BusinessLayer/AI辅助XX业务服务"
-}
-],
-"relationships": [
-{
-"id": "2172",
-"statement": "CHROME EXTENSION --(ArchiMate_Assignment)--> CHROME EXTENSION 正常显示",
-"name": "ArchiMate_Assignment",
-"super_type": "ArchiMate_Assignment",
-"source_id": "2254",
-"target_id": "2242",
-"source_name": "CHROME EXTENSION",
-"target_name": "CHROME EXTENSION 正常显示"
-},
-{
-"id": "2173",
-"statement": "CHROME EXTENSION --(ArchiMate_Assignment)--> 扩展可正常抓取页面内容并发送到PROMPT",
-"name": "ArchiMate_Assignment",
-"super_type": "ArchiMate_Assignment",
-"source_id": "2254",
-"target_id": "2243",
-"source_name": "CHROME EXTENSION",
-"target_name": "扩展可正常抓取页面内容并发送到PROMPT"
-},
-{
-"id": "2174",
-"statement": "CHROME EXTENSION --(ArchiMate_Flow)--> PYTHON ADAPTER",
-"name": "ArchiMate_Flow",
-"super_type": "ArchiMate_Flow",
-"source_id": "2254",
-"target_id": "2253",
-"source_name": "CHROME EXTENSION",
-"target_name": "PYTHON ADAPTER"
-},
-{
-"id": "2175",
-"statement": "REMOTE OPENCODE SERVER --(ArchiMate_Serving)--> PYTHON ADAPTER",
-"name": "ArchiMate_Serving",
-"super_type": "ArchiMate_Serving",
-"source_id": "2255",
-"target_id": "2253",
-"source_name": "REMOTE OPENCODE SERVER",
-"target_name": "PYTHON ADAPTER"
-},
-{
-"id": "2176",
-"statement": "人类用户 --(ArchiMate_Assignment)--> AI辅助XX业务",
-"name": "ArchiMate_Assignment",
-"super_type": "ArchiMate_Assignment",
-"source_id": "2257",
-"target_id": "2258",
-"source_name": "人类用户",
-"target_name": "AI辅助XX业务"
-},
-{
-"id": "2177",
-"statement": "AI辅助XX业务服务 --(ArchiMate_Serving)--> AI辅助XX业务",
-"name": "ArchiMate_Serving",
-"super_type": "ArchiMate_Serving",
-"source_id": "2259",
-"target_id": "2258",
-"source_name": "AI辅助XX业务服务",
-"target_name": "AI辅助XX业务"
-}
-],
-"views": [
-{
-"view_id": "159",
-"view_name": "StrategyLayerAndMotivationAspect",
-"browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect",
-"parent_element_id": "1207",
-"parent_element_name": "StrategyLayerAndMotivationAspect",
-"included_elements": [
-"2256"
-],
-"included_relationships": []
-},
-{
-"view_id": "160",
-"view_name": "BusinessLayer",
-"browser_path": "Model/System/BusinessLayer/BusinessLayer/BusinessLayer",
-"parent_element_id": "1208",
-"parent_element_name": "BusinessLayer",
-"included_elements": [
-"2257",
-"2258",
-"2259"
-],
-"included_relationships": [
-"2176",
-"2177"
-]
-},
-{
-"view_id": "161",
-"view_name": "ApplicationLayer",
-"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/ApplicationLayer",
-"parent_element_id": "1209",
-"parent_element_name": "ApplicationLayer",
-"included_elements": [
-"2253",
-"2254",
-"2242",
-"2243",
-"2255"
-],
-"included_relationships": [
-"2172",
-"2173",
-"2174",
-"2175"
-]
-},
-{
-"view_id": "162",
-"view_name": "TechnologyLayer",
-"browser_path": "Model/System/TechnologyLayer/TechnologyLayer/TechnologyLayer",
-"parent_element_id": "1210",
-"parent_element_name": "TechnologyLayer",
-"included_elements": [],
-"included_relationships": []
-},
-{
-"view_id": "158",
-"view_name": "SystemArchitecture",
-"browser_path": "Model/System/SystemArchitecture",
-"included_elements": [
-"1207",
-"1208",
-"1209",
-"1210"
-],
-"included_relationships": []
-}
-]
+    "name": "System",
+    "description": "",
+    "elements": [
+        {
+            "id": "1207",
+            "name": "StrategyLayerAndMotivationAspect",
+            "type": "ArchiMate_Assessment",
+            "browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect",
+            "subdiagram_views": [
+                {
+                    "view_id": "159",
+                    "view_name": "StrategyLayerAndMotivationAspect"
+                }
+            ]
+        },
+        {
+            "id": "1208",
+            "name": "BusinessLayer",
+            "type": "ArchiMate_Assessment",
+            "browser_path": "Model/System/BusinessLayer/BusinessLayer",
+            "subdiagram_views": [
+                {
+                    "view_id": "160",
+                    "view_name": "BusinessLayer"
+                }
+            ]
+        },
+        {
+            "id": "1209",
+            "name": "ApplicationLayer",
+            "type": "ArchiMate_Assessment",
+            "browser_path": "Model/System/ApplicationLayer/ApplicationLayer",
+            "subdiagram_views": [
+                {
+                    "view_id": "161",
+                    "view_name": "ApplicationLayer"
+                }
+            ]
+        },
+        {
+            "id": "1210",
+            "name": "TechnologyLayer",
+            "type": "ArchiMate_Assessment",
+            "browser_path": "Model/System/TechnologyLayer/TechnologyLayer",
+            "subdiagram_views": [
+                {
+                    "view_id": "162",
+                    "view_name": "TechnologyLayer"
+                }
+            ]
+        },
+        {
+            "id": "2242",
+            "name": "CHROME EXTENSION 正常显示",
+            "type": "ArchiMate_ApplicationFunction",
+            "browser_path": "Model/System/ApplicationLayer/ApplicationLayer/CHROME EXTENSION/CHROME EXTENSION 正常显示",
+            "testcases": [
+                {
+                    "name": "TestCase1",
+                    "description": "真实端到端 SMOKE：使用精确 prompt“请总结当前 SR 的风险与建议下一步动作。”，校验界面显示消息与 OPENCODE SERVER 接收消息一致，不重复、不遗漏、不乱序；同时该 smoke 必须继续复用 extension/scripts/real-extension-smoke.mjs 与 extension/scripts/real-smoke-assertions.mjs 产出的 assistant message sequence comparison、status checkpoints、visible transcript artifact，作为流式渲染、状态收敛、summary 完成态与消息序列比较的系统级护栏，而不是只验证最终页面出现了一段文本。\\r\\n\\r\\n\\\"RuntimeView\\\": {\\r\\n\\\"coveredComponents\\\": [\\r\\n\\\"test_site 页面\\\",\\r\\n\\\"extension content script / 浮动 AI 入口\\\",\\r\\n\\\"embedded side panel iframe\\\",\\r\\n\\\"sidepanel App + useSidepanelController\\\",\\r\\n\\\"reasoningTimeline / reasoningTimelineView\\\",\\r\\n\\\"extension shared api SSE 客户端\\\",\\r\\n\\\"python_adapter FastAPI\\\",\\r\\n\\\"opencode serve\\\",\\r\\n\\\"python_adapter/logs/invocations.jsonl\\\",\\r\\n\\\"Playwright smoke driver\\\"\\r\\n],\\r\\n\\\"interactionFlow\\\": [\\r\\n\\\"Playwright smoke driver 打开 test_site 页面并通过 content script 唤起 embedded side panel iframe\\\",\\r\\n\\\"side panel 通过 shared api 向 python_adapter POST /api/runs 发起 run，并建立 /api/runs/{runId}/events 或 raw events SSE 连接\\\",\\r\\n\\\"python_adapter 创建或复用 opencode session，转发 prompt 到 opencode serve，并持续代理上游流式事件\\\",\\r\\n\\\"sidepanel controller 接收 adapter 事件，投影为 transcriptReadModel，再由 reasoningTimelineView 渲染主舞台消息\\\",\\r\\n\\\"smoke 脚本同时读取 python_adapter/logs/invocations.jsonl、extension state、comparison artifact 和最终可见 transcript，校验最终可见 assistant 消息与 canonical state 收敛一致，并保留 in-progress / completed checkpoint 以发现性能优化引入的回归\\\"\\r\\n]}",
+                    "type": "Acceptance Test",
+                    "Input": "以 `extension\\\\scripts\\\\real-extension-smoke.mjs` 为真实系统级入口，复用 `extension\\\\scripts\\\\real-smoke-assertions.mjs` 的 assistant message sequence comparison、status checkpoints 与 visible transcript artifact，作为性能优化后最外层护栏。",
+                    "acceptanceCriteria": "extension\\scripts\\real-extension-smoke.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "TestCase2",
+                    "description": "会话界面隐藏 tool transcript：验证主舞台 transcript 不显示 transcript-part-tool 类型消息，仅保留用户消息、assistant 正文和 summary；该用例属于显示与可见 transcript 收敛能力，不属于页面采集发送能力。\\r\\n\\r\\n\"RuntimeView\": {\\r\\n\"coveredComponents\": [\\r\\n\"Playwright smoke driver\",\\r\\n\"embedded side panel iframe\",\\r\\n\"sidepanel App + useSidepanelController\",\\r\\n\"opencodeRawEventProjector / run event state\",\\r\\n\"reasoningTimeline\",\\r\\n\"MainStage\",\\r\\n\"reasoningTimelineView\",\\r\\n\"python_adapter FastAPI\",\\r\\n\"opencode serve\"\\r\\n],\\r\\n\"interactionFlow\": [\\r\\n\"真实 smoke 触发一次带工具调用和 assistant 输出的 run，adapter 将 opencode 事件流转发给 sidepanel\",\\r\\n\"controller 和 projector 将 reasoning、tool_call、assistant_text 等事件归一化为 transcriptReadModel\",\\r\\n\"reasoningTimeline 在 includeToolCallParts=false 的主舞台视图中仅保留 prompt、assistant 正文和 summary，不把 tool transcript 放入最终可见 transcript\",\\r\\n\"MainStage / reasoningTimelineView 渲染最终主舞台 DOM，smoke 只从可见 transcript 采样 part kind，确认 tool part 没有泄漏到用户会话界面\"\\r\\n]\\r\\n}",
+                    "type": "Acceptance Test",
+                    "Input": "复用 `extension\\scripts\\acceptance-testcase2.mjs` 作为真实 smoke wrapper，并继续依赖 `extension\\scripts\\real-smoke-assertions.mjs` 对 visible transcript part kind 与 sequence comparison 的断言。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-testcase2.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "TestCase3",
+                    "description": "完成态显示正确：1、会话开始时一直到会话结束前页面的 transcript-part-summary-copy 状态都应该是“进行中”，且“新会话”按钮不可点击，且对话框不可发起新消息；2、会话结束后 transcript-part-summary-copy 需要显示“已完成”，且“新会话”按钮可点击，且对话框可发起新消息；3、该用例属于显示收敛与交互控件启停能力，必须在真实 SMOKE 环境测试，不可 MOCK。\\r\\n\\r\\n\"RuntimeView\": {\\r\\n\"coveredComponents\": [\\r\\n\"Playwright smoke driver\",\\r\\n\"embedded side panel iframe\",\\r\\n\"sidepanel App + useSidepanelController\",\\r\\n\"currentRun / stream UI state\",\\r\\n\"reasoningTimeline summary part\",\\r\\n\"发送按钮与输入框\",\\r\\n\"新会话按钮\",\\r\\n\"python_adapter FastAPI\",\\r\\n\"opencode serve\"\\r\\n],\\r\\n\"interactionFlow\": [\\r\\n\"真实 smoke 发起 run 后，sidepanel controller 根据 adapter 流式事件驱动 currentRun、stream 和 transcript summary 的进行中状态\",\\r\\n\"run 进行中阶段，reasoningTimeline summary copy 呈现进行中，同时发送按钮与新会话按钮被禁用，避免会话尚未收敛时再次发起交互\",\\r\\n\"当 adapter 侧出现 terminal evidence 且 transcript 收敛后，UI summary 切换为已完成，发送按钮和新会话按钮重新可用\",\\r\\n\"smoke 脚本在 in-progress 和 completed 两个 checkpoint 分别采样 summary 文案、按钮 disabled 状态和最终 transcript，以验证完整状态转换链路\"\\r\\n]\\r\\n}",
+                    "type": "Acceptance Test",
+                    "Input": "复用 `extension\\scripts\\acceptance-testcase3.mjs` 作为真实 smoke wrapper，要求保留 in-progress 与 completed 两个 checkpoint 的 UI 状态采样。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-testcase3.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "从 streaming 降级态收敛到最终 Markdown 后，语义与交互不变",
+                    "description": "Given：assistant 消息在 streaming 阶段经历了降级渲染。When：run 进入稳定或终态并切换为完整 Markdown 渲染。Then：最终 transcript 的文本顺序、消息分组、copy、feedback、summary 收敛状态必须与 canonical transcript 一致；不得出现重复追加、内容回滚或消息拆分错误。测试环境要求：最小可运行环境为 extension Vitest + jsdom sidepanel transcript path；测试必须经过 opencode raw event projector、stable transcript projection 与 ReasoningTimeline 渲染链路，不允许只比较字符串拼接结果。",
+                    "type": "Acceptance Test",
+                    "Input": "以未闭合代码块 delta、part.updated 文本快照与 terminal result 组成单轮 run，验证 streaming 降级态到最终 Markdown 的单消息收敛、无重复 part、无顺序回滚。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-streaming-markdown-convergence.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "最终大 Markdown 终态保真",
+                    "description": "Given：assistant 最终返回大体量 Markdown，包含 tables、code fences、lists、headings、block quotes、inline code 和 links。When：run 完成后在主舞台展示最终 assistant 消息。Then：这些结构必须正确渲染；表格必须可横向滚动且不破坏纵向会话滚动；raw HTML 继续保持不支持并按现有策略处理。测试环境要求：最小可运行环境为 extension Vitest + jsdom；必须走真实 ReasoningTimeline Markdown 渲染路径，不允许 mock ReactMarkdown。",
+                    "type": "Acceptance Test",
+                    "Input": "构造包含 heading、blockquote、list、table、code fence、inline code、link 与 raw HTML 字面量的大 Markdown result，验证主舞台 DOM 结构与 raw HTML 保守策略。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-final-markdown-fidelity.mjs",
+                    "TestResults": ""
+                }
+            ]
+        },
+        {
+            "id": "2243",
+            "name": "扩展可正常抓取页面内容并发送到PROMPT",
+            "type": "ArchiMate_ApplicationFunction",
+            "browser_path": "Model/System/ApplicationLayer/ApplicationLayer/CHROME EXTENSION/扩展可正常抓取页面内容并发送到PROMPT",
+            "testcases": [
+                {
+                    "name": "TestCase4",
+                    "description": "扩展可见采集上下文的真实端到端用例，不允许 mock 页面采集、权限链路或 run 主链路：用户先在扩展侧执行页面采集，再发送问题后，主舞台 transcript 必须额外出现一条用户侧 capture 摘要，而不只是 prompt 与 assistant 回答。该摘要必须展示 selected_sr、software_version、pageTitle、pageUrl 等已采集字段；同时发送动作本身不能再次触发页面采集，而应复用上一次已采集字段进入本轮 run，确保主会话界面中显示的 capture 内容就是本次真实发送携带的上下文；该用例继续以 extension/scripts/acceptance-testcase4.mjs 为真实 smoke wrapper。\\r\\n\\r\\n\\\"RuntimeView\\\": {\\r\\n\\\"coveredComponents\\\": [\\r\\n\\\"Playwright smoke driver\\\",\\r\\n\\\"extension sidepanel Composer / 采集页面按钮\\\",\\r\\n\\\"background START_RUN orchestration\\\",\\r\\n\\\"stored capturedFields state\\\",\\r\\n\\\"RunRecord capture metadata\\\",\\r\\n\\\"sidepanel App + useSidepanelController\\\",\\r\\n\\\"reasoningTimeline / reasoningTimelineView\\\",\\r\\n\\\"embedded side panel iframe\\\",\\r\\n\\\"python_adapter FastAPI\\\",\\r\\n\\\"opencode serve\\\"\\r\\n],\\r\\n\\\"interactionFlow\\\": [\\r\\n\\\"测试入口脚本先为 127.0.0.1 页面自动写入可命中的规则，并在 sidepanel 中完成当前域名授权，再触发页面采集\\\",\\r\\n\\\"真实 smoke 在 embedded side panel 中点击采集页面，等待 capturedFields 写入扩展状态\\\",\\r\\n\\\"随后用户点击发送消息，background 不重新抓取页面，但复用已存在 capturedFields 组装本轮 run request 与 RunRecord\\\",\\r\\n\\\"sidepanel controller 将 run 上的 capture metadata 投影成主舞台 transcript 中的一条用户 capture part，并与 prompt、assistant 输出、summary 一起渲染\\\",\\r\\n\\\"真实 smoke 从最终可见 transcript 采样 data-part-kind，确认 capture part 存在且字段值完整，并校验 currentRun 中记录的是同一组 capture 字段\\\"\\r\\n]\\r\\n}",
+                    "type": "Acceptance Test",
+                    "Input": "用户在 test_site 页面先点击一次采集页面，得到 selected_sr、software_version、pageTitle、pageUrl 等字段；随后在同一扩展会话中发送分析问题。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-testcase4.mjs",
+                    "TestResults": ""
+                }
+            ]
+        },
+        {
+            "id": "2253",
+            "name": "PYTHON ADAPTER",
+            "type": "ArchiMate_ApplicationComponent",
+            "browser_path": "Model/System/ApplicationLayer/ApplicationLayer/PYTHON ADAPTER",
+            "attributes": [
+                {
+                    "name": "INTRODUCTION",
+                    "description": "D:\\Projects\\googlepluginForAiwebassistant\\python_adapter\\INTRODUCTION.md"
+                }
+            ],
+            "testcases": [
+                {
+                    "name": "Adapter run-answer-raw-stream 契约闭环",
+                    "description": "验证 python adapter 在 run 主链路中的真实契约编排：POST /api/runs 接收 capture/context 与 selectedAgent，创建或复用 session；GET /api/runs/{runId}/events 输出 thinking / question 等归一化事件；POST /api/runs/{runId}/answers 继续回答阻断问题；GET /api/runs/{runId}/events/raw 输出上游 raw envelope。该用例属于 adapter 组件边界的 integration/system 证据，不直接替代 extension 侧 acceptance。",
+                    "type": "Integration Test",
+                    "Input": "复用 `python_adapter/tests/test_app.py` 中的 TestClient 场景，覆盖 start_run、events、answers、raw events 四条 HTTP 边界。",
+                    "acceptanceCriteria": "python_adapter/tests/test_app.py",
+                    "TestResults": ""
+                },
+                {
+                    "name": "Adapter 对 opencode session contract 与 agent 约束保持一致",
+                    "description": "验证 python adapter 对远端 opencode contract 的适配不漂移：start_run 必须把 capture/context 打包进 prompt_async；question reply 必须调用远端 question/reply；session message 若仅有 reasoning 不得误当最终 answer；agent discovery 与 canonical agent mismatch 必须显式报错。该用例为 adapter 与远端协议的 integration guard。",
+                    "type": "Integration Test",
+                    "Input": "复用 `python_adapter/tests/test_opencode_adapter.py` 中的 fake httpx client 契约测试，覆盖 /agent、/session、/session/{id}/prompt_async、/global/event、/question/{id}/reply、/session/{id}/message。",
+                    "acceptanceCriteria": "python_adapter/tests/test_opencode_adapter.py",
+                    "TestResults": ""
+                }
+            ]
+        },
+        {
+            "id": "2254",
+            "name": "CHROME EXTENSION",
+            "type": "ArchiMate_ApplicationComponent",
+            "browser_path": "Model/System/ApplicationLayer/ApplicationLayer/CHROME EXTENSION",
+            "testcases": [
+                {
+                    "name": "流式消息渲染的 UI 线程隔离 (防止卡死)",
+                    "description": "**GIVEN**: Side Panel 已连接到 `PYTHON_ADAPTER`，并开始接收高频的 SSE 流式 `thinking` / `result` 事件（模拟 AI 极速吐字）。\\r\\n**WHEN**: 在消息持续滚动渲染的同时，用户尝试在输入框内快速输入文字，或在 Side Panel 内点击切换“主 Agent”。\\r\\n**THEN**: 输入框字符出现不应有可感知延迟，下拉菜单响应应即时，UI 帧率（FPS）应保持在 50+；并且该用例必须走真实 sidepanel transcript 渲染路径，不允许通过 mock `ReactMarkdown`、跳过 `reasoningTimelineView` 或直接断言字符串拼接来伪造通过。",
+                    "type": "Acceptance Test",
+                    "Input": "复用 `extension\\\\src\\\\sidepanel\\\\missingCriteria.acceptance.test.tsx` 与 `extension\\\\scripts\\\\acceptance-ui-thread-isolation.mjs` 作为最小入口：连续注入高频 assistant delta 事件，同时驱动 textarea 输入与主 Agent 下拉切换。后续应扩展到 `extension\\\\scripts\\\\real-extension-smoke.mjs`，在真实浏览器 sidepanel 中采样输入响应、主 Agent 切换和主舞台可见 transcript。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-ui-thread-isolation.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "大数据量 Markdown 解析性能基准",
+                    "description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-large-markdown-performance.mjs。当前入口实际只包装仓内 Vitest 切片验证，尚不能独立证明真实浏览器或真实 sidepanel 下的大 Markdown 验收闭环。**GIVEN**: AI 返回的消息包含极端复杂的 Markdown 内容（例如：50行&#215;10列的漏洞列表表格，或包含 1000 行代码的 T-Box 固件日志）。\r\n**WHEN**: 扩展将该片段在页面进行渲染时。\r\n**THEN**: 侧边栏不应出现超过 200ms 的视觉冻结，且表格应支持平滑横向滚动，不影响纵向会话滚动。",
+                    "type": "Acceptance Test",
+                    "Input": "复用 `extension\\\\src\\\\sidepanel\\\\missingCriteria.acceptance.test.tsx` 中的大 Markdown payload 生成方式，覆盖大表格 + 长代码块 + 从 delta 到 terminal result 的切换；最小可执行入口为 `extension\\\\scripts\\\\acceptance-large-markdown-performance.mjs`，后续应并入 `extension\\\\scripts\\\\real-extension-smoke.mjs`，对比最终可见 transcript、extension state 与 comparison artifact。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-large-markdown-performance.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "长会话内存管理与 DOM 负载优化",
+                    "description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-long-session-memory.mjs。当前入口实际只包装仓内 Vitest 切片验证，尚不能独立证明真实浏览器下的长会话内存与 DOM 负载闭环。**GIVEN**: 当前会话（Session）已积累超过 40 条历史运行记录，每条记录包含大量的事件（Events）和分析结论。\\r\\n**WHEN**: 用户发起第 41 次 `START_RUN` 并开始接收新消息。\\r\\n**THEN**: 扩展的内存占用（Memory Footprint）不应出现阶梯式爆炸增长，且旧消息的渲染不应因为新消息的加入而触发全量重绘（Re-render）；必须验证 `historicalMessages` / `historicalParts` 与历史 DOM 节点复用仍成立，而不是只比较最终文本包含关系。",
+                    "type": "Acceptance Test",
+                    "Input": "复用 `extension\\\\src\\\\sidepanel\\\\missingCriteria.acceptance.test.tsx` 中 40 条历史 run + 1 条 live run 的构造方式，并与 `extension\\\\src\\\\sidepanel\\\\reasoningTimelineView.test.tsx` 的历史节点 identity 复用断言保持一致；入口为 `extension\\\\scripts\\\\acceptance-long-session-memory.mjs`。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-long-session-memory.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "高频 Tool-Call 事件的“节流”处理",
+                    "description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-tool-call-throttle.mjs。当前入口实际只包装仓内 Vitest 切片验证，尚不能独立证明真实浏览器与真实事件风暴下的节流护栏。**GIVEN**: 后端 AI 正在快速触发多个工具调用（例如：连续查询 10 个 ECU 状态，产生 10 个 `tool_call` 事件）。\\r\\n**WHEN**: 扩展后台监听到这些高频状态变更消息。\\r\\n**THEN**: 前端 UI 应通过受控频率更新“思考中”状态，避免每秒数十次的 DOM 变更导致浏览器 CPU 负载过高；同时主舞台对用户可见的 transcript 仍应隐藏 tool transcript，不得因节流策略改动而泄漏 `transcript-part-tool`。",
+                    "type": "Acceptance Test",
+                    "Input": "复用 `extension\\\\src\\\\sidepanel\\\\missingCriteria.acceptance.test.tsx` 的高频 tool burst 构造方式，并与 `extension\\\\src\\\\sidepanel\\\\architecture.acceptance.test.tsx` 中 TestCase2 的 visible transcript 约束联动验证；入口为 `extension\\\\scripts\\\\acceptance-tool-call-throttle.mjs`。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-tool-call-throttle.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "人工追问事件（Question）的阻断性交互",
+                    "description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-question-blocking.mjs。当前入口实际只包装 src/shared/api.test.ts 与 src/sidepanel/App.test.tsx 的窄切面断言，尚不能独立证明真实 question 阻断交互闭环。**GIVEN**: Agent 输出流中下发了 `question` 类型事件，要求用户确认“是否继续执行高危漏洞补丁注入”。\r\n**WHEN**: 扩展监听到该事件并在 UI 上弹出追问表单。\r\n**THEN**: 扩展必须暂停当前的进度条显示，并在用户提交答案后，准确向 `POST /api/runs/{runId}/answers` 发送 `questionId` 和 `answer`。",
+                    "type": "Acceptance Test",
+                    "Input": "以单轮 pendingQuestion run 渲染 ReasoningTimeline，并在同一脚本内复用 shared/api 与 App 侧现有问答断言，验证等待补充 summary、inline question UI 与 answer payload。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-question-blocking.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "会话历史（History）的本地持久化读取",
+                    "description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-history-persistence.mjs。当前入口实际只包装 IndexedDB store 与 App history detail 的窄切面断言，尚不能独立证明真实历史切换场景闭环。**GIVEN**: 用户曾在 `IndexedDB` 中保存了多条历史运行记录。\r\n**WHEN**: 用户在 Side Panel 中点击“历史会话”切换到一周前的某个 `runId`。\r\n**THEN**: 扩展应能即时（&lt;500ms）从本地加载完整的事件轨迹（Events）和最终结果，且 Markdown 渲染保持原样。",
+                    "type": "Acceptance Test",
+                    "Input": "先向 IndexedDB 写入完整 run/detail，再在单一脚本里读取 detail 并走 transcript projection + ReasoningTimeline 渲染，验证读取时延与 Markdown 保真。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-history-persistence.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "诊断日志（Diagnostics）的导出完整性",
+                    "description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-diagnostics-export.mjs。当前入口实际只包装 diagnostics snapshot formatting 与 App 导出动作的窄切面断言，尚不能独立证明真实异常会话导出闭环。**GIVEN**: 发生了一次渲染缓慢或 AI 返回错误的异常会话。\r\n**WHEN**: 用户在侧边栏点击“导出诊断日志”。\r\n**THEN**: 扩展应生成并下载一个 `.log` 文件，内容必须包含该次运行的原始事件流（Raw Events）、环境配置摘要及前端错误捕获堆栈（如有）。",
+                    "type": "Acceptance Test",
+                    "Input": "构造包含 transport trace、render trace、error event 的异常 run，生成 diagnostics snapshot 与导出日志，校验日志包含原始事件标识、环境摘要与前端堆栈片段。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-diagnostics-export.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "SSE 连接意外中断的容错处理",
+                    "description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-sse-interruption.mjs。当前入口实际只包装 shared/api EventSource 状态机的窄切面断言，尚不能独立证明真实 sidepanel 在 SSE 中断后的保留内容、停止动画、提示重试闭环。**GIVEN**: AI 正在流式输出时，`PYTHON_ADAPTER` 服务意外宕机导致 SSE 请求断开。\\r\\n**WHEN**: `CHROME_EXTENSION` 检测到请求非正常关闭。\\r\\n**THEN**: 扩展应停止“正在输入”的视觉动画，保留已接收到的部分内容，并向用户展示“连接中断，请重试”的警告提示，而不是持续转圈；同时不得回滚或清空已显示的 assistant Markdown。",
+                    "type": "Acceptance Test",
+                    "Input": "在流式输出过程中人为终止或中断 SSE 数据源，检查 sidepanel 对部分 Markdown 内容保留、动画停止、summary / 错误提示切换与重试入口的回退行为；入口为 `extension\\\\scripts\\\\acceptance-sse-interruption.mjs`，后续应复用 `extension\\\\scripts\\\\real-extension-smoke.mjs` 的 checkpoint 采样。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-sse-interruption.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "真实 Question 阻断交互闭环",
+                    "description": "真实场景下的 question acceptance：当 adapter/opencode 下发 `question` 事件时，sidepanel 必须进入 waiting_for_answer 阻断态，暂停当前 run 的继续交互，在用户提交答案后真实调用 POST /api/runs/{runId}/answers，并在答案提交后清除 pendingQuestionId、恢复流式处理。该用例必须走真实 sidepanel、真实 adapter、真实 run 主链路，不允许只靠模块级 mock 通过。",
+                    "type": "Scenario Test",
+                    "Input": "以 `extension\\scripts\\real-extension-smoke.mjs` 为基座，补充 question checkpoint：制造真实 question 事件，采样 visible transcript、waiting_for_answer UI 状态、POST /api/runs/{runId}/answers 请求证据与回答后继续流转的 run state。",
+                    "acceptanceCriteria": "extension\\scripts\\real-extension-smoke.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "真实域名授权拒绝与访问控制闭环",
+                    "description": "真实场景下的域名授权与访问控制：当当前页面未命中授权或用户未授予当前域名权限时，扩展必须在 sidepanel 或唤起入口明确提示“当前站点未授权采集”，并拒绝执行 GET_ACTIVE_CONTEXT / capture-bearing START_RUN，而不是仅在 pageAccess.ts 层返回错误。该用例必须覆盖用户可见提示、background orchestration 拒绝路径与最终未创建 run 的外部结果。",
+                    "type": "Scenario Test",
+                    "Input": "优先复用 `extension\\scripts\\acceptance-domain-access-control.mjs` 作为真实浏览器入口；若脚本需补强，则在同一入口中同时采样页面授权提示、runtime message 拒绝结果与 extension state 中 currentRun 仍为空的状态。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-domain-access-control.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "真实 SSE 中断后保留已收内容并切换可观察终态",
+                    "description": "真实场景下的 SSE interruption acceptance：当 assistant 正在流式输出时，python adapter 或上游 SSE 意外中断，sidepanel 必须保留中断前已显示的 assistant Markdown，停止正在输入动画，并向用户暴露可观察的连接中断提示与重试路径；不得回滚、清空或继续无限忙碌。该用例必须走真实 sidepanel 与真实 adapter 连接，不允许仅通过 EventSource mock 通过。",
+                    "type": "Scenario Test",
+                    "Input": "以 `extension\\scripts\\real-extension-smoke.mjs` 为基座，注入中断 checkpoint：在 assistant 文本增长中途断开 SSE，再同时采样 visible transcript、summary 文案、错误提示、busy 状态和 extension state。",
+                    "acceptanceCriteria": "extension\\scripts\\real-extension-smoke.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "真实浏览器下的大 Markdown 流式交互无卡死",
+                    "description": "Given：assistant 持续流式输出超大 Markdown，内容包含大表格和长代码块。When：Side Panel 在真实浏览器中持续接收增量内容，同时用户在输入框快速输入并切换主 Agent。Then：UI 不得出现超过 200ms 的可感知冻结；输入和主 Agent 切换必须持续可操作；主舞台 transcript 最终内容与 canonical state 收敛一致。测试环境要求：当前最小可运行入口为 extension Vitest + jsdom sidepanel harness，同一脚本验证大 Markdown 流式渲染、交互控件可操作性与最终 transcript 收敛；后续可在保持脚本路径不变的前提下升级为真实 Playwright smoke。",
+                    "type": "Acceptance Test",
+                    "Input": "连续注入大 Markdown delta 与 terminal result，同时保留 prompt 输入框和主 Agent 选择器交互断言，验证最终 answer part 收敛且控件未被冻结。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-real-large-markdown-streaming.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "域名授权与访问控制逻辑",
+                    "description": "该用例及其对应系统功能需要重新实现；原测试入口为 extension\\scripts\\acceptance-domain-access.mjs。当前入口实际只包装 pageAccess 与 background permission error 的窄切面断言，尚不能独立证明真实授权拒绝场景。**GIVEN**: 扩展设置中仅授权了 `*.company.com` 域名，用户当前位于 `www.google.com`。\r\n**WHEN**: 用户尝试通过快捷键唤起 AI 分析。\r\n**THEN**: 扩展应依据 `pageAccess.ts` 逻辑，提示“当前站点未授权采集”，并拒绝执行 `GET_ACTIVE_CONTEXT` 操作。",
+                    "type": "Acceptance Test",
+                    "Input": "在同一脚本里同时执行 pageAccess guard、background permission error 与 sidepanel acceptance copy 断言，验证拒绝结果和用户可见文案一致。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-domain-access.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "用户主动停止后保留已收内容且不再继续增长",
+                    "description": "真实场景下的 stop acceptance：**GIVEN**: Side Panel 正在持续接收 assistant 的流式 Markdown 输出，且已有部分内容显示在主舞台 transcript。\\r\\n**WHEN**: 用户在当前会话中触发停止，或上游事件以 `finish=stop` / 等价 terminal evidence 收敛。\\r\\n**THEN**: 扩展必须立即停止后续内容增长，保留停止前已收到且已展示的 assistant Markdown，不得出现内容回滚、重复追加或无限忙碌态；summary / 状态文案应切换到可观察的终态，后续“新会话”与发送控件恢复到设计允许的状态。该用例必须复用真实 smoke 基座，并把 stop checkpoint 作为独立验收目标，而不是只把 finish=stop 当作已有完成态的顺带情况。",
+                    "type": "Acceptance Test",
+                    "Input": "复用 `extension\\\\scripts\\\\real-extension-smoke.mjs` 作为真实浏览器入口，增加 stop checkpoint：在 assistant 文本持续增长阶段触发停止，再同时采样 visible transcript、extension state、status checkpoints 与 adapter / opencode terminal evidence。若短期内无独立 stop 入口，则至少覆盖上游 `finish=stop` 收敛语义。",
+                    "acceptanceCriteria": "extension\\scripts\\real-extension-smoke.mjs",
+                    "TestResults": ""
+                },
+                {
+                    "name": "未完成 Markdown 在 streaming 阶段的降级渲染策略",
+                    "description": "Given：assistant 正在流式输出一个尚未闭合的代码块、表格或列表。When：当前 Markdown 语法仍未稳定。Then：主舞台允许以 plain text 或最小格式降级显示该 live tail，但不得阻塞 UI，不得打乱文本顺序；一旦语法稳定或 run 结束，必须收敛为正确的最终 Markdown。测试环境要求：最小可运行环境为 extension Vitest + jsdom transcript harness；同一脚本必须同时验证 streaming 阶段的保守展示与终态 Markdown 收敛。",
+                    "type": "Acceptance Test",
+                    "Input": "先构造未闭合 code fence 的 live tail，再附加 terminal result 中的完整 code fence 与 table，验证 streaming 阶段不阻塞、终态阶段正确渲染。",
+                    "acceptanceCriteria": "extension\\scripts\\acceptance-streaming-markdown-degradation.mjs",
+                    "TestResults": ""
+                }
+            ]
+        },
+        {
+            "id": "2255",
+            "name": "REMOTE OPENCODE SERVER",
+            "type": "ArchiMate_ApplicationComponent",
+            "browser_path": "Model/System/ApplicationLayer/ApplicationLayer/REMOTE OPENCODE SERVER",
+            "attributes": [
+                {
+                    "name": "INTRODUCTION",
+                    "description": "D:\\Projects\\ThreatIntelliganceAgent\\INTRODUCTION.md"
+                }
+            ]
+        },
+        {
+            "id": "2256",
+            "name": "提供一个用户和AI会话的途径",
+            "type": "ArchiMate_Outcome",
+            "browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect/提供一个用户和AI会话的途径",
+            "description": "1、通过CHROME扩展的方式提供；\r\n2、用户可以选择使用哪个业务AGENT；\r\n3、会话过程中，AI输出的消息以流式逐步显示在会话窗口，并进行MARKDOWN渲染；\r\n4、用户可以设置需要抓取当前页面哪些内容，并可预抓取；\r\n5、在用户发起会话时，预抓取的页面内容会随着用户输入的内容一起发送给AI；"
+        },
+        {
+            "id": "2257",
+            "name": "人类用户",
+            "type": "ArchiMate_BusinessActor",
+            "browser_path": "Model/System/BusinessLayer/BusinessLayer/人类用户"
+        },
+        {
+            "id": "2258",
+            "name": "AI辅助XX业务",
+            "type": "ArchiMate_BusinessProcess",
+            "browser_path": "Model/System/BusinessLayer/BusinessLayer/AI辅助XX业务"
+        },
+        {
+            "id": "2259",
+            "name": "AI辅助XX业务服务",
+            "type": "ArchiMate_BusinessService",
+            "browser_path": "Model/System/BusinessLayer/BusinessLayer/AI辅助XX业务服务"
+        }
+    ],
+    "relationships": [
+        {
+            "id": "2172",
+            "statement": "CHROME EXTENSION --(ArchiMate_Assignment)--> CHROME EXTENSION 正常显示",
+            "name": "ArchiMate_Assignment",
+            "super_type": "ArchiMate_Assignment",
+            "source_id": "2254",
+            "target_id": "2242",
+            "source_name": "CHROME EXTENSION",
+            "target_name": "CHROME EXTENSION 正常显示"
+        },
+        {
+            "id": "2173",
+            "statement": "CHROME EXTENSION --(ArchiMate_Assignment)--> 扩展可正常抓取页面内容并发送到PROMPT",
+            "name": "ArchiMate_Assignment",
+            "super_type": "ArchiMate_Assignment",
+            "source_id": "2254",
+            "target_id": "2243",
+            "source_name": "CHROME EXTENSION",
+            "target_name": "扩展可正常抓取页面内容并发送到PROMPT"
+        },
+        {
+            "id": "2174",
+            "statement": "CHROME EXTENSION --(ArchiMate_Flow)--> PYTHON ADAPTER",
+            "name": "ArchiMate_Flow",
+            "super_type": "ArchiMate_Flow",
+            "source_id": "2254",
+            "target_id": "2253",
+            "source_name": "CHROME EXTENSION",
+            "target_name": "PYTHON ADAPTER"
+        },
+        {
+            "id": "2175",
+            "statement": "REMOTE OPENCODE SERVER --(ArchiMate_Serving)--> PYTHON ADAPTER",
+            "name": "ArchiMate_Serving",
+            "super_type": "ArchiMate_Serving",
+            "source_id": "2255",
+            "target_id": "2253",
+            "source_name": "REMOTE OPENCODE SERVER",
+            "target_name": "PYTHON ADAPTER"
+        },
+        {
+            "id": "2176",
+            "statement": "人类用户 --(ArchiMate_Assignment)--> AI辅助XX业务",
+            "name": "ArchiMate_Assignment",
+            "super_type": "ArchiMate_Assignment",
+            "source_id": "2257",
+            "target_id": "2258",
+            "source_name": "人类用户",
+            "target_name": "AI辅助XX业务"
+        },
+        {
+            "id": "2177",
+            "statement": "AI辅助XX业务服务 --(ArchiMate_Serving)--> AI辅助XX业务",
+            "name": "ArchiMate_Serving",
+            "super_type": "ArchiMate_Serving",
+            "source_id": "2259",
+            "target_id": "2258",
+            "source_name": "AI辅助XX业务服务",
+            "target_name": "AI辅助XX业务"
+        }
+    ],
+    "views": [
+        {
+            "view_id": "159",
+            "view_name": "StrategyLayerAndMotivationAspect",
+            "browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect",
+            "parent_element_id": "1207",
+            "parent_element_name": "StrategyLayerAndMotivationAspect",
+            "included_elements": [
+                "2256"
+            ],
+            "included_relationships": []
+        },
+        {
+            "view_id": "160",
+            "view_name": "BusinessLayer",
+            "browser_path": "Model/System/BusinessLayer/BusinessLayer/BusinessLayer",
+            "parent_element_id": "1208",
+            "parent_element_name": "BusinessLayer",
+            "included_elements": [
+                "2257",
+                "2258",
+                "2259"
+            ],
+            "included_relationships": [
+                "2176",
+                "2177"
+            ]
+        },
+        {
+            "view_id": "161",
+            "view_name": "ApplicationLayer",
+            "browser_path": "Model/System/ApplicationLayer/ApplicationLayer/ApplicationLayer",
+            "parent_element_id": "1209",
+            "parent_element_name": "ApplicationLayer",
+            "included_elements": [
+                "2253",
+                "2254",
+                "2242",
+                "2243",
+                "2255"
+            ],
+            "included_relationships": [
+                "2172",
+                "2173",
+                "2174",
+                "2175"
+            ]
+        },
+        {
+            "view_id": "162",
+            "view_name": "TechnologyLayer",
+            "browser_path": "Model/System/TechnologyLayer/TechnologyLayer/TechnologyLayer",
+            "parent_element_id": "1210",
+            "parent_element_name": "TechnologyLayer",
+            "included_elements": [],
+            "included_relationships": []
+        },
+        {
+            "view_id": "158",
+            "view_name": "SystemArchitecture",
+            "browser_path": "Model/System/SystemArchitecture",
+            "included_elements": [
+                "1207",
+                "1208",
+                "1209",
+                "1210"
+            ],
+            "included_relationships": []
+        }
+    ]
 }
