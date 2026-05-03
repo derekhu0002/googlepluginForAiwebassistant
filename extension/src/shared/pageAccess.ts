@@ -75,7 +75,7 @@ export function evaluatePageAccess(url: string | undefined, allowedPageMatches: 
     return {
       allowed: false,
       code: "PERMISSION_ERROR",
-      message: "当前页面域名不在受控授权清单内。请先在扩展配置中登记该域名，再由用户在 Side Panel 中申请当前域名权限。"
+      message: "当前站点未授权采集。请先在扩展配置中登记该域名，再由用户在 Side Panel 中申请当前域名权限。"
     };
   }
 

@@ -2252,6 +2252,13 @@ function resolveAssistantEventMessageId(state: LiveTranscriptProjectionState, ev
   );
 }
 
+function currentAssistantGroupHasProcessItems(state: LiveTranscriptProjectionState) {
+  return state.items.some((item) => (
+    item.groupAnchorId === state.currentAssistantGroupAnchorId
+    && item.kind === "assistant_process"
+  ));
+}
+
 function shouldOpenNextAssistantNode(state: LiveTranscriptProjectionState, event: NormalizedRunEvent) {
   const stableMessageId = getAssistantStableMessageId(event);
   if (!state.currentAssistantLogicalMessageId || !stableMessageId) {
@@ -2274,6 +2281,10 @@ function shouldOpenNextAssistantNode(state: LiveTranscriptProjectionState, event
   }
 
   if (isProvisionalAssistantMessageId(state.currentAssistantLogicalMessageId)) {
+    return false;
+  }
+
+  if (currentAssistantGroupHasProcessItems(state)) {
     return false;
   }
 
@@ -3109,6 +3120,14 @@ function getFinalAnswerTranscriptPart(message: TranscriptMessageModel | null) {
     return resultTextParts[resultTextParts.length - 1];
   }
 
+  if (textParts.length > 1) {
+    const mergedText = textParts.reduce((currentText, part) => mergeAssistantResponseSnapshot(currentText, part.text), "");
+    return {
+      ...textParts[textParts.length - 1],
+      text: mergedText
+    };
+  }
+
   return textParts[textParts.length - 1] ?? null;
 }
 
@@ -3158,6 +3177,35 @@ function getRunScopedAssistantMessageId(runId: string) {
 
 function getRunScopedAssistantGroupAnchorId(runId: string) {
   return `assistant-run:${runId}`;
+}
+
+function getLiveProjectionItemMessageToken(item: ChatStreamItemModel) {
+  if (item.kind === "assistant_output") {
+    return item.anchorId?.trim() || null;
+  }
+
+  if (item.kind === "assistant_process") {
+    const parts = item.anchorId?.split(":") ?? [];
+    return parts.length > 1 ? parts[1]?.trim() || null : null;
+  }
+
+  return null;
+}
+
+function hasLiveProjectionMessageIdChurn(state: LiveTranscriptProjectionState | null | undefined) {
+  if (!state) {
+    return false;
+  }
+
+  if (!state.items.some((item) => item.kind === "assistant_process")) {
+    return false;
+  }
+
+  const tokens = new Set(state.items
+    .map((item) => getLiveProjectionItemMessageToken(item))
+    .filter((token): token is string => Boolean(token && !isProvisionalAssistantMessageId(token))));
+
+  return tokens.size > 1;
 }
 
 function collapseRunScopedAssistantMessages(
@@ -3237,7 +3285,20 @@ function mergeTranscriptMessageCollections(options: {
 }) {
   const previousModel = options.previousModel ?? null;
   const historicalMessages = normalizeTranscriptMessages(options.historicalMessages);
-  const liveMessages = normalizeTranscriptMessages(options.liveMessages);
+  const normalizedLiveMessages = normalizeTranscriptMessages(options.liveMessages);
+  const liveRunId = normalizedLiveMessages.find((message) => message.role === "assistant")?.runId;
+  const previousLiveAssistantMessage = liveRunId
+    ? previousModel?.liveMessages.find((message) => message.role === "assistant" && message.runId === liveRunId) ?? null
+    : null;
+  const liveAssistantMessageCount = normalizedLiveMessages.filter((message) => message.role === "assistant").length;
+  const hasProvisionalAssistantSplit = normalizedLiveMessages.some((message) => (
+    message.role === "assistant" && message.groupAnchorId.includes("assistant-provisional:")
+  ));
+  const shouldCollapseRunScopedAssistant = (liveAssistantMessageCount > 1 && hasProvisionalAssistantSplit)
+    || hasLiveProjectionMessageIdChurn(options.liveProjectionState);
+  const liveMessages = shouldCollapseRunScopedAssistant && liveAssistantMessageCount > 0
+    ? collapseRunScopedAssistantMessages(normalizedLiveMessages, previousLiveAssistantMessage, liveAssistantMessageCount === 1)
+    : normalizedLiveMessages;
   const rawMessages = normalizeTranscriptMessages(liveMessages.length
     ? [...historicalMessages, ...liveMessages]
     : historicalMessages);

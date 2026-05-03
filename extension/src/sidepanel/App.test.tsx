@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_MAIN_AGENT, MAIN_AGENTS } from "../shared/protocol";
 import { initialAssistantState } from "../shared/state";
 import type { ActiveTabContext, AssistantState, PageRule, RuntimeMessage } from "../shared/types";
-import type { NormalizedRunEvent, RunHistoryDetail, RunRecord } from "../shared/protocol";
+import type { NormalizedRunEvent, RawRunEventEnvelope, RunHistoryDetail, RunRecord } from "../shared/protocol";
 
 const {
   mockCreateRunEventStream,
+  mockCreateRawRunEventStream,
   mockSubmitQuestionAnswer,
   mockSubmitMessageFeedback,
   mockRefreshHistory,
@@ -29,9 +30,42 @@ const {
   };
 
   const mockStreamClose = vi.fn();
+  const mockCreateRunEventStream = vi.fn((runId: string, handlers: {
+    onEvent: (event: NormalizedRunEvent) => Promise<void> | void;
+    onError: (error: Error) => void;
+    onStatusChange?: (status: "connecting" | "streaming" | "reconnecting") => void;
+    onTransportLog?: (entry: Record<string, unknown>) => void;
+    shouldClose?: (event: NormalizedRunEvent) => boolean;
+  }) => ({ close: mockStreamClose }));
+  const mockCreateRawRunEventStream = vi.fn((runId: string, handlers: {
+    onEvent: (event: RawRunEventEnvelope) => Promise<void> | void;
+    onError: (error: Error) => void;
+    onStatusChange?: (status: "connecting" | "streaming" | "reconnecting") => void;
+  }) => {
+    mockCreateRunEventStream(runId, {
+      onEvent: async (event: NormalizedRunEvent) => {
+        await handlers.onEvent?.({
+          id: event.id,
+          runId: event.runId,
+          createdAt: event.createdAt,
+          sequence: event.sequence,
+          source: "adapter",
+          eventType: "normalized_event",
+          payload: {
+            event
+          }
+        });
+      },
+      onError: handlers.onError,
+      onStatusChange: handlers.onStatusChange
+    });
+
+    return { close: mockStreamClose };
+  });
 
   return {
-    mockCreateRunEventStream: vi.fn(() => ({ close: mockStreamClose })),
+    mockCreateRunEventStream,
+    mockCreateRawRunEventStream,
     mockSubmitQuestionAnswer: vi.fn(),
     mockSubmitMessageFeedback: vi.fn(),
     mockRefreshHistory: vi.fn(async () => undefined),
@@ -65,6 +99,7 @@ vi.mock("../shared/config", () => ({
 
 vi.mock("../shared/api", () => ({
   createRunEventStream: mockCreateRunEventStream,
+  createRawRunEventStream: mockCreateRawRunEventStream,
   submitQuestionAnswer: mockSubmitQuestionAnswer,
   submitMessageFeedback: mockSubmitMessageFeedback
 }));
@@ -2402,7 +2437,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     const roleSequence = Array.from(container.querySelectorAll(".transcript-part[data-section='part']")).map((element) => element.getAttribute("data-part-role"));
-    expect(roleSequence).toEqual(["user", "assistant", "assistant"]);
+    expect(roleSequence).toEqual(["user", "user", "assistant", "assistant"]);
     expect(container.querySelector(".transcript-part[data-part-role='user'] [data-section='content']")).toBeTruthy();
     expect(container.querySelector(".transcript-part[data-part-role='assistant'][data-part-kind='text']")).toBeTruthy();
   });
@@ -2473,7 +2508,7 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     expect(container.querySelector("[data-part-kind='text']")).toBeNull();
-    expect(container.querySelector("[data-part-kind='tool']")?.textContent).toContain("正在检索相关信息。");
+    expect(container.querySelector("[data-part-kind='tool']")).toBeNull();
     expect(container.textContent).not.toContain("token=123");
     expect(container.textContent).not.toContain("grep");
   });
@@ -2697,10 +2732,8 @@ describe("side panel host permission request flow", () => {
     await flushUi();
 
     const streamParts = Array.from(container.querySelectorAll(".transcript-part[data-section='part']"));
-    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "answer", "tool", "text", "question", "text", "summary"]);
-    expect(container.textContent).toContain("查询历史 SR");
-    expect(streamParts[1]?.textContent ?? "").toContain("继续执行");
-    expect(streamParts[2]?.textContent ?? "").toContain("查询历史 SR");
+    expect(streamParts.map((node) => node.getAttribute("data-part-kind"))).toEqual(["prompt", "capture", "answer", "text", "question", "text", "summary"]);
+    expect(streamParts[2]?.textContent ?? "").toContain("继续执行");
     expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
     expect(streamParts[3]?.textContent ?? "").toContain("第一段");
     expect(streamParts[4]?.textContent ?? "").toContain("请选择处理方式");
@@ -2798,9 +2831,9 @@ describe("side panel host permission request flow", () => {
 
     expect(container.querySelectorAll("[data-message-role='assistant']")).toHaveLength(1);
     expect(container.querySelector("[data-message-role='assistant']")?.getAttribute("data-message-id")).toBe("sealed-assistant");
-    expect(container.querySelector("[data-component='process-stream']")?.textContent).toContain("查询历史 SR");
+    expect(container.querySelector("[data-component='process-stream']")).toBeNull();
     expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("最终回答");
-    expect(container.querySelector("[data-component='process-stream'] [data-part-kind='tool']")?.textContent).toContain("查询历史 SR");
+    expect(container.querySelector("[data-component='process-stream'] [data-part-kind='tool']")).toBeNull();
   });
 
   it("does not render visible avatar role markers or message-card shells in transcript output", async () => {

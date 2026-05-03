@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyRunEventState } from "../shared/protocol";
 import type { NormalizedRunEvent } from "../shared/protocol";
-import { acceptIncomingRunEvent, deriveRunFinalOutput } from "./model";
+import { initialAssistantState } from "../shared/state";
+import type { AssistantState } from "../shared/types";
+import { acceptIncomingRunEvent, deriveLifecycleStatus, deriveRunFinalOutput } from "./model";
 
 // @ArchitectureID: ELM-FUNC-EXT-CONSUME-RUN-STREAM
 describe("sidepanel canonical run-event acceptance", () => {
@@ -253,5 +255,85 @@ describe("sidepanel canonical run-event acceptance", () => {
     ];
 
     expect(deriveRunFinalOutput("第一段", nextEvents[2], nextEvents, "done")).toBe("第一段第二段");
+  });
+
+  it("keeps lifecycle status done when non-terminal events arrive after a result", () => {
+    const current: AssistantState = {
+      ...initialAssistantState,
+      status: "streaming",
+      currentRun: {
+        ...initialAssistantState.currentRun,
+        runId: "run-terminal",
+        sessionId: undefined,
+        selectedAgent: initialAssistantState.mainAgentPreference,
+        prompt: "当前问题",
+        username: "alice",
+        usernameSource: "dom_text",
+        softwareVersion: "",
+        selectedSr: "",
+        pageTitle: "",
+        pageUrl: "",
+        status: "streaming",
+        startedAt: "2026-04-02T00:00:00.000Z",
+        updatedAt: "2026-04-02T00:00:00.000Z",
+        finalOutput: ""
+      },
+      stream: {
+        runId: "run-terminal",
+        status: "streaming",
+        pendingQuestionId: null
+      }
+    };
+    const nextEvents = [
+      createEvent(1, { runId: "run-terminal", type: "result", message: "最终回答" }),
+      createEvent(2, { runId: "run-terminal", type: "tool_call", message: "session updated" })
+    ];
+
+    expect(deriveLifecycleStatus(current, nextEvents[1], nextEvents)).toEqual({
+      assistantStatus: "done",
+      runStatus: "done",
+      streamStatus: "done",
+      pendingQuestionId: null
+    });
+  });
+
+  it("keeps lifecycle status error when non-terminal events arrive after an error", () => {
+    const current: AssistantState = {
+      ...initialAssistantState,
+      status: "streaming",
+      currentRun: {
+        ...initialAssistantState.currentRun,
+        runId: "run-error",
+        sessionId: undefined,
+        selectedAgent: initialAssistantState.mainAgentPreference,
+        prompt: "当前问题",
+        username: "alice",
+        usernameSource: "dom_text",
+        softwareVersion: "",
+        selectedSr: "",
+        pageTitle: "",
+        pageUrl: "",
+        status: "streaming",
+        startedAt: "2026-04-02T00:00:00.000Z",
+        updatedAt: "2026-04-02T00:00:00.000Z",
+        finalOutput: ""
+      },
+      stream: {
+        runId: "run-error",
+        status: "streaming",
+        pendingQuestionId: null
+      }
+    };
+    const nextEvents = [
+      createEvent(1, { runId: "run-error", type: "error", message: "boom" }),
+      createEvent(2, { runId: "run-error", type: "tool_call", message: "late tool noise" })
+    ];
+
+    expect(deriveLifecycleStatus(current, nextEvents[1], nextEvents)).toEqual({
+      assistantStatus: "error",
+      runStatus: "error",
+      streamStatus: "error",
+      pendingQuestionId: null
+    });
   });
 });

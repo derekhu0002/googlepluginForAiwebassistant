@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from collections import deque
+from pathlib import Path
 import httpx
 import anyio
 import pytest
+
+from _direct_entry import ensure_repo_root_on_path, run_current_test_file
+
+ensure_repo_root_on_path()
 
 from python_adapter.app.config import Settings
 from python_adapter.app.models import QuestionAnswerRequest, RunContext, RunStartRequest
@@ -1053,3 +1058,7 @@ def test_submit_answer_raises_run_not_found_for_unknown_run_id() -> None:
             )
 
     anyio.run(scenario)
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_current_test_file(str(Path(__file__).resolve())))

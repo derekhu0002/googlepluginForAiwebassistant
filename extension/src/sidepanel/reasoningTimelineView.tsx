@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { submitMessageFeedback } from "../shared/api";
 import type { AnswerRecord, MessageFeedbackValue, QuestionPayload, RunRecord } from "../shared/protocol";
 import type { MessageFeedbackUiState, StreamConnectionState } from "../shared/types";
@@ -42,7 +43,7 @@ function normalizeFeedbackFailureMessage(message: string) {
 function MarkdownMessage({ text, className }: { text: string; className: string }) {
   return (
     <div className={`${className} markdown-body`}>
-      <ReactMarkdown>{text}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
     </div>
   );
 }

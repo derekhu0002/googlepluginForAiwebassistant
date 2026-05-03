@@ -263,6 +263,127 @@ describe("opencode raw event projector", () => {
     });
   });
 
+  it("promotes session idle to a terminal result after text grows through deltas from an empty snapshot", () => {
+    const projector = createOpencodeRawEventProjector("run-6");
+
+    const emptySnapshotEvents = projector.project({
+      id: "run-6-raw-1",
+      runId: "run-6",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      sequence: 1,
+      source: "opencode",
+      eventType: "message.part.updated",
+      payload: {
+        event: {
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              sessionID: "ses-1",
+              part: {
+                id: "part-6",
+                messageID: "msg-6",
+                type: "text",
+                text: ""
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(emptySnapshotEvents).toHaveLength(1);
+    expect(emptySnapshotEvents[0]).toMatchObject({
+      type: "tool_call",
+      title: "消息片段更新 text"
+    });
+
+    const deltaEvents = projector.project({
+      id: "run-6-raw-2",
+      runId: "run-6",
+      createdAt: "2026-04-01T00:00:01.000Z",
+      sequence: 2,
+      source: "opencode",
+      eventType: "message.part.delta",
+      payload: {
+        event: {
+          payload: {
+            type: "message.part.delta",
+            properties: {
+              sessionID: "ses-1",
+              messageID: "msg-6",
+              partID: "part-6",
+              delta: "第一段"
+            }
+          }
+        }
+      }
+    });
+
+    expect(deltaEvents).toHaveLength(1);
+    expect(deltaEvents[0]).toMatchObject({
+      type: "thinking",
+      message: "第一段"
+    });
+
+    const moreDeltaEvents = projector.project({
+      id: "run-6-raw-3",
+      runId: "run-6",
+      createdAt: "2026-04-01T00:00:02.000Z",
+      sequence: 3,
+      source: "opencode",
+      eventType: "message.part.delta",
+      payload: {
+        event: {
+          payload: {
+            type: "message.part.delta",
+            properties: {
+              sessionID: "ses-1",
+              messageID: "msg-6",
+              partID: "part-6",
+              delta: "第二段"
+            }
+          }
+        }
+      }
+    });
+
+    expect(moreDeltaEvents).toHaveLength(1);
+    expect(moreDeltaEvents[0]).toMatchObject({
+      type: "thinking",
+      message: "第二段"
+    });
+
+    const idleEvents = projector.project({
+      id: "run-6-raw-4",
+      runId: "run-6",
+      createdAt: "2026-04-01T00:00:03.000Z",
+      sequence: 4,
+      source: "opencode",
+      eventType: "session.idle",
+      payload: {
+        event: {
+          payload: {
+            type: "session.idle",
+            properties: {
+              sessionID: "ses-1"
+            }
+          }
+        }
+      }
+    });
+
+    expect(idleEvents).toHaveLength(1);
+    expect(idleEvents[0]).toMatchObject({
+      type: "result",
+      message: "第一段第二段",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "final",
+        messageId: "msg-6"
+      }
+    });
+  });
+
   it("does not surface assistant metadata updates as duplicate visible messages", () => {
     const projector = createOpencodeRawEventProjector("run-4");
 

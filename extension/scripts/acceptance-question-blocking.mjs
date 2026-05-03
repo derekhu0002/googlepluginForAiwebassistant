@@ -8,5 +8,9 @@ await runVitestSelections("人工追问事件（Question）的阻断性交互", 
   {
     file: "src/sidepanel/App.test.tsx",
     testName: "clears the waiting question state immediately after answer submission"
+  },
+  {
+    file: "src/sidepanel/missingCriteria.acceptance.test.tsx",
+    testName: "人工追问事件（Question）的阻断性交互"
   }
 ]);

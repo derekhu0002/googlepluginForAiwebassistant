@@ -1,7 +1,12 @@
+from pathlib import Path
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock
 import httpx
 import anyio
+
+from _direct_entry import ensure_repo_root_on_path, run_current_test_file
+
+ensure_repo_root_on_path()
 
 from python_adapter.app import main
 from python_adapter.app.config import Settings
@@ -421,6 +426,10 @@ def test_stream_events_returns_404_for_unknown_run() -> None:
             "message": "Run 'run-missing' 不存在或已过期，请重新发起新的 run。",
         },
     }
+
+
+if __name__ == "__main__":
+    raise SystemExit(run_current_test_file(str(Path(__file__).resolve())))
 
 
 def test_submit_answer_returns_404_for_unknown_run() -> None:

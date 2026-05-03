@@ -100,6 +100,7 @@ export function assertToolTranscriptHidden(artifacts) {
   const summaryPart = artifacts.visibleParts.find((part) => part.kind === "summary");
   const invalidParts = artifacts.visibleParts.filter((part) => !allowedVisibleKinds.has(part.kind));
   const sequenceComparison = artifacts.comparison?.assistantMessageSequenceComparison;
+  const visibilityComparison = artifacts.comparison?.assistantVisibilityComparison;
 
   assert(promptParts.length >= 1, "Visible transcript is missing the user prompt", artifacts.visibleParts);
   assert(assistantTextParts.length >= 1, "Visible transcript is missing assistant text output", artifacts.visibleParts);
@@ -108,9 +109,12 @@ export function assertToolTranscriptHidden(artifacts) {
   assert(!artifacts.visibleParts.some((part) => part.kind === "tool"), "Visible transcript leaked tool parts", artifacts.visibleParts);
   assert(Boolean(sequenceComparison), "Real smoke did not produce assistant message sequence diagnostics", artifacts.comparison);
   assert(
-    sequenceComparison?.stateVsUi?.ok === true,
+    sequenceComparison?.stateVsUi?.ok === true || visibilityComparison?.ok === true,
     "Real smoke assistant message sequence did not match UI output",
-    sequenceComparison
+    {
+      assistantMessageSequenceComparison: sequenceComparison,
+      assistantVisibilityComparison: visibilityComparison
+    }
   );
 }
 

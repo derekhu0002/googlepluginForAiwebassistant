@@ -382,6 +382,16 @@ export function deriveRunFinalOutput(
 export function deriveLifecycleStatus(current: AssistantState, event: NormalizedRunEvent, nextEvents: NormalizedRunEvent[]) {
   const pendingQuestionId = getNextPendingQuestionId(current.stream.pendingQuestionId, event);
   const hasResultEvidence = nextEvents.some((item) => item.type === "result");
+  const hasErrorEvidence = nextEvents.some((item) => item.type === "error");
+
+  if (hasErrorEvidence) {
+    return {
+      assistantStatus: "error" as const,
+      runStatus: "error" as const,
+      streamStatus: "error" as const,
+      pendingQuestionId: null as string | null
+    };
+  }
 
   if (event.type === "error") {
     return {
@@ -401,7 +411,7 @@ export function deriveLifecycleStatus(current: AssistantState, event: Normalized
     };
   }
 
-  if (event.type === "result" || (isAssistantResponseDeltaEvent(event) && hasResultEvidence)) {
+  if (hasResultEvidence) {
     return {
       assistantStatus: "done" as const,
       runStatus: "done" as const,

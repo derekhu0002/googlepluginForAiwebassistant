@@ -257,6 +257,12 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
     if (!message.trim()) {
       return [] as NormalizedRunEvent[];
     }
+    if (messageId?.trim()) {
+      state.assistantMessageId = messageId;
+    }
+    state.lastOutputText = emissionKind === "delta"
+      ? mergeBufferedDelta(state.lastOutputText, message)
+      : message;
     return [nextEvent(raw, "thinking", message, {
       data: responseTextData(messageId),
       semantic: assistantTextSemantic(messageId, emissionKind, partId)
@@ -417,6 +423,9 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
       const partType = typeof part.type === "string" ? part.type : undefined;
       const partId = partIdFromProperties(properties, part);
       const messageId = messageIdFromProperties(properties, part);
+      if (messageId?.trim()) {
+        state.assistantMessageId = messageId;
+      }
       if (partId && partType) {
         state.partTypes[partId] = partType;
       }
@@ -451,7 +460,6 @@ export function createOpencodeRawEventProjector(runId: string): OpencodeRawEvent
         })];
       }
       if (partType === "text" && typeof part.text === "string" && part.text.trim()) {
-        state.lastOutputText = part.text;
         const flushed = partId ? flushBufferedDelta(raw, partId, messageId, part.text) : [] as NormalizedRunEvent[];
         return [...flushed, ...emitAssistantText(raw, part.text, messageId, partId, "snapshot")];
       }

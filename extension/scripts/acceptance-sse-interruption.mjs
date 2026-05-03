@@ -8,5 +8,9 @@ await runVitestSelections("SSE 连接意外中断的容错处理", [
   {
     file: "src/shared/api.test.ts",
     testName: "returns to streaming after reconnect open event"
+  },
+  {
+    file: "src/sidepanel/missingCriteria.acceptance.test.tsx",
+    testName: "SSE 连接意外中断的容错处理"
   }
 ]);

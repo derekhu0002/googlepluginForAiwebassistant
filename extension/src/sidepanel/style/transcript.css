@@ -371,3 +371,22 @@
   padding-left: 10px;
   border-left: 3px solid var(--copilot-accent);
 }
+
+.markdown-body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+  border-collapse: collapse;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 6px 10px;
+  border: 1px solid var(--copilot-border);
+  text-align: left;
+}
+
+.markdown-body th {
+  background: rgba(4, 69, 230, 0.08);
+}

@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import "../../scripts/ensure-rollup-native.mjs";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const extensionRoot = path.resolve(scriptsDir, "..");
@@ -17,13 +19,21 @@ function resolveVitestEntrypoint() {
 function runVitestSelection(selection) {
   return new Promise((resolve, reject) => {
     const vitestEntrypoint = resolveVitestEntrypoint();
+    const reportFile = path.resolve(
+      extensionRoot,
+      "temp",
+      `acceptance-${Date.now()}-${Math.random().toString(36).slice(2)}.json`
+    );
     const target = selection.line
       ? `${path.normalize(selection.file)}:${selection.line}`
       : path.normalize(selection.file);
     const args = [
       vitestEntrypoint,
       "run",
-      target
+      target,
+      "--reporter=json",
+      "--outputFile",
+      reportFile
     ];
 
     if (selection.testName) {
@@ -40,7 +50,7 @@ function runVitestSelection(selection) {
     });
 
     child.on("error", reject);
-    child.on("exit", (code, signal) => {
+    child.on("exit", async (code, signal) => {
       if (signal) {
         reject(new Error(`vitest selection terminated by signal ${signal}`));
         return;
@@ -49,7 +59,19 @@ function runVitestSelection(selection) {
         reject(new Error(`vitest selection failed with exit code ${code ?? 1}: ${selection.testName}`));
         return;
       }
-      resolve();
+
+      try {
+        const report = JSON.parse(await fs.readFile(reportFile, "utf8"));
+        if ((report.numPassedTests ?? 0) < 1) {
+          reject(new Error(`vitest selection matched no passing tests: ${selection.testName ?? selection.file}`));
+          return;
+        }
+        resolve();
+      } catch (error) {
+        reject(error);
+      } finally {
+        void fs.rm(reportFile, { force: true });
+      }
     });
   });
 }

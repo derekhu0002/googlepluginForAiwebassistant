@@ -584,6 +584,23 @@ class OpencodeAdapter:
                 data={"opencode_mode": "real", "target": self.settings.opencode_base_url},
             )
             run["completed"] = True
+            return
+
+        try:
+            async for event in self._stream_real_events(run):
+                yield event
+                if event.type in {"result", "error"}:
+                    run["completed"] = True
+                    break
+        except Exception as exc:
+            yield self._next_event(
+                run,
+                "error",
+                str(exc),
+                data={"opencode_mode": "real", "target": self.settings.opencode_base_url},
+            )
+            run["completed"] = True
+            return
 
     async def stream_raw_events(self, run_id: str):
         run = self.require_run(run_id)
@@ -631,21 +648,6 @@ class OpencodeAdapter:
             )
             run["completed"] = True
             return
-
-        try:
-            async for event in self._stream_real_events(run):
-                yield event
-                if event.type in {"result", "error"}:
-                    run["completed"] = True
-                    break
-        except Exception as exc:
-            yield self._next_event(
-                run,
-                "error",
-                str(exc),
-                data={"opencode_mode": "real", "target": self.settings.opencode_base_url},
-            )
-            run["completed"] = True
 
     async def submit_answer(self, run_id: str, answer: QuestionAnswerRequest) -> None:
         run = self.require_run(run_id)
