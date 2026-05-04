@@ -7,6 +7,41 @@ export interface SidepanelDebugLogEntry {
 
 const DEBUG_LOG_LIMIT = 800;
 const DEBUG_TEXT_PREVIEW_LIMIT = 96;
+const DEBUG_LOG_STORAGE_KEY = "aiwa:enable-sidepanel-diagnostics";
+
+function isTestRuntime() {
+  return typeof process !== "undefined"
+    && (process.env?.VITEST === "true" || process.env?.NODE_ENV === "test");
+}
+
+export function isSidepanelDiagnosticsEnabled() {
+  if (isTestRuntime()) {
+    return true;
+  }
+
+  const runtimeGlobal = globalThis as typeof globalThis & {
+    __AIWA_ENABLE_SIDEPANEL_DIAGNOSTICS__?: unknown;
+  };
+  const globalOverride = runtimeGlobal.__AIWA_ENABLE_SIDEPANEL_DIAGNOSTICS__;
+
+  if (globalOverride === true || globalOverride === "1") {
+    return true;
+  }
+
+  try {
+    if (globalThis.localStorage?.getItem(DEBUG_LOG_STORAGE_KEY) === "1") {
+      return true;
+    }
+  } catch {
+    // Ignore storage access failures in restricted contexts.
+  }
+
+  try {
+    return new URLSearchParams(globalThis.location?.search ?? "").get("aiwaDebug") === "1";
+  } catch {
+    return false;
+  }
+}
 
 function compactText(value: unknown, limit = DEBUG_TEXT_PREVIEW_LIMIT) {
   if (typeof value !== "string") {
@@ -179,6 +214,9 @@ export function appendSidepanelDebugLog(
     runId: typeof sanitizedEntry.runId === "string" ? sanitizedEntry.runId : null,
     entry: sanitizedEntry
   };
+  if (!isSidepanelDiagnosticsEnabled()) {
+    return nextEntry;
+  }
   debugLogBuffer.push(nextEntry);
   if (debugLogBuffer.length > DEBUG_LOG_LIMIT) {
     debugLogBuffer.splice(0, debugLogBuffer.length - DEBUG_LOG_LIMIT);
@@ -187,6 +225,10 @@ export function appendSidepanelDebugLog(
 }
 
 export function getSidepanelDebugLogs(runId?: string | null) {
+  if (!isSidepanelDiagnosticsEnabled()) {
+    return [];
+  }
+
   if (!runId) {
     return [...debugLogBuffer];
   }

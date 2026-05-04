@@ -780,6 +780,7 @@ describe("side panel host permission request flow", () => {
       (globalThis.chrome.runtime.onMessage.addListener as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.(runtimeMessage);
     });
     await flushUi();
+    await flushAllTimers();
 
     expect(container.textContent).toContain("历史回答");
     expect(container.textContent).toContain("第一段第二段");
@@ -2405,8 +2406,8 @@ describe("side panel host permission request flow", () => {
     await flushAllTimers();
 
     expect(container.querySelectorAll(".transcript-part[data-part-role='assistant']")).toHaveLength(2);
-    expect(container.querySelector(".transcript-part[data-part-role='assistant'] .transcript-part-copy.markdown-body")).toBeTruthy();
-    expect(container.querySelectorAll(".transcript-part[data-part-role='assistant'] h1").length).toBeGreaterThanOrEqual(1);
+    expect(container.querySelector(".transcript-part[data-part-role='assistant'] .transcript-streaming-plain-text")).toBeTruthy();
+    expect(container.querySelectorAll(".transcript-part[data-part-role='assistant'] h1")).toHaveLength(0);
     expect(container.textContent).toContain("标题");
   });
 
@@ -2484,6 +2485,7 @@ describe("side panel host permission request flow", () => {
       }));
     });
     await flushUi();
+    await flushAllTimers();
 
     expect(container.textContent).toContain("第一段第二段");
   });

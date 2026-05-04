@@ -677,7 +677,7 @@ describe("ReasoningTimeline transcript rendering", () => {
     expect(firstHistoricalNode).toBe(secondHistoricalNode);
   }, 10000);
 
-  it("flushes active tail markdown immediately on revision updates and terminal state", async () => {
+  it("throttles active tail markdown updates within frame budget and flushes terminal state immediately", async () => {
     const raf = createRafController();
     const performanceSpy = vi.spyOn(performance, "now");
     const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => raf.request(callback));
@@ -728,6 +728,23 @@ describe("ReasoningTimeline transcript rendering", () => {
       root.render(<ReasoningTimeline transcriptReadModel={secondModel} runId="run-live" prompt="当前问题" events={[]} runStatus="streaming" live />);
     });
 
+    expect(container.querySelector("[data-component='active-tail-renderer']")?.textContent).toContain("A");
+
+    await act(async () => {
+      vi.advanceTimersByTime(17);
+      raf.flush(33);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector("[data-component='active-tail-renderer']")?.textContent).toContain("A");
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      now = 34;
+      raf.flush(now);
+      await Promise.resolve();
+    });
+
     expect(container.querySelector("[data-component='active-tail-renderer']")?.textContent).toContain("AB");
 
     const terminalModel = buildStableTranscriptProjection({
@@ -754,6 +771,7 @@ describe("ReasoningTimeline transcript rendering", () => {
     });
 
     expect(container.querySelector("[data-component='final-answer-panel']")?.textContent).toContain("ABCD");
+    expect(container.querySelector("[data-component='active-tail-renderer']")).toBeNull();
     performanceSpy.mockRestore();
   });
 

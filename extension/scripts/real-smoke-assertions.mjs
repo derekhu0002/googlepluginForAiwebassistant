@@ -84,14 +84,15 @@ function hasTerminalEvidenceInState(extensionState) {
 export async function runSmokeAndLoadArtifacts(options = {}) {
   await runSmokeScript(options);
 
-  const [visibleParts, extensionState, comparison, statusCheckpoints] = await Promise.all([
+  const [visibleParts, extensionState, comparison, statusCheckpoints, performance] = await Promise.all([
     readJsonArtifact("visible-parts.json"),
     readJsonArtifact("extension-state.json"),
     readJsonArtifact("comparison.json"),
-    readOptionalJsonArtifact("status-checkpoints.json")
+    readOptionalJsonArtifact("status-checkpoints.json"),
+    readOptionalJsonArtifact("performance.json")
   ]);
 
-  return { visibleParts, extensionState, comparison, statusCheckpoints };
+  return { visibleParts, extensionState, comparison, statusCheckpoints, performance };
 }
 
 export function assertToolTranscriptHidden(artifacts) {
@@ -168,4 +169,60 @@ export function assertCapturedContextVisibleInTranscript(artifacts) {
   assert(Boolean(currentRun?.softwareVersion), "Current run is missing softwareVersion after capture-backed send", currentRun);
   assert(Boolean(currentRun?.pageTitle), "Current run is missing pageTitle after capture-backed send", currentRun);
   assert(Boolean(currentRun?.pageUrl), "Current run is missing pageUrl after capture-backed send", currentRun);
+}
+
+export function assertSidepanelPerformanceGuard(artifacts, thresholds = {}) {
+  const performance = artifacts.performance;
+  const inputMeasurements = [performance?.inputMeasurement, ...(Array.isArray(performance?.inputMeasurements) ? performance.inputMeasurements : [])]
+    .filter((entry) => entry?.supported && entry?.updated);
+  const agentMeasurements = [performance?.agentMeasurement, ...(Array.isArray(performance?.agentMeasurements) ? performance.agentMeasurements : [])]
+    .filter((entry) => entry?.supported && entry?.updated);
+  const maxInputLatencyMs = Math.max(0, ...inputMeasurements.map((entry) => entry.latencyMs ?? 0));
+  const maxAgentLatencyMs = Math.max(0, ...agentMeasurements.map((entry) => entry.latencyMs ?? 0));
+  const maxGrowthStallMs = performance?.maxGrowthStallMs ?? Number.POSITIVE_INFINITY;
+  const maxLongTaskMs = performance?.maxLongTaskMs ?? 0;
+  const maxRafGapMs = performance?.maxRafGapMs ?? 0;
+  const growthEventCount = Array.isArray(performance?.growthEvents) ? performance.growthEvents.length : 0;
+
+  const limits = {
+    maxInputLatencyMs: thresholds.maxInputLatencyMs ?? 250,
+    maxAgentLatencyMs: thresholds.maxAgentLatencyMs ?? 250,
+    maxGrowthStallMs: thresholds.maxGrowthStallMs ?? 1000,
+    maxLongTaskMs: thresholds.maxLongTaskMs ?? 200,
+    maxRafGapMs: thresholds.maxRafGapMs ?? 300,
+    minGrowthEvents: thresholds.minGrowthEvents ?? 5
+  };
+
+  assert(Boolean(performance), "Real smoke did not produce sidepanel performance artifacts", artifacts);
+  assert(inputMeasurements.length >= 1, "Performance guard did not capture any successful textarea input measurements", performance);
+  assert(agentMeasurements.length >= 1, "Performance guard did not capture any successful main-agent switch measurements", performance);
+  assert(growthEventCount >= limits.minGrowthEvents, "Assistant transcript did not show enough incremental growth samples", {
+    growthEventCount,
+    transcriptSamples: performance?.transcriptSamples?.slice(-20) ?? []
+  });
+  assert(maxInputLatencyMs <= limits.maxInputLatencyMs, "Textarea input latency exceeded the performance budget", {
+    maxInputLatencyMs,
+    limit: limits.maxInputLatencyMs,
+    inputMeasurements
+  });
+  assert(maxAgentLatencyMs <= limits.maxAgentLatencyMs, "Main-agent switch latency exceeded the performance budget", {
+    maxAgentLatencyMs,
+    limit: limits.maxAgentLatencyMs,
+    agentMeasurements
+  });
+  assert(maxGrowthStallMs <= limits.maxGrowthStallMs, "Assistant transcript stalled for too long during streaming", {
+    maxGrowthStallMs,
+    limit: limits.maxGrowthStallMs,
+    growthEvents: performance?.growthEvents?.slice(-20) ?? []
+  });
+  assert(maxLongTaskMs <= limits.maxLongTaskMs, "Sidepanel emitted a long task beyond the allowed threshold", {
+    maxLongTaskMs,
+    limit: limits.maxLongTaskMs,
+    longTasks: performance?.longTasks ?? []
+  });
+  assert(maxRafGapMs <= limits.maxRafGapMs, "Sidepanel exhibited a visible freeze-sized animation frame gap", {
+    maxRafGapMs,
+    limit: limits.maxRafGapMs,
+    rafGaps: performance?.rafGaps ?? []
+  });
 }

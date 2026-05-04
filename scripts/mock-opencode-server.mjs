@@ -8,6 +8,8 @@ const AGENT_ID = process.env.OPENCODE_STUB_AGENT_ID ?? "TARA_analyst";
 const FINAL_TEXT = process.env.OPENCODE_STUB_FINAL_TEXT ?? "REAL_EXTENSION_SMOKE_OK\n\n建议先核对当前 SR 的风险范围，再执行针对软件版本的回归验证。";
 const STREAM_EVENT_DELAY_MS = Number(process.env.OPENCODE_STUB_STREAM_EVENT_DELAY_MS ?? "75");
 const SESSION_IDLE_DELAY_MS = Number(process.env.OPENCODE_STUB_SESSION_IDLE_DELAY_MS ?? "2000");
+const STREAM_CHUNK_COUNT = Math.max(1, Number(process.env.OPENCODE_STUB_STREAM_CHUNK_COUNT ?? "1"));
+const STREAM_EMISSION_KIND = process.env.OPENCODE_STUB_STREAM_EMISSION_KIND ?? "snapshot";
 
 let nextSessionNumber = 1;
 const sessions = new Map();
@@ -87,6 +89,8 @@ function buildSessionPayload(record) {
 }
 
 function buildGlobalEvents(record) {
+  const partUpdates = buildPartUpdateEvents(record);
+
   return [
     {
       directory: DIRECTORY,
@@ -114,24 +118,7 @@ function buildGlobalEvents(record) {
         }
       }
     },
-    {
-      directory: DIRECTORY,
-      payload: {
-        type: "message.part.updated",
-        agent: AGENT_ID,
-        properties: {
-          sessionID: record.id,
-          messageID: record.messageId,
-          partID: record.partId,
-          part: {
-            id: record.partId,
-            sessionID: record.id,
-            type: "text",
-            text: record.finalText
-          }
-        }
-      }
-    },
+    ...partUpdates,
     {
       directory: DIRECTORY,
       payload: {
@@ -142,6 +129,50 @@ function buildGlobalEvents(record) {
       }
     }
   ];
+}
+
+function buildPartUpdateEvents(record) {
+  const textChunks = splitIntoStreamingChunks(record.finalText, STREAM_CHUNK_COUNT);
+
+  return textChunks.map((text, index) => ({
+    directory: DIRECTORY,
+    payload: {
+      type: "message.part.updated",
+      agent: AGENT_ID,
+      properties: {
+        sessionID: record.id,
+        messageID: record.messageId,
+        partID: record.partId,
+        metadata: {
+          emissionKind: index === textChunks.length - 1 ? "final" : STREAM_EMISSION_KIND,
+          chunkIndex: index + 1,
+          chunkCount: textChunks.length
+        },
+        part: {
+          id: record.partId,
+          sessionID: record.id,
+          type: "text",
+          text
+        }
+      }
+    }
+  }));
+}
+
+function splitIntoStreamingChunks(text, chunkCount) {
+  if (chunkCount <= 1 || text.length <= 1) {
+    return [text];
+  }
+
+  const chunks = [];
+  const size = Math.max(1, Math.ceil(text.length / chunkCount));
+
+  for (let index = 1; index < chunkCount; index += 1) {
+    chunks.push(text.slice(0, Math.min(text.length, size * index)));
+  }
+
+  chunks.push(text);
+  return chunks;
 }
 
 async function sendSse(response, events) {

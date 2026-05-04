@@ -27,7 +27,7 @@ import {
   truncateText
 } from "./model";
 import { useRunHistory } from "./useRunHistory";
-import { appendSidepanelDebugLog, clearSidepanelDebugLogs } from "./debugLogStore";
+import { appendSidepanelDebugLog, clearSidepanelDebugLogs, isSidepanelDiagnosticsEnabled } from "./debugLogStore";
 import { createOpencodeRawEventProjector, type OpencodeRawEventProjector } from "./opencodeRawEventProjector";
 
 function toTranscriptCaptureSummary(run: RunRecord | null | undefined) {
@@ -62,6 +62,10 @@ export interface MainAgentOption {
 }
 
 function logSidepanelRunEvent(entry: Record<string, unknown>) {
+  if (!isSidepanelDiagnosticsEnabled()) {
+    return;
+  }
+
   const stored = appendSidepanelDebugLog("sidepanel-run-event", entry);
   console.info("[sidepanel-run-event]", stored.entry);
 }
@@ -139,6 +143,7 @@ function stripDiagnosticMetadata(event: NormalizedRunEvent): NormalizedRunEvent 
 // @ArchitectureID: ELM-FUNC-SP-ASSEMBLE-CORRELATED-TRANSCRIPT-DIAGNOSTICS
 // @SoftwareUnitID: SU-SP-RUN-STREAM-CONTROLLER
 export function useSidepanelController() {
+  const sidepanelDiagnosticsEnabled = isSidepanelDiagnosticsEnabled();
   const [state, setState] = useState<AssistantState>(initialAssistantState);
   const [rules, setRules] = useState<PageRule[]>([]);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
@@ -1025,6 +1030,10 @@ export function useSidepanelController() {
   }
 
   function handleRenderTrace(traces: TranscriptTraceRecord[]) {
+    if (!sidepanelDiagnosticsEnabled) {
+      return;
+    }
+
     const activeMessageTrace = traces.find((trace) => trace.step === "render_path");
     const tailTrace = traces.find((trace) => trace.step === "tail_revision");
     const projectionMismatch = traces.find((trace) => trace.step === "projection_vs_render");
@@ -1148,7 +1157,7 @@ export function useSidepanelController() {
     handleCaptureOnly,
     handleExportDiagnostics,
     handleQuestionSubmit,
-    handleRenderTrace,
+    handleRenderTrace: sidepanelDiagnosticsEnabled ? handleRenderTrace : undefined,
     handleRemoveFieldRule,
     handleRetry,
     handleReturnToCurrentSession,

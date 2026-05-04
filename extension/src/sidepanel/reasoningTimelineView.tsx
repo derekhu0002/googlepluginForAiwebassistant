@@ -15,7 +15,7 @@ import {
   type TranscriptTailPatchModel
 } from "./reasoningTimeline";
 import { deriveTranscriptTraceCorrelation } from "../shared/protocol";
-import { appendSidepanelDebugLog } from "./debugLogStore";
+import { appendSidepanelDebugLog, isSidepanelDiagnosticsEnabled } from "./debugLogStore";
 import { useScrollFollowController } from "./useScrollFollowController";
 
 const MAX_MARKDOWN_FPS = 30;
@@ -23,6 +23,10 @@ const MIN_MARKDOWN_FRAME_MS = 1000 / MAX_MARKDOWN_FPS;
 const RENDER_LOG_PREVIEW_LIMIT = 160;
 
 function logTranscriptRender(entry: Record<string, unknown>) {
+  if (!isSidepanelDiagnosticsEnabled()) {
+    return;
+  }
+
   const stored = appendSidepanelDebugLog("transcript-render", entry);
   console.info("[transcript-render]", stored.entry);
 }
@@ -45,6 +49,12 @@ function MarkdownMessage({ text, className }: { text: string; className: string 
     <div className={`${className} markdown-body`}>
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
     </div>
+  );
+}
+
+function StreamingTextMessage({ text, className }: { text: string; className: string }) {
+  return (
+    <pre className={`${className} transcript-streaming-plain-text`} data-render-mode="streaming-plain-text">{text}</pre>
   );
 }
 
@@ -204,6 +214,7 @@ function PartActions({
 
 function TranscriptPartBlock({
   part,
+  renderMode = "markdown",
   onCopy,
   onRetry,
   onFeedback,
@@ -211,6 +222,7 @@ function TranscriptPartBlock({
   questionSubmitDisabled
 }: {
   part: TranscriptPartModel;
+  renderMode?: "markdown" | "streaming-plain-text";
   onCopy: (part: TranscriptPartModel) => void | Promise<void>;
   onRetry?: (part: TranscriptPartModel) => void | Promise<void>;
   onFeedback?: (part: TranscriptPartModel, feedback: MessageFeedbackValue) => void | Promise<void>;
@@ -249,7 +261,9 @@ function TranscriptPartBlock({
             {part.text ? (
               isUser
                 ? <p className="transcript-part-copy transcript-part-copy-user">{part.text}</p>
-                : <MarkdownMessage text={part.text} className={messageClassName} />
+                : renderMode === "streaming-plain-text"
+                  ? <StreamingTextMessage text={part.text} className={messageClassName} />
+                  : <MarkdownMessage text={part.text} className={messageClassName} />
             ) : null}
             {part.kind === "question" && part.question && part.pendingQuestion && onQuestionSubmit && !questionSubmitDisabled ? (
               <InlineQuestionComposer question={part.question} disabled={questionSubmitDisabled} onSubmit={onQuestionSubmit} />
@@ -265,7 +279,7 @@ function TranscriptPartBlock({
   );
 }
 
-const MemoTranscriptPartBlock = memo(TranscriptPartBlock, (previous, next) => previous.part === next.part && previous.questionSubmitDisabled === next.questionSubmitDisabled);
+const MemoTranscriptPartBlock = memo(TranscriptPartBlock, (previous, next) => previous.part === next.part && previous.renderMode === next.renderMode && previous.questionSubmitDisabled === next.questionSubmitDisabled);
 
 function applyFeedbackStateToPart(part: TranscriptPartModel, feedbackByMessageId: Record<string, MessageFeedbackUiState>) {
   if (!part.supportsFeedback) {
@@ -477,16 +491,12 @@ function ActiveTailRenderer({
   questionSubmitDisabled?: boolean;
 }) {
   const [renderedText, setRenderedText] = useState(tailPatch?.fullText ?? part.text);
-  const frameRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastFlushAtRef = useRef(0);
+  const lastFlushAtRef = useRef<number | null>(null);
   const pendingTextRef = useRef(tailPatch?.fullText ?? part.text);
+  const pendingRevisionRef = useRef<string | null>(null);
 
   const clearScheduledWork = useCallback(() => {
-    if (frameRef.current !== null) {
-      cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-    }
     if (timeoutRef.current !== null) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -496,30 +506,59 @@ function ActiveTailRenderer({
   const flush = useCallback((revision: string) => {
     clearScheduledWork();
     lastFlushAtRef.current = performance.now();
+    pendingRevisionRef.current = null;
     setRenderedText(pendingTextRef.current);
     onFrameRendered?.(revision);
   }, [clearScheduledWork, onFrameRendered]);
 
+  const scheduleFlush = useCallback((revision: string, immediate = false) => {
+    pendingRevisionRef.current = revision;
+
+    if (immediate || lastFlushAtRef.current === null) {
+      flush(revision);
+      return;
+    }
+
+    clearScheduledWork();
+    const elapsedMs = performance.now() - lastFlushAtRef.current;
+    const remainingMs = Math.max(0, MIN_MARKDOWN_FRAME_MS - elapsedMs);
+    if (remainingMs <= 0) {
+      flush(revision);
+      return;
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      timeoutRef.current = null;
+      if (!pendingRevisionRef.current) {
+        return;
+      }
+      flush(pendingRevisionRef.current);
+    }, remainingMs);
+  }, [clearScheduledWork, flush]);
+
   useEffect(() => {
     pendingTextRef.current = tailPatch?.fullText ?? part.text;
     const revision = tailPatch?.revision ?? `${messageId}:${part.updatedAt}`;
-    flush(terminalState || tailPatch?.terminal ? `${revision}:terminal` : revision);
+    const terminalRevision = terminalState || tailPatch?.terminal;
+    scheduleFlush(terminalRevision ? `${revision}:terminal` : revision, terminalRevision);
 
     return () => {
       clearScheduledWork();
     };
-  }, [clearScheduledWork, flush, messageId, part.text, part.updatedAt, tailPatch?.fullText, tailPatch?.revision, tailPatch?.terminal, terminalState]);
+  }, [clearScheduledWork, messageId, part.text, part.updatedAt, scheduleFlush, tailPatch?.fullText, tailPatch?.revision, tailPatch?.terminal, terminalState]);
 
   const renderedPart = useMemo(() => ({
     ...part,
     text: renderedText,
     updatedAt: tailPatch?.updatedAt ?? part.updatedAt
   }), [part, renderedText, tailPatch?.updatedAt]);
+  const renderMode = terminalState || tailPatch?.terminal ? "markdown" : "streaming-plain-text";
 
   return (
     <div data-component="active-tail-renderer" data-tail-revision={tailPatch?.revision ?? "sealed"}>
       <MemoTranscriptPartBlock
         part={renderedPart}
+        renderMode={renderMode}
         onCopy={onCopy}
         onRetry={onRetry}
         onFeedback={onFeedback}
@@ -950,8 +989,13 @@ export function ReasoningTimeline({
 
   const contentRevision = projectedTranscript?.contentRevision
     ?? fallbackParts.map((part) => `${part.id}:${part.text.length}:${part.updatedAt}`).join("|");
+  const shouldCollectRenderTrace = Boolean(onRenderTrace) || isSidepanelDiagnosticsEnabled();
 
   useEffect(() => {
+    if (!shouldCollectRenderTrace) {
+      return;
+    }
+
     const renderTraces = buildRenderTrace({
       runId,
       transcriptReadModel: transcriptReadModel ?? null,
@@ -977,7 +1021,7 @@ export function ReasoningTimeline({
       missingRenderedIds: mismatchTrace?.details?.missingRenderedIds ?? []
     });
     onRenderTrace?.(renderTraces);
-  }, [contentRevision, fallbackParts, onRenderTrace, presentationState, projectedTranscript, runId, tailRenderRevision, transcriptReadModel]);
+  }, [contentRevision, fallbackParts, onRenderTrace, presentationState, projectedTranscript, runId, shouldCollectRenderTrace, tailRenderRevision, transcriptReadModel]);
 
   const scrollFollow = useScrollFollowController({
     containerRef,

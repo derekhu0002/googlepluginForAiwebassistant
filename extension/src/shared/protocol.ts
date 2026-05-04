@@ -384,7 +384,13 @@ export function deriveCanonicalEventMetadata(event: NormalizedRunEvent): RunEven
   let key = event.id;
 
   if (semanticIdentity) {
-    if (semanticEmissionKind === "delta" && sequence !== null) {
+    if (
+      sequence !== null
+      && (
+        semanticEmissionKind === "delta"
+        || (semanticChannel === "assistant_text" && semanticEmissionKind === "snapshot")
+      )
+    ) {
       identitySource = "semantic_identity_sequence";
       key = buildSequenceScopedCanonicalKey(semanticIdentity, sequence);
     } else {

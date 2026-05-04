@@ -220,6 +220,7 @@ function renderTimeline(
           <span>agent</span>
           <select aria-label="main-agent-picker" defaultValue="ThreatIntelAnalyst">
             <option value="ThreatIntelAnalyst">ThreatIntelAnalyst</option>
+            <option value="ThreatIntelTriage">ThreatIntelTriage</option>
           </select>
         </label>
         <ReasoningTimeline
@@ -789,7 +790,7 @@ describe("missing architecture acceptance coverage", () => {
     act(() => root.unmount());
   });
 
-  it("真实浏览器下的大 Markdown 流式交互无卡死", () => {
+  it("真实浏览器下的大 Markdown 流式交互无卡死", async () => {
     const runId = "run-large-markdown-live";
     const finalOutput = createRichMarkdownPayload();
     const events = Array.from({ length: 80 }, (_, index) => createEvent(index + 1, {
@@ -804,19 +805,85 @@ describe("missing architecture acceptance coverage", () => {
         partId: `part-${index + 1}`
       }
     }));
-    const streamingModel = buildStableTranscriptProjection({
-      historicalSegments: [],
-      liveSegment: {
-        runId,
-        prompt: "请总结当前 SR 的风险与建议下一步动作。",
-        events,
-        status: "streaming",
-        runStatus: "streaming",
-        streamStatus: "streaming",
-        includeSummary: true,
-        includeToolCallParts: false
+    const root = createRoot(container);
+    const batchSize = 20;
+    const updateDurations: number[] = [];
+    let previousModel: TranscriptReadModel | undefined;
+    let previousTailLength = 0;
+
+    function renderStreamingModel(model: TranscriptReadModel, runStatus: "streaming" | "done", options: { finalOutput?: string; streamStatus: "streaming" | "done" }) {
+      const startedAt = performance.now();
+
+      act(() => {
+        root.render(
+          <div>
+            <label>
+              <span>prompt</span>
+              <textarea aria-label="prompt-input" defaultValue="用户正在输入" />
+            </label>
+            <label>
+              <span>agent</span>
+              <select aria-label="main-agent-picker" defaultValue="ThreatIntelAnalyst">
+                <option value="ThreatIntelAnalyst">ThreatIntelAnalyst</option>
+                <option value="ThreatIntelTriage">ThreatIntelTriage</option>
+              </select>
+            </label>
+            <ReasoningTimeline
+              transcriptReadModel={model}
+              runId={runId}
+              prompt="请总结当前 SR 的风险与建议下一步动作。"
+              events={[]}
+              runStatus={runStatus}
+              streamStatus={options.streamStatus}
+              finalOutput={options.finalOutput}
+              live
+            />
+          </div>
+        );
+      });
+
+      return performance.now() - startedAt;
+    }
+
+    for (let end = batchSize; end <= events.length; end += batchSize) {
+      const batchModel = buildStableTranscriptProjection({
+        historicalSegments: [],
+        liveSegment: {
+          runId,
+          prompt: "请总结当前 SR 的风险与建议下一步动作。",
+          events: events.slice(0, end),
+          status: "streaming",
+          runStatus: "streaming",
+          streamStatus: "streaming",
+          includeSummary: true,
+          includeToolCallParts: false
+        },
+        previousModel
+      });
+
+      updateDurations.push(renderStreamingModel(batchModel, "streaming", { streamStatus: "streaming" }));
+      previousModel = batchModel;
+
+      const textarea = container.querySelector("textarea[aria-label='prompt-input']") as HTMLTextAreaElement | null;
+      const select = container.querySelector("select[aria-label='main-agent-picker']") as HTMLSelectElement | null;
+
+      if (textarea) {
+        textarea.value = `用户输入第 ${end / batchSize} 轮`;
       }
-    });
+      if (select) {
+        select.value = "ThreatIntelTriage";
+      }
+
+      const activeTailText = container.querySelector("[data-component='active-tail-renderer']")?.textContent ?? "";
+
+      expect(activeTailText.length).toBeGreaterThan(0);
+      expect(activeTailText.length).toBeGreaterThanOrEqual(previousTailLength);
+      expect(container.textContent).toContain("进行中");
+      expect(textarea?.value).toBe(`用户输入第 ${end / batchSize} 轮`);
+      expect(select?.value).toBe("ThreatIntelTriage");
+      previousTailLength = activeTailText.length;
+    }
+
     const finalModel = buildStableTranscriptProjection({
       historicalSegments: [],
       liveSegment: {
@@ -830,18 +897,24 @@ describe("missing architecture acceptance coverage", () => {
         includeSummary: true,
         includeToolCallParts: false
       },
-      previousModel: streamingModel
+      previousModel
     });
 
-    const { root, durationMs } = renderTimeline(container, finalModel, runId, "done", { finalOutput, streamStatus: "done" });
+    const durationMs = renderStreamingModel(finalModel, "done", { finalOutput, streamStatus: "done" });
     const textarea = container.querySelector("textarea[aria-label='prompt-input']") as HTMLTextAreaElement | null;
     const select = container.querySelector("select[aria-label='main-agent-picker']") as HTMLSelectElement | null;
 
+    expect(updateDurations).toHaveLength(4);
+    expect(Math.max(...updateDurations)).toBeLessThan(700);
     expect(durationMs).toBeLessThan(700);
     expect(textarea?.disabled).toBe(false);
     expect(select?.disabled).toBe(false);
+    expect(textarea?.value).toBe("用户输入第 4 轮");
+    expect(select?.value).toBe("ThreatIntelTriage");
     expect(container.querySelector("table")).toBeTruthy();
     expect(container.querySelector("pre")).toBeTruthy();
+    expect(container.querySelector("[data-component='active-tail-renderer']")).toBeFalsy();
+    expect(container.textContent).toContain("已完成");
     expect(finalModel.finalAnswerPart?.text).toContain("风险摘要");
     expect(finalModel.finalAnswerPart?.text).toContain("log line 999");
 
@@ -916,7 +989,8 @@ describe("missing architecture acceptance coverage", () => {
 
     const { root: streamingRoot } = renderTimeline(container, streamingModel, runId, "streaming", { streamStatus: "streaming" });
     expect(container.textContent).toContain("const answer = 1");
-    expect(container.querySelector("code")?.textContent).toContain("const answer = 1");
+    expect(container.querySelector(".transcript-streaming-plain-text")?.textContent).toContain("const answer = 1");
+    expect(container.querySelector("table")).toBeNull();
     act(() => streamingRoot.unmount());
 
     const { root: finalRoot } = renderTimeline(container, finalModel, runId, "done", { finalOutput, streamStatus: "done" });

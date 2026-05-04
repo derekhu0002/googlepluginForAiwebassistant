@@ -18,7 +18,7 @@ import {
   type TranscriptTraceRecord,
   type RunRecord
 } from "../shared/protocol";
-import { appendSidepanelDebugLog } from "./debugLogStore";
+import { appendSidepanelDebugLog, isSidepanelDiagnosticsEnabled } from "./debugLogStore";
 import { collectRunAssistantResponseText, isAssistantResponseDeltaEvent } from "./reasoningTimeline";
 import { getNextPendingQuestionId } from "./questionState";
 
@@ -69,6 +69,10 @@ export interface RunEventAcceptanceResult {
 const ACCEPTANCE_LOG_PREVIEW_LIMIT = 160;
 
 function logRunAcceptance(entry: Record<string, unknown>) {
+  if (!isSidepanelDiagnosticsEnabled()) {
+    return;
+  }
+
   const stored = appendSidepanelDebugLog("sidepanel-run-acceptance", entry);
   console.info("[sidepanel-run-acceptance]", stored.entry);
 }

@@ -10,7 +10,7 @@ import {
   type RunRecord,
   type TranscriptTraceRecord
 } from "../shared/protocol";
-import { appendSidepanelDebugLog } from "./debugLogStore";
+import { appendSidepanelDebugLog, isSidepanelDiagnosticsEnabled } from "./debugLogStore";
 import type { MessageFeedbackUiState } from "../shared/types";
 
 const DEFAULT_EVENT_TITLES: Record<NormalizedEventType, string> = {
@@ -2851,6 +2851,10 @@ function buildTranscriptMessagesFromFragments(fragments: ChatStreamItemModel[]) 
 }
 
 function logProjection(entry: Record<string, unknown>) {
+  if (!isSidepanelDiagnosticsEnabled()) {
+    return;
+  }
+
   const stored = appendSidepanelDebugLog("transcript-projection", entry);
   console.info("[transcript-projection]", stored.entry);
 }
@@ -3413,14 +3417,17 @@ export function buildTranscriptReadModel(options: BuildTranscriptSegmentReadMode
 // @ArchitectureID: ELM-FUNC-SP-TRACE-INCREMENTAL-TRANSCRIPT-PROJECTION
 // @SoftwareUnitID: SU-SP-TRANSCRIPT-PROJECTION
 export function buildStableTranscriptProjection(options: StableTranscriptProjectionOptions): TranscriptReadModel {
-  logProjection({
-    phase: "start",
-    historicalEventCount: options.historicalSegments.reduce((total, segment) => total + segment.events.length, 0),
-    liveEventCount: options.liveSegment?.events.length ?? 0,
-    reusedProjectionState: Boolean(options.previousModel?.liveProjectionState),
-    liveRunId: options.liveSegment?.runId ?? null,
-    historicalRunIds: options.historicalSegments.map((segment) => segment.runId)
-  });
+  const diagnosticsEnabled = isSidepanelDiagnosticsEnabled();
+  if (diagnosticsEnabled) {
+    logProjection({
+      phase: "start",
+      historicalEventCount: options.historicalSegments.reduce((total, segment) => total + segment.events.length, 0),
+      liveEventCount: options.liveSegment?.events.length ?? 0,
+      reusedProjectionState: Boolean(options.previousModel?.liveProjectionState),
+      liveRunId: options.liveSegment?.runId ?? null,
+      historicalRunIds: options.historicalSegments.map((segment) => segment.runId)
+    });
+  }
   const historySignature = createHistorySegmentsSignature(options.historicalSegments);
   const canReuseHistory = Boolean(
     options.previousModel
@@ -3509,15 +3516,20 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
     sealActiveMessage,
     previousModel: options.previousModel
   });
-  const anomalies = collectProjectionAnomalies(
-    projection.messages,
-    sortNormalizedRunEvents([
-      ...options.historicalSegments.flatMap((segment) => segment.events),
-      ...(options.liveSegment?.events ?? [])
-    ]),
-    options.liveSegment?.runId ?? options.historicalSegments.at(-1)?.runId ?? "transcript"
-  );
-  if (anomalies.length) {
+  const sortedProjectionEvents = diagnosticsEnabled
+    ? sortNormalizedRunEvents([
+        ...options.historicalSegments.flatMap((segment) => segment.events),
+        ...(options.liveSegment?.events ?? [])
+      ])
+    : [];
+  const anomalies = diagnosticsEnabled
+    ? collectProjectionAnomalies(
+        projection.messages,
+        sortedProjectionEvents,
+        options.liveSegment?.runId ?? options.historicalSegments.at(-1)?.runId ?? "transcript"
+      )
+    : [];
+  if (diagnosticsEnabled && anomalies.length) {
     for (const anomaly of anomalies) {
       logProjection({ ...anomaly });
     }
@@ -3525,63 +3537,64 @@ export function buildStableTranscriptProjection(options: StableTranscriptProject
   const projectionWithAnomalies: TranscriptReadModel = {
     ...projection,
     anomalies,
-    projectionTraces: collectProjectionTraceRecords({
-      events: sortNormalizedRunEvents([
-        ...options.historicalSegments.flatMap((segment) => segment.events),
-        ...(options.liveSegment?.events ?? [])
-      ]),
-      fragments: [
-        ...projection.historicalMessages.flatMap((message) => message.parts.map((part) => ({
-          id: part.id,
-          anchorId: part.anchorId,
-          groupAnchorId: part.groupAnchorId,
-          runId: part.runId,
-          kind: part.kind === "prompt" ? "user_prompt" : part.kind === "capture" ? "user_capture" : part.kind === "answer" ? "user_answer" : part.kind === "question" ? "assistant_question" : part.kind === "error" ? "assistant_error" : part.kind === "text" ? "assistant_output" : "assistant_process",
-          title: "",
-          summary: part.text,
-          createdAt: part.createdAt,
-          updatedAt: part.updatedAt,
-          primaryType: (part.originEventTypes[0] ?? (part.kind === "error" ? "error" : part.kind === "question" ? "question" : "thinking")) as ChatStreamItemModel["primaryType"],
-          badges: part.badges,
-          originEventTypes: part.originEventTypes,
-          question: part.question,
-          answer: part.answer,
-          pendingQuestion: part.pendingQuestion,
-          sourceQuestionPrompt: part.sourceQuestionPrompt,
-          supportsCopy: part.supportsCopy,
-          supportsRetry: part.supportsRetry,
-          supportsFeedback: part.supportsFeedback,
-          feedbackState: part.feedbackState
-        } as ChatStreamItemModel))),
-        ...(projection.liveProjectionState?.items ?? [])
-      ],
-      messages: projection.messages,
-      processParts: projection.processParts,
-      finalAnswerPart: projection.finalAnswerPart,
-      questionPart: projection.questionPart,
-      errorPart: projection.errorPart,
-      summaryPart: projection.summaryPart,
-      liveProjectionDebug: projection.liveProjectionDebug,
-      anomalies,
-      sealActiveMessage
-    })
+    projectionTraces: diagnosticsEnabled
+      ? collectProjectionTraceRecords({
+          events: sortedProjectionEvents,
+          fragments: [
+            ...projection.historicalMessages.flatMap((message) => message.parts.map((part) => ({
+              id: part.id,
+              anchorId: part.anchorId,
+              groupAnchorId: part.groupAnchorId,
+              runId: part.runId,
+              kind: part.kind === "prompt" ? "user_prompt" : part.kind === "capture" ? "user_capture" : part.kind === "answer" ? "user_answer" : part.kind === "question" ? "assistant_question" : part.kind === "error" ? "assistant_error" : part.kind === "text" ? "assistant_output" : "assistant_process",
+              title: "",
+              summary: part.text,
+              createdAt: part.createdAt,
+              updatedAt: part.updatedAt,
+              primaryType: (part.originEventTypes[0] ?? (part.kind === "error" ? "error" : part.kind === "question" ? "question" : "thinking")) as ChatStreamItemModel["primaryType"],
+              badges: part.badges,
+              originEventTypes: part.originEventTypes,
+              question: part.question,
+              answer: part.answer,
+              pendingQuestion: part.pendingQuestion,
+              sourceQuestionPrompt: part.sourceQuestionPrompt,
+              supportsCopy: part.supportsCopy,
+              supportsRetry: part.supportsRetry,
+              supportsFeedback: part.supportsFeedback,
+              feedbackState: part.feedbackState
+            } as ChatStreamItemModel))),
+            ...(projection.liveProjectionState?.items ?? [])
+          ],
+          messages: projection.messages,
+          processParts: projection.processParts,
+          finalAnswerPart: projection.finalAnswerPart,
+          questionPart: projection.questionPart,
+          errorPart: projection.errorPart,
+          summaryPart: projection.summaryPart,
+          liveProjectionDebug: projection.liveProjectionDebug,
+          anomalies,
+          sealActiveMessage
+        })
+      : []
   };
-  logProjection({
-    phase: "complete",
-    messageCount: projectionWithAnomalies.messages.length,
-    partCount: projectionWithAnomalies.parts.length,
-    anomalyCount: projectionWithAnomalies.anomalies?.length ?? 0,
-    runId: options.liveSegment?.runId ?? options.historicalSegments.at(-1)?.runId ?? null,
-    sealedMessageCount: projectionWithAnomalies.sealedMessages.length,
-    activeMessageId: projectionWithAnomalies.activeAssistantMessageId,
-    finalAnswerPartId: projectionWithAnomalies.finalAnswerPart?.id ?? null,
-    finalAnswerPreview: previewProjectionLogText(projectionWithAnomalies.finalAnswerPart?.text),
-    questionPartId: projectionWithAnomalies.questionPart?.id ?? null,
-    errorPartId: projectionWithAnomalies.errorPart?.id ?? null,
-    tailPatchRevision: projectionWithAnomalies.tailPatch?.revision ?? null,
-    tailDeltaPreview: previewProjectionLogText(projectionWithAnomalies.tailPatch?.deltaText),
-    anomalyTypes: projectionWithAnomalies.anomalies?.map((anomaly) => anomaly.anomalyType) ?? []
-  });
+  if (diagnosticsEnabled) {
+    logProjection({
+      phase: "complete",
+      messageCount: projectionWithAnomalies.messages.length,
+      partCount: projectionWithAnomalies.parts.length,
+      anomalyCount: projectionWithAnomalies.anomalies?.length ?? 0,
+      runId: options.liveSegment?.runId ?? options.historicalSegments.at(-1)?.runId ?? null,
+      sealedMessageCount: projectionWithAnomalies.sealedMessages.length,
+      activeMessageId: projectionWithAnomalies.activeAssistantMessageId,
+      finalAnswerPartId: projectionWithAnomalies.finalAnswerPart?.id ?? null,
+      finalAnswerPreview: previewProjectionLogText(projectionWithAnomalies.finalAnswerPart?.text),
+      questionPartId: projectionWithAnomalies.questionPart?.id ?? null,
+      errorPartId: projectionWithAnomalies.errorPart?.id ?? null,
+      tailPatchRevision: projectionWithAnomalies.tailPatch?.revision ?? null,
+      tailDeltaPreview: previewProjectionLogText(projectionWithAnomalies.tailPatch?.deltaText),
+      anomalyTypes: projectionWithAnomalies.anomalies?.map((anomaly) => anomaly.anomalyType) ?? []
+    });
+  }
   return projectionWithAnomalies;
 }
 

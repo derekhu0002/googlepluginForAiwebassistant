@@ -152,7 +152,7 @@
 ,"testcases": [
 {
 "name": "流式消息渲染的 UI 线程隔离 (防止卡死)",
-"description": "**GIVEN**: Side Panel 已连接到 `PYTHON_ADAPTER`，并开始接收高频的 SSE 流式 `thinking` / `result` 事件（模拟 AI 极速吐字）。\\r\\n**WHEN**: 在消息持续滚动渲染的同时，用户尝试在输入框内快速输入文字，或在 Side Panel 内点击切换“主 Agent”。\\r\\n**THEN**: 输入框字符出现不应有可感知延迟，下拉菜单响应应即时，UI 帧率（FPS）应保持在 50+；并且该用例必须走真实 sidepanel transcript 渲染路径，不允许通过 mock `ReactMarkdown`、跳过 `reasoningTimelineView` 或直接断言字符串拼接来伪造通过。",
+"description": "**GIVEN**: Side Panel 已连接到 `PYTHON_ADAPTER`，并开始接收高频的 SSE 流式 `thinking` / `result` 事件（模拟 AI 极速吐字）。\\r\\n**WHEN**: 在消息持续滚动渲染的同时，用户尝试在输入框内快速输入文字，或在 Side Panel 内点击切换“主 Agent”。\\r\\n**THEN**: 输入框字符出现不应有可感知延迟，下拉菜单响应应即时，UI 帧率（FPS）应保持在 50+；并且该用例必须走真实 sidepanel transcript 渲染路径，不允许通过 mock `ReactMarkdown`、跳过 `reasoningTimelineView` 或直接断言字符串拼接来伪造通过。该用例定位为最小可执行的前置回归与局部交互护栏，不单独承担真实浏览器下大 Markdown streaming 性能退化的最终系统级证明。",
 "type": "Acceptance Test",
 "Input": "复用 `extension\\\\src\\\\sidepanel\\\\missingCriteria.acceptance.test.tsx` 与 `extension\\\\scripts\\\\acceptance-ui-thread-isolation.mjs` 作为最小入口：连续注入高频 assistant delta 事件，同时驱动 textarea 输入与主 Agent 下拉切换。后续应扩展到 `extension\\\\scripts\\\\real-extension-smoke.mjs`，在真实浏览器 sidepanel 中采样输入响应、主 Agent 切换和主舞台可见 transcript。",
 "acceptanceCriteria": "extension\\scripts\\acceptance-ui-thread-isolation.mjs",
@@ -160,7 +160,7 @@
 },
 {
 "name": "大数据量 Markdown 解析性能基准",
-"description": "**GIVEN**: AI 返回的消息包含极端复杂的 Markdown 内容（例如：50行&#215;10列的漏洞列表表格，或包含 1000 行代码的 T-Box 固件日志）。\r\n**WHEN**: 扩展将该片段在页面进行渲染时。\r\n**THEN**: 侧边栏不应出现超过 200ms 的视觉冻结，且表格应支持平滑横向滚动，不影响纵向会话滚动。",
+"description": "**GIVEN**: AI 返回的消息包含极端复杂的 Markdown 内容（例如：50行&#215;10列的漏洞列表表格，或包含 1000 行代码的 T-Box 固件日志）。\r\n**WHEN**: 扩展将该片段在页面进行渲染时。\r\n**THEN**: 侧边栏不应出现超过 200ms 的视觉冻结，且表格应支持平滑横向滚动，不影响纵向会话滚动。\r\n真实浏览器下的最终性能护栏由 acceptance-real-sidepanel-performance.mjs 承担",
 "type": "Acceptance Test",
 "Input": "复用 `extension\\\\src\\\\sidepanel\\\\missingCriteria.acceptance.test.tsx` 中的大 Markdown payload 生成方式，覆盖大表格 + 长代码块 + 从 delta 到 terminal result 的切换；最小可执行入口为 `extension\\\\scripts\\\\acceptance-large-markdown-performance.mjs`，后续应并入 `extension\\\\scripts\\\\real-extension-smoke.mjs`，对比最终可见 transcript、extension state 与 comparison artifact。",
 "acceptanceCriteria": "extension\\scripts\\acceptance-large-markdown-performance.mjs",
@@ -216,10 +216,10 @@
 },
 {
 "name": "真实浏览器下的大 Markdown 流式交互无卡死",
-"description": "Given：assistant 持续流式输出超大 Markdown，内容包含大表格和长代码块。When：Side Panel 在真实浏览器中持续接收增量内容，同时用户在输入框快速输入并切换主 Agent。Then：UI 不得出现超过 200ms 的可感知冻结；输入和主 Agent 切换必须持续可操作；主舞台 transcript 最终内容与 canonical state 收敛一致。测试环境要求：当前最小可运行入口为 extension Vitest + jsdom sidepanel harness，同一脚本验证大 Markdown 流式渲染、交互控件可操作性与最终 transcript 收敛；后续可在保持脚本路径不变的前提下升级为真实 Playwright smoke。",
+"description": "Given：assistant 持续流式输出超大 Markdown，内容包含大表格和长代码块。When：Side Panel 在真实浏览器中持续接收增量内容，同时用户在输入框快速输入并切换主 Agent。Then：UI 不得出现超过 200ms 的可感知冻结；输入和主 Agent 切换必须持续可操作；主舞台 transcript 必须出现足够多的可见增量增长，且最终内容与 canonical state 收敛一致。测试环境要求：该用例当前必须以真实 Playwright smoke 为入口，并基于真实 sidepanel 页面采样 `growthEvents`、`maxGrowthStallMs`、`maxLongTaskMs`、`maxRafGapMs`、输入响应、主 Agent 切换与最终 transcript 收敛，作为本次大 Markdown streaming 性能问题的系统级护栏。",
 "type": "Acceptance Test",
-"Input": "连续注入大 Markdown delta 与 terminal result，同时保留 prompt 输入框和主 Agent 选择器交互断言，验证最终 answer part 收敛且控件未被冻结。",
-"acceptanceCriteria": "extension\\scripts\\acceptance-real-large-markdown-streaming.mjs",
+"Input": "以 `extension\\\\scripts\\\\acceptance-real-sidepanel-performance.mjs` 为真实浏览器入口，构造大 Markdown payload，经 repo-local stub 与 test adapter 持续输出 snapshot/update 流；在 smoke 中同时校验输入框响应、主 Agent 切换、assistant transcript 可见增长次数、`maxGrowthStallMs`、`maxLongTaskMs`、`maxRafGapMs` 与最终 transcript 收敛。",
+"acceptanceCriteria": "extension\\scripts\\acceptance-real-sidepanel-performance.mjs",
 "TestResults": ""
 },
 {

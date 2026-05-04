@@ -18,7 +18,7 @@ function scrollToBottom(element: HTMLDivElement | null) {
   const top = element.scrollHeight;
   if (typeof element.scrollTo === "function") {
     try {
-      element.scrollTo({ top, behavior: "smooth" });
+      element.scrollTo({ top, behavior: "auto" });
       return;
     } catch {
       // Fall through for environments that don't support ScrollToOptions.
@@ -36,7 +36,7 @@ function scrollToMessageStart(container: HTMLDivElement | null, target: HTMLElem
   const top = target.offsetTop;
   if (typeof container.scrollTo === "function") {
     try {
-      container.scrollTo({ top, behavior: "smooth" });
+      container.scrollTo({ top, behavior: "auto" });
       return;
     } catch {
       // Fall through for environments that don't support ScrollToOptions.
@@ -114,9 +114,6 @@ export function useScrollFollowController({
     if (mode === "pinned-end" || isNearBottom(container)) {
       requestAnimationFrame(() => {
         scrollToBottom(containerRef.current);
-        requestAnimationFrame(() => {
-          scrollToBottom(containerRef.current);
-        });
       });
       setMode("pinned-end");
       setShowLatestMessageButton(false);
@@ -138,9 +135,6 @@ export function useScrollFollowController({
   const resumeFollow = useCallback(() => {
     requestAnimationFrame(() => {
       scrollToBottom(containerRef.current);
-      requestAnimationFrame(() => {
-        scrollToBottom(containerRef.current);
-      });
     });
     setMode("pinned-end");
     setShowLatestMessageButton(false);

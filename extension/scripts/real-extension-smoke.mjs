@@ -11,18 +11,31 @@ const TEST_URL = process.env.EXTENSION_TEST_URL ?? "http://127.0.0.1:4173/";
 const RUN_PROMPT = process.env.EXTENSION_SMOKE_PROMPT ?? "请总结当前 SR 的风险与建议下一步动作。";
 const STATE_KEY = "ai-web-assistant-state";
 const OUTPUT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../temp/real-extension-smoke");
+const EXTENSION_WORKSPACE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXTENSION_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 const PROFILE_ROOT_DIR = path.join(OUTPUT_DIR, "playwright-profile-runs");
-const ADAPTER_LOG_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../python_adapter/logs/invocations.jsonl");
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const PYTHON_ADAPTER_DIR = path.join(REPO_ROOT, "python_adapter");
 const LAUNCH_MODE = process.env.EXTENSION_SMOKE_BROWSER_MODE ?? "launch";
 const CHROMIUM_EXECUTABLE = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? null;
 const NOISE_MARKERS = ["会话已创建", "会话状态", "正在读取所需内容"];
 const ENFORCE_ASSISTANT_SEQUENCE_COMPARISON = process.env.REAL_SMOKE_ENFORCE_SEQUENCE_COMPARISON !== "0";
 const CAPTURE_PROGRESS_CHECKPOINTS = process.env.REAL_SMOKE_CAPTURE_PROGRESS_CHECKPOINT === "1";
 const CAPTURE_BEFORE_SEND = process.env.REAL_SMOKE_CAPTURE_BEFORE_SEND === "1";
-const OPENCODE_HEALTH_URL = process.env.EXTENSION_SMOKE_OPENCODE_HEALTH_URL ?? "http://127.0.0.1:8124/global/health";
+const CAPTURE_PERFORMANCE_GUARD = process.env.REAL_SMOKE_CAPTURE_PERFORMANCE_GUARD === "1";
+const PERFORMANCE_SAMPLE_INTERVAL_MS = Number(process.env.REAL_SMOKE_PERFORMANCE_SAMPLE_INTERVAL_MS ?? "100");
+const PERFORMANCE_FREEZE_THRESHOLD_MS = Number(process.env.REAL_SMOKE_PERFORMANCE_FREEZE_THRESHOLD_MS ?? "250");
+const REQUIRE_REPO_OPENCODE_STUB = process.env.REAL_SMOKE_REQUIRE_REPO_STUB === "1";
+const TEST_OPENCODE_STUB_PORT = Number(process.env.REAL_SMOKE_OPENCODE_STUB_PORT ?? (REQUIRE_REPO_OPENCODE_STUB ? "18124" : "8124"));
+const TEST_ADAPTER_PORT = Number(process.env.REAL_SMOKE_ADAPTER_PORT ?? (REQUIRE_REPO_OPENCODE_STUB ? "18030" : "8030"));
+const EXTENSION_API_BASE_URL = process.env.REAL_SMOKE_EXTENSION_API_BASE_URL ?? `http://127.0.0.1:${TEST_ADAPTER_PORT}`;
+const OPENCODE_BASE_URL = process.env.REAL_SMOKE_OPENCODE_BASE_URL ?? `http://127.0.0.1:${TEST_OPENCODE_STUB_PORT}`;
+const OPENCODE_HEALTH_URL = process.env.EXTENSION_SMOKE_OPENCODE_HEALTH_URL ?? `${OPENCODE_BASE_URL}/global/health`;
+const ADAPTER_HEALTH_URL = process.env.EXTENSION_SMOKE_ADAPTER_HEALTH_URL ?? `${EXTENSION_API_BASE_URL}/health`;
+const ADAPTER_LOG_DIR = process.env.EXTENSION_SMOKE_ADAPTER_LOG_DIR ?? path.join(OUTPUT_DIR, "python-adapter-logs");
+const ADAPTER_LOG_PATH = process.env.EXTENSION_SMOKE_ADAPTER_LOG_PATH ?? path.join(ADAPTER_LOG_DIR, "invocations.jsonl");
 const OPENCODE_STUB_SCRIPT = path.join(REPO_ROOT, "scripts", "mock-opencode-server.mjs");
+const PYTHON_EXECUTABLE = process.env.REAL_SMOKE_PYTHON_EXECUTABLE ?? "python";
 
 function logSmokeStep(step) {
   console.error(`[real-smoke] ${step}`);
@@ -51,12 +64,60 @@ function httpGetJson(url) {
   });
 }
 
+function attachChildLogging(child, prefix) {
+  child.stdout?.on("data", (chunk) => {
+    const text = String(chunk).trim();
+    if (text) {
+      console.error(`[${prefix}] ${text}`);
+    }
+  });
+
+  child.stderr?.on("data", (chunk) => {
+    const text = String(chunk).trim();
+    if (text) {
+      console.error(`[${prefix}] ${text}`);
+    }
+  });
+}
+
+function spawnAndWaitForExit(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const { logPrefix, ...spawnOptions } = options;
+    const child = spawn(command, args, {
+      shell: false,
+      ...spawnOptions
+    });
+
+    attachChildLogging(child, logPrefix ?? path.basename(command));
+    child.on("error", reject);
+    child.on("exit", (code, signal) => {
+      if (signal) {
+        reject(new Error(`${command} ${args.join(" ")} terminated by signal ${signal}`));
+        return;
+      }
+
+      if (code !== 0) {
+        reject(new Error(`${command} ${args.join(" ")} exited with code ${code ?? 1}`));
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
 async function ensureOpencodeEnvironment() {
   try {
-    await httpGetJson(OPENCODE_HEALTH_URL);
+    const health = await httpGetJson(OPENCODE_HEALTH_URL);
     logSmokeStep("opencode-health-ready");
+    if (REQUIRE_REPO_OPENCODE_STUB && health?.service !== "mock-opencode-server") {
+      throw new Error(`REAL_SMOKE_REQUIRE_REPO_STUB=1 but ${OPENCODE_HEALTH_URL} is not serving the repository stub. Expected service=mock-opencode-server, received ${JSON.stringify(health)}.`);
+    }
     return { close: async () => undefined };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("REAL_SMOKE_REQUIRE_REPO_STUB=1")) {
+      throw error;
+    }
     logSmokeStep("opencode-health-missing-starting-stub");
   }
 
@@ -66,22 +127,10 @@ async function ensureOpencodeEnvironment() {
     shell: false,
     env: {
       ...process.env,
-      OPENCODE_STUB_PORT: "8124"
+      OPENCODE_STUB_PORT: String(TEST_OPENCODE_STUB_PORT)
     }
   });
-
-  child.stdout.on("data", (chunk) => {
-    const text = String(chunk).trim();
-    if (text) {
-      console.error(`[mock-opencode-server] ${text}`);
-    }
-  });
-  child.stderr.on("data", (chunk) => {
-    const text = String(chunk).trim();
-    if (text) {
-      console.error(text);
-    }
-  });
+  attachChildLogging(child, "mock-opencode-server");
 
   await waitFor(async () => {
     try {
@@ -97,6 +146,90 @@ async function ensureOpencodeEnvironment() {
   });
 
   logSmokeStep("opencode-stub-ready");
+  return {
+    close: async () => {
+      if (!child.killed) {
+        child.kill("SIGTERM");
+      }
+    }
+  };
+}
+
+async function ensureExtensionBuildForSmoke() {
+  if (!REQUIRE_REPO_OPENCODE_STUB) {
+    return;
+  }
+
+  logSmokeStep(`extension-build-start apiBaseUrl=${EXTENSION_API_BASE_URL}`);
+  const buildCommand = process.platform === "win32" ? "cmd.exe" : "npm";
+  const buildArgs = process.platform === "win32" ? ["/d", "/s", "/c", "npm run build"] : ["run", "build"];
+  await spawnAndWaitForExit(buildCommand, buildArgs, {
+    cwd: EXTENSION_WORKSPACE_DIR,
+    env: {
+      ...process.env,
+      VITE_EXTENSION_ENV: "development",
+      VITE_API_BASE_URL: EXTENSION_API_BASE_URL,
+      VITE_ALLOWED_API_ORIGINS: EXTENSION_API_BASE_URL
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    logPrefix: "extension-build"
+  });
+  logSmokeStep("extension-build-ready");
+}
+
+async function ensurePythonAdapterEnvironment() {
+  if (!REQUIRE_REPO_OPENCODE_STUB) {
+    return { close: async () => undefined };
+  }
+
+  try {
+    const health = await httpGetJson(ADAPTER_HEALTH_URL);
+    if (health?.backend === "python-adapter" && health?.opencode_base_url === OPENCODE_BASE_URL) {
+      logSmokeStep("adapter-health-ready");
+      return { close: async () => undefined };
+    }
+
+    throw new Error(`Adapter health check at ${ADAPTER_HEALTH_URL} does not match test environment: ${JSON.stringify(health)}`);
+  } catch (error) {
+    logSmokeStep(`adapter-health-missing-starting-test-adapter port=${TEST_ADAPTER_PORT}`);
+    if (error instanceof Error && /does not match test environment/iu.test(error.message)) {
+      throw error;
+    }
+  }
+
+  await mkdir(ADAPTER_LOG_DIR, { recursive: true });
+  const child = spawn(PYTHON_EXECUTABLE, ["-m", "uvicorn", "python_adapter.app.main:app", "--host", "127.0.0.1", "--port", String(TEST_ADAPTER_PORT)], {
+    cwd: REPO_ROOT,
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: false,
+    env: {
+      ...process.env,
+      PYTHON_ADAPTER_PORT: String(TEST_ADAPTER_PORT),
+      PYTHON_ADAPTER_ALLOWED_ORIGINS: EXTENSION_API_BASE_URL,
+      PYTHON_ADAPTER_LOG_DIR: ADAPTER_LOG_DIR,
+      OPENCODE_BASE_URL,
+      OPENCODE_DIRECTORY: REPO_ROOT
+    }
+  });
+  attachChildLogging(child, "python-adapter");
+
+  await waitFor(async () => {
+    try {
+      const health = await httpGetJson(ADAPTER_HEALTH_URL);
+      if (health?.backend === "python-adapter" && health?.opencode_base_url === OPENCODE_BASE_URL) {
+        return true;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, {
+    timeoutMs: 15000,
+    intervalMs: 250,
+    errorMessage: `Timed out waiting for test python adapter to become healthy at ${ADAPTER_HEALTH_URL}`
+  });
+
+  logSmokeStep("adapter-ready");
   return {
     close: async () => {
       if (!child.killed) {
@@ -292,6 +425,197 @@ async function getInteractiveCheckpoint(frame) {
       textareaDisabled: textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
       panelText: (root.textContent ?? "").trim()
     };
+  });
+}
+
+async function installSidepanelPerformanceProbe(frame, options = {}) {
+  await frame.evaluate(({ sampleIntervalMs, freezeThresholdMs }) => {
+    const probeKey = "__aiWebAssistantPerformanceProbe";
+    if (globalThis[probeKey]?.installed) {
+      return;
+    }
+
+    const state = {
+      installed: true,
+      startedAt: performance.now(),
+      sampleIntervalMs,
+      freezeThresholdMs,
+      transcriptSamples: [],
+      growthEvents: [],
+      longTasks: [],
+      rafGaps: [],
+      inputMeasurements: [],
+      agentMeasurements: [],
+      errors: [],
+      maxGrowthStallMs: 0
+    };
+
+    const getSummaryText = () => (document.querySelector(".transcript-part[data-part-kind='summary']")?.textContent ?? "").trim();
+    const getAssistantTextLength = () => Array.from(document.querySelectorAll("[data-section='part'][data-part-role='assistant'][data-part-kind='text']"))
+      .reduce((total, node) => total + ((node.textContent ?? "").trim().length), 0);
+    const nowOffset = () => performance.now() - state.startedAt;
+
+    let lastGrowthLength = 0;
+    let lastGrowthAt = state.startedAt;
+    const sample = () => {
+      const assistantTextLength = getAssistantTextLength();
+      const summaryText = getSummaryText();
+      const atMs = nowOffset();
+      state.transcriptSamples.push({ atMs, assistantTextLength, summaryText });
+
+      if (assistantTextLength > lastGrowthLength) {
+        lastGrowthLength = assistantTextLength;
+        lastGrowthAt = performance.now();
+        state.growthEvents.push({ atMs, assistantTextLength });
+      }
+
+      if (assistantTextLength > 0 && !summaryText.includes("已完成")) {
+        state.maxGrowthStallMs = Math.max(state.maxGrowthStallMs, performance.now() - lastGrowthAt);
+      }
+    };
+
+    const waitForCondition = async (predicate, timeoutMs = 1000) => {
+      const deadline = performance.now() + timeoutMs;
+      while (performance.now() <= deadline) {
+        if (predicate()) {
+          return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 16));
+      }
+      return false;
+    };
+
+    const sampleTimer = setInterval(sample, sampleIntervalMs);
+    sample();
+
+    let lastAnimationFrameAt = performance.now();
+    let animationFrameId = 0;
+    const tick = (timestamp) => {
+      const gapMs = timestamp - lastAnimationFrameAt;
+      if (gapMs > freezeThresholdMs) {
+        state.rafGaps.push({ atMs: timestamp - state.startedAt, gapMs });
+      }
+      lastAnimationFrameAt = timestamp;
+      animationFrameId = requestAnimationFrame(tick);
+    };
+    animationFrameId = requestAnimationFrame(tick);
+
+    let longTaskObserver = null;
+    if (typeof PerformanceObserver === "function") {
+      try {
+        longTaskObserver = new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) {
+            state.longTasks.push({
+              atMs: entry.startTime,
+              durationMs: entry.duration,
+              name: entry.name,
+              entryType: entry.entryType
+            });
+          }
+        });
+        longTaskObserver.observe({ type: "longtask", buffered: true });
+      } catch {
+        // longtask is not supported in all environments.
+      }
+    }
+
+    globalThis[probeKey] = {
+      installed: true,
+      async measureTextareaInput(text) {
+        const textarea = document.querySelector("textarea");
+        if (!(textarea instanceof HTMLTextAreaElement)) {
+          const result = { supported: false, reason: "textarea-not-found" };
+          state.inputMeasurements.push(result);
+          return result;
+        }
+
+        const startedAt = performance.now();
+        textarea.focus();
+        textarea.value = text;
+        textarea.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        const updated = await waitForCondition(() => textarea.value === text, 750);
+        const result = {
+          supported: true,
+          updated,
+          disabled: textarea.disabled,
+          latencyMs: performance.now() - startedAt,
+          valueLength: text.length
+        };
+        state.inputMeasurements.push(result);
+        return result;
+      },
+      async measureAgentSwitch() {
+        const trigger = document.querySelector(".main-agent-trigger");
+        if (!(trigger instanceof HTMLButtonElement)) {
+          const result = { supported: false, reason: "agent-trigger-not-found" };
+          state.agentMeasurements.push(result);
+          return result;
+        }
+
+        const before = (trigger.getAttribute("aria-label") ?? trigger.textContent ?? "").trim();
+        trigger.click();
+        const menuVisible = await waitForCondition(() => document.querySelector("[role='menu'][aria-label='主 AGENT 菜单']"), 750);
+        if (!menuVisible) {
+          const result = { supported: false, reason: "agent-menu-not-visible" };
+          state.agentMeasurements.push(result);
+          return result;
+        }
+
+        const nextOption = Array.from(document.querySelectorAll(".main-agent-option"))
+          .find((node) => node instanceof HTMLButtonElement && node.getAttribute("aria-checked") !== "true");
+        if (!(nextOption instanceof HTMLButtonElement)) {
+          const result = { supported: false, reason: "alternate-agent-not-found" };
+          state.agentMeasurements.push(result);
+          return result;
+        }
+
+        const startedAt = performance.now();
+        nextOption.click();
+        const updated = await waitForCondition(() => (trigger.getAttribute("aria-label") ?? trigger.textContent ?? "").trim() !== before, 1000);
+        const after = (trigger.getAttribute("aria-label") ?? trigger.textContent ?? "").trim();
+        const result = {
+          supported: true,
+          updated,
+          latencyMs: performance.now() - startedAt,
+          before,
+          after
+        };
+        state.agentMeasurements.push(result);
+        return result;
+      },
+      stopAndGet() {
+        clearInterval(sampleTimer);
+        cancelAnimationFrame(animationFrameId);
+        longTaskObserver?.disconnect();
+        sample();
+        return {
+          ...state,
+          maxLongTaskMs: state.longTasks.reduce((max, entry) => Math.max(max, entry.durationMs ?? 0), 0),
+          maxRafGapMs: state.rafGaps.reduce((max, entry) => Math.max(max, entry.gapMs ?? 0), 0)
+        };
+      }
+    };
+  }, {
+    sampleIntervalMs: options.sampleIntervalMs ?? PERFORMANCE_SAMPLE_INTERVAL_MS,
+    freezeThresholdMs: options.freezeThresholdMs ?? PERFORMANCE_FREEZE_THRESHOLD_MS
+  });
+}
+
+async function measureSidepanelInputLatency(frame, text) {
+  return await frame.evaluate(async ({ nextText }) => {
+    return await globalThis.__aiWebAssistantPerformanceProbe.measureTextareaInput(nextText);
+  }, { nextText: text });
+}
+
+async function measureSidepanelAgentSwitchLatency(frame) {
+  return await frame.evaluate(async () => {
+    return await globalThis.__aiWebAssistantPerformanceProbe.measureAgentSwitch();
+  });
+}
+
+async function finalizeSidepanelPerformanceProbe(frame) {
+  return await frame.evaluate(() => {
+    return globalThis.__aiWebAssistantPerformanceProbe?.stopAndGet?.() ?? null;
   });
 }
 
@@ -923,8 +1247,10 @@ function compareTerminalAssistantVisibility(stateAssistantTexts, visibleAssistan
         || expectedTerminalKey.includes(visibleTerminalKey)
         || visibleTerminalKey.includes(expectedTerminalKey)
         || isOrderedCharacterSubsequence(expectedTerminalKey, visibleTerminalKey)
+        || isOrderedCharacterSubsequence(visibleTerminalKey, expectedTerminalKey)
       ))
       || isOrderedTokenSubsequence(expectedTerminalTokens, visibleTerminalTokens)
+      || isOrderedTokenSubsequence(visibleTerminalTokens, expectedTerminalTokens)
       || (sharedPrefix && sharedSuffix && comparableLengthRatio >= 0.6)
     );
 
@@ -1252,7 +1578,9 @@ async function main() {
   await mkdir(OUTPUT_DIR, { recursive: true });
   const beforeEntries = await readInvocationLogEntries();
   const beforeRawLines = new Set(beforeEntries.map((entry) => entry.rawLine));
+  await ensureExtensionBuildForSmoke();
   const opencodeEnvironment = await ensureOpencodeEnvironment();
+  const adapterEnvironment = await ensurePythonAdapterEnvironment();
 
   const browserSession = await createBrowserContext();
   logSmokeStep("browser-context-ready");
@@ -1306,6 +1634,11 @@ async function main() {
     await ensurePagePermission(frame, extensionFrame);
     logSmokeStep("page-permission-ready");
 
+    if (CAPTURE_PERFORMANCE_GUARD) {
+      await installSidepanelPerformanceProbe(frame);
+      logSmokeStep("performance-probe-installed");
+    }
+
     const initialPanelText = await frame.locator("body").innerText();
     if (CAPTURE_BEFORE_SEND) {
       await frame.locator("button[aria-label='采集页面']").waitFor({ timeout: 20000 });
@@ -1341,6 +1674,14 @@ async function main() {
       errorMessage: "Timed out waiting for the embedded panel to show live run output"
     });
     logSmokeStep("live-output-visible");
+
+    let performanceInputMeasurement = null;
+    let performanceAgentMeasurement = null;
+    if (CAPTURE_PERFORMANCE_GUARD) {
+      performanceInputMeasurement = await measureSidepanelInputLatency(frame, "性能护栏输入 during streaming");
+      performanceAgentMeasurement = await measureSidepanelAgentSwitchLatency(frame);
+      logSmokeStep(`performance-interactions-captured inputLatency=${performanceInputMeasurement?.latencyMs ?? "n/a"} agentLatency=${performanceAgentMeasurement?.latencyMs ?? "n/a"}`);
+    }
 
     const inProgressCheckpoint = CAPTURE_PROGRESS_CHECKPOINTS
       ? await waitForInteractiveCheckpoint(page, extensionId, (checkpoint) => (
@@ -1404,6 +1745,7 @@ async function main() {
     const visiblePartsJsonPath = path.join(OUTPUT_DIR, "visible-parts.json");
     const comparisonJsonPath = path.join(OUTPUT_DIR, "comparison.json");
     const statusCheckpointsJsonPath = path.join(OUTPUT_DIR, "status-checkpoints.json");
+    const performanceJsonPath = path.join(OUTPUT_DIR, "performance.json");
 
     await page.screenshot({ path: pageScreenshotPath, fullPage: true }).catch(() => undefined);
     await frame.locator("body").screenshot({ path: panelScreenshotPath }).catch(() => undefined);
@@ -1459,6 +1801,17 @@ async function main() {
       inProgress: inProgressCheckpoint,
       completed: completedCheckpoint
     }, null, 2), "utf8");
+
+    const performanceMetrics = CAPTURE_PERFORMANCE_GUARD
+      ? await finalizeSidepanelPerformanceProbe(frame)
+      : null;
+    if (performanceMetrics) {
+      await writeFile(performanceJsonPath, JSON.stringify({
+        ...performanceMetrics,
+        inputMeasurement: performanceInputMeasurement,
+        agentMeasurement: performanceAgentMeasurement
+      }, null, 2), "utf8");
+    }
     logSmokeStep("artifacts-written");
 
     const settledTerminalState = deriveSmokeTerminalState(
@@ -1484,6 +1837,7 @@ async function main() {
       assistantMessageSequenceComparison,
       assistantTextComparison,
       assistantVisibilityComparison,
+      performanceMetrics,
       panelTextSample: finalizedPanelText.slice(0, 2000),
       panelSource: settled.panelSource,
       exports: {
@@ -1494,7 +1848,8 @@ async function main() {
         rawEvents: rawEventsJsonPath,
         visibleParts: visiblePartsJsonPath,
         comparison: comparisonJsonPath,
-        statusCheckpoints: statusCheckpointsJsonPath
+        statusCheckpoints: statusCheckpointsJsonPath,
+        performance: performanceMetrics ? performanceJsonPath : null
       }
     };
 
@@ -1541,6 +1896,7 @@ async function main() {
       browserSession.close(),
       new Promise((resolve) => setTimeout(resolve, 5000))
     ]);
+    await adapterEnvironment.close();
     await opencodeEnvironment.close();
   }
 }

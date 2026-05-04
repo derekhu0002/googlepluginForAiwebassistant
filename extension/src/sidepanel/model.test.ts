@@ -78,6 +78,39 @@ describe("sidepanel canonical run-event acceptance", () => {
     expect(advancedDelta.diagnostic.canonicalEventKey).toBe("assistant_text:msg-1:part-1:seq:2");
   });
 
+  it("accepts later snapshot events for the same assistant text part when sequence advances", () => {
+    const initial = acceptIncomingRunEvent([], createEvent(1, {
+      id: "raw-snapshot-a",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "snapshot",
+        identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    }), createEmptyRunEventState());
+
+    const advancedSnapshot = acceptIncomingRunEvent(initial.nextEvents, createEvent(2, {
+      id: "raw-snapshot-b",
+      message: "event-2 snapshot",
+      semantic: {
+        channel: "assistant_text",
+        emissionKind: "snapshot",
+        identity: "assistant_text:msg-1:part-1",
+        itemKind: "text",
+        messageId: "msg-1",
+        partId: "part-1"
+      }
+    }), initial.nextRunEventState);
+
+    expect(advancedSnapshot.accepted).toBe(true);
+    expect(advancedSnapshot.decision).toBe("accepted");
+    expect(advancedSnapshot.nextEvents).toHaveLength(2);
+    expect(advancedSnapshot.nextEvents.map((event) => event.sequence)).toEqual([1, 2]);
+    expect(advancedSnapshot.diagnostic.canonicalEventKey).toBe("assistant_text:msg-1:part-1:seq:2");
+  });
+
   it("rejects same-sequence delta replays even when raw ids differ", () => {
     const initial = acceptIncomingRunEvent([], createEvent(1, {
       id: "raw-a",
