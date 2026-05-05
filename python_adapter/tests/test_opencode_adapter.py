@@ -612,6 +612,112 @@ def test_session_idle_without_text_defers_placeholder_until_stream_end() -> None
     anyio.run(scenario)
 
 
+def test_step_finish_stop_emits_result_without_waiting_for_session_idle() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+    sse_events = [
+        {"directory": "/repo", "payload": {"type": "message.part.delta", "properties": {"sessionID": "ses-1", "messageID": "msg-1", "partID": "part-1", "field": "text", "delta": "final answer"}}},
+        {"directory": "/repo", "payload": {"type": "message.part.updated", "properties": {"sessionID": "ses-1", "part": {"id": "part-1", "messageID": "msg-1", "sessionID": "ses-1", "type": "text", "text": "final answer"}}}},
+        {"directory": "/repo", "payload": {"type": "message.part.updated", "properties": {"sessionID": "ses-1", "part": {"id": "part-stop", "messageID": "msg-1", "sessionID": "ses-1", "type": "step-finish", "reason": "stop"}}}},
+    ]
+    messages_payload = [
+        {
+            "agent": "TARA_analyst",
+            "info": {"id": "msg-1", "sessionID": "ses-1", "role": "assistant", "time": {"created": 1, "completed": 2}},
+            "parts": [{"type": "text", "text": "final answer from stop"}],
+        }
+    ]
+
+    response_sets = [
+        [("GET", "/agent", make_agent_catalog_response("TARA_analyst"))],
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [("GET", "/global/event", make_sse_response(sse_events))],
+        [("GET", "/session/ses-1/message", make_response("GET", "/session/ses-1/message", json_body=messages_payload))],
+    ]
+
+    def factory(_timeout):
+        return FakeAsyncClient(response_sets.pop(0))
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(create_request())
+
+        events = [event async for event in adapter.stream_events(run_id)]
+
+        assert events[-1].type == "result"
+        assert events[-1].message == "final answer from stop"
+        assert not any(event.type == "tool_call" and event.title == "会话空闲" for event in events)
+
+    anyio.run(scenario)
+
+
+def test_textual_question_stop_synthesizes_question_and_answer_falls_back_to_follow_up_prompt() -> None:
+    session_payload = {
+        "id": "ses-1",
+        "slug": "slug",
+        "projectID": "proj",
+        "directory": "/repo",
+        "title": "title",
+        "version": "1.3.10",
+        "time": {"created": 1, "updated": 1},
+    }
+    question_prompt = create_request().model_copy(update={
+        "prompt": "请先使用 QUESTION 工具向我提出一个澄清问题，再在我回答后继续完成任务。问题必须包含可选项，并允许我补充自由文本。"
+    })
+    question_text = "请先澄清：您希望通过什么方式确定当前 SR 的处理优先级？\n\n1. 按业务影响\n2. 按利用难度\n3. 按修复成本"
+
+    clients: list[FakeAsyncClient] = []
+    response_sets = [
+        [("GET", "/agent", make_agent_catalog_response("TARA_analyst"))],
+        [("POST", "/session", make_response("POST", "/session", json_body=session_payload))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+        [("POST", "/session/ses-1/prompt_async", make_response("POST", "/session/ses-1/prompt_async", status_code=204))],
+    ]
+
+    def factory(_timeout):
+        client = FakeAsyncClient(response_sets.pop(0))
+        clients.append(client)
+        return client
+
+    async def scenario() -> None:
+        adapter = OpencodeAdapter(Settings(opencode_base_url="http://testserver"), client_factory=factory)
+        run_id = await adapter.start_run(question_prompt)
+        run = adapter._runs[run_id]
+
+        await adapter._normalize_global_event(
+            run,
+            {"directory": "/repo", "payload": {"type": "message.part.updated", "properties": {"sessionID": "ses-1", "part": {"id": "part-1", "messageID": "msg-1", "sessionID": "ses-1", "type": "text", "text": question_text}}}},
+        )
+        events = await adapter._normalize_global_event(
+            run,
+            {"directory": "/repo", "payload": {"type": "message.part.updated", "properties": {"sessionID": "ses-1", "part": {"id": "part-stop", "messageID": "msg-1", "sessionID": "ses-1", "type": "step-finish", "reason": "stop"}}}},
+        )
+
+        assert len(events) == 1
+        assert events[0].type == "question"
+        assert events[0].question is not None
+        assert [option.label for option in events[0].question.options] == ["按业务影响", "按利用难度", "按修复成本"]
+
+        await adapter.submit_answer(run_id, QuestionAnswerRequest(questionId=events[0].question.questionId, answer="按业务影响"))
+
+        assert len(clients) == 4
+        assert clients[3].calls[0][1] == "/session/ses-1/prompt_async"
+        assert clients[3].calls[0][3] == {
+            "agent": "TARA_analyst",
+            "parts": [{"type": "text", "text": "对上一条澄清问题的回答：按业务影响"}],
+        }
+
+    anyio.run(scenario)
+
+
 def test_request_without_capture_defaults_to_generic_session_title() -> None:
     session_payload = {
         "id": "ses-1",

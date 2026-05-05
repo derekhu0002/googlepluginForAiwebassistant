@@ -50,7 +50,13 @@
 - 职责：作为真实浏览器 smoke 的唯一外部入口，负责浏览器启动、规则灌入、权限授权、prompt 提交、artifact 导出，以及缺失上游 `opencode` 时的本地兼容环境自举。
 - 边界：对外只暴露单一脚本入口；对内可复用仓库级 stub 和现有 sidepanel 状态读取 helper，但不把环境准备分散给 wrapper 脚本。
 - 依赖：`playwright`、`extension/dist`、`scripts/mock-opencode-server.mjs`、本机 `test_site` 与 `python_adapter`。
-- 调用约束：调用方只运行 `node extension/scripts/real-extension-smoke.mjs`；不得在外部额外拼装 opencode 启动命令。
+- 调用约束：调用方只运行 `node extension/scripts/real-extension-smoke.mjs`；需要真实上游 AI 时，应显式设置 `REAL_SMOKE_REQUIRE_LIVE_UPSTREAM=1`，并指向已启动的外部 `opencode`/adapter。只有显式设置 `REAL_SMOKE_REQUIRE_REPO_STUB=1` 时，入口才会在内部自举 repo-local stub(`18124`) 和测试 adapter(`18030`)；不得在 wrapper 层重复拼装启动链。
+- Prompt 约束：可通过 `EXTENSION_SMOKE_PROMPT` 提供测试问题，并通过 `EXTENSION_SMOKE_RESPONSE_CONTRACT` 追加“返回契约”，显式约束真实上游回答的结构，以降低 live upstream 场景下的输出漂移；该契约不能替代真实上游本身。
+- Question 约束：若 smoke 需要验证真实 Question 阻断闭环，应通过 `REAL_SMOKE_SCENARIO=question` 或 `REAL_SMOKE_EXPECT_QUESTION=1` 启用 QUESTION 场景；入口会把 `REAL_SMOKE_QUESTION_TOOL_CONTRACT` 追加到 prompt，显式要求上游先用 QUESTION 工具提问，并在面板出现 `.question-card` 后通过真实 UI 提交 `REAL_SMOKE_QUESTION_ANSWER`。
+- Stop 约束：若 smoke 需要验证 stop terminal 语义，应通过 `REAL_SMOKE_SCENARIO=stop` 或 `REAL_SMOKE_EXPECT_STOP=1` 启用 stop 场景；入口会要求 repo-local stub 发出 `step-finish: stop`，在 run 收敛后把 stop 前已见 assistant 文本、stop 后 finalOutput 与 completed summary 写入 `status-checkpoints.json.stop`。
+- Progress 约束：当 wrapper 打开 `REAL_SMOKE_CAPTURE_PROGRESS_CHECKPOINT=1` 时，`real-extension-smoke.mjs` 必须在可选 question handling 和性能交互之前先抓取 in-progress checkpoint，避免快速终态或性能探针本身吞掉运行中窗口。
+- Question completion 约束：真实 QUESTION 场景下，smoke 以“pending question 被清空且 run 继续收敛”为闭环主信号；`state.answers` 仍会作为附加诊断保留，但不再是 live upstream 下唯一完成门槛。
+- 上游约束：入口摘要会显式写出 `upstreamMode` / `usedRepoStub`。凡是需要验证真实 AI 输出、QUESTION 链路或真实回答收敛的 wrapper，必须使用 `REAL_SMOKE_REQUIRE_LIVE_UPSTREAM=1`，否则只属于“真实浏览器 + 仓库 stub”的协议护栏，而不是真实上游验收。
 - 终态约束：smoke 内部必须把 transport idle、finalOutput、visible assistant text 与 completed summary 组合为 canonical terminal evidence，不能仅依赖 background state 的 `currentRun.status` 翻转；否则真实环境下会把已完成 run 误判为未收敛。
 - 序列约束：`assistantMessageSequenceComparison` 仍需强约束 raw events 与 projected state 的一致性；但对 UI 侧，若 `assistantVisibilityComparison.ok === true`，则允许 terminal assistant message 被 Markdown/summary 收敛逻辑合并，不再把这类可接受 coalescing 误判为失败。
 - 演进注意：若后续要把 `test_site` / `python_adapter` 也纳入完全自举，继续在该入口内部扩展，不新增第二层 wrapper。

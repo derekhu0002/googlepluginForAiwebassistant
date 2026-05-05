@@ -9,6 +9,20 @@ const repoRoot = path.resolve(scriptsDir, "../..");
 const smokeScriptPath = path.join(scriptsDir, "real-extension-smoke.mjs");
 const smokeOutputDir = path.join(repoRoot, "temp", "real-extension-smoke");
 
+const REAL_SMOKE_ENV_KEYS = [
+  "REAL_SMOKE_REQUIRE_LIVE_UPSTREAM",
+  "REAL_SMOKE_REQUIRE_REPO_STUB",
+  "REAL_SMOKE_OPENCODE_BASE_URL",
+  "EXTENSION_SMOKE_OPENCODE_HEALTH_URL",
+  "REAL_SMOKE_EXTENSION_API_BASE_URL",
+  "EXTENSION_SMOKE_ADAPTER_HEALTH_URL",
+  "REAL_SMOKE_ADAPTER_PORT",
+  "REAL_SMOKE_OPENCODE_STUB_PORT",
+  "REAL_SMOKE_SCENARIO",
+  "REAL_SMOKE_CAPTURE_PROGRESS_CHECKPOINT",
+  "REAL_SMOKE_CAPTURE_PERFORMANCE_GUARD"
+];
+
 const allowedVisibleKinds = new Set(["prompt", "capture", "text", "summary"]);
 
 function normalizeText(value) {
@@ -31,12 +45,17 @@ async function readOptionalJsonArtifact(fileName) {
 
 function runSmokeScript(options = {}) {
   return new Promise((resolve, reject) => {
+    const sanitizedEnv = { ...process.env };
+    for (const key of REAL_SMOKE_ENV_KEYS) {
+      delete sanitizedEnv[key];
+    }
+
     const child = spawn(process.execPath, [smokeScriptPath], {
       cwd: repoRoot,
       stdio: "inherit",
       shell: false,
       env: {
-        ...process.env,
+        ...sanitizedEnv,
         ...(options.env ?? {})
       }
     });
@@ -169,6 +188,82 @@ export function assertCapturedContextVisibleInTranscript(artifacts) {
   assert(Boolean(currentRun?.softwareVersion), "Current run is missing softwareVersion after capture-backed send", currentRun);
   assert(Boolean(currentRun?.pageTitle), "Current run is missing pageTitle after capture-backed send", currentRun);
   assert(Boolean(currentRun?.pageUrl), "Current run is missing pageUrl after capture-backed send", currentRun);
+}
+
+export function assertQuestionFlowCompleted(artifacts) {
+  const questionCheckpoint = artifacts.statusCheckpoints?.question;
+  const runEvents = Array.isArray(artifacts.extensionState?.runEvents) ? artifacts.extensionState.runEvents : [];
+  const questionEvents = runEvents.filter((event) => event?.type === "question");
+  const answerRecords = Array.isArray(artifacts.extensionState?.answers) ? artifacts.extensionState.answers : [];
+  const answerPersisted = answerRecords.some((answer) => answer?.questionId === questionCheckpoint?.pendingQuestionId)
+    || questionCheckpoint?.answerPersisted === true;
+
+  assert(Boolean(questionCheckpoint?.pendingQuestionId), "Real smoke did not record a visible question checkpoint", artifacts.statusCheckpoints);
+  assert(questionEvents.length >= 1, "Real smoke did not receive any normalized question event", runEvents.slice(-10));
+  assert(Boolean(questionCheckpoint?.questionText), "Real smoke question checkpoint is missing visible question text", questionCheckpoint);
+  assert(Boolean(questionCheckpoint?.answerText), "Real smoke question checkpoint is missing the submitted answer", questionCheckpoint);
+  assert(
+    answerPersisted || artifacts.extensionState?.stream?.pendingQuestionId === null,
+    "Real smoke did not carry the question flow through to a cleared pending state",
+    { answerRecords, questionCheckpoint, stream: artifacts.extensionState?.stream ?? null }
+  );
+  assert(artifacts.extensionState?.stream?.pendingQuestionId === null, "Pending question did not clear after the answer submission", artifacts.extensionState?.stream);
+  assert(hasTerminalEvidenceInState(artifacts.extensionState), "Run never converged after the question answer was submitted", {
+    currentRun: artifacts.extensionState?.currentRun ?? null,
+    stream: artifacts.extensionState?.stream ?? null,
+    runEvents: runEvents.slice(-10)
+  });
+}
+
+export function assertDomainAccessDenied(artifacts) {
+  const domainAccess = artifacts.statusCheckpoints?.domainAccess;
+  assert(Boolean(domainAccess), "Real smoke did not record the domain access denial checkpoint", artifacts.statusCheckpoints);
+  const normalizedPanelText = normalizeText(`${domainAccess?.panelText ?? ""} ${domainAccess?.activeContext?.message ?? ""}`);
+  assert(
+    normalizedPanelText.includes("当前站点未授权采集")
+      || normalizedPanelText.includes("规则未命中")
+      || normalizedPanelText.includes("当前页面未命中任何启用规则")
+      || normalizedPanelText.includes("尚未命中任何启用规则"),
+    "Sidepanel did not expose the expected domain access denial state",
+    domainAccess
+  );
+  assert(!domainAccess?.activeContext?.matchedRule, "Unauthorized domain scenario unexpectedly matched a rule", domainAccess?.activeContext);
+  assert(!domainAccess?.currentRun?.runId, "Unauthorized domain scenario should not create a run", domainAccess?.currentRun);
+}
+
+export function assertSseInterruptionHandled(artifacts) {
+  const interruption = artifacts.statusCheckpoints?.interruption;
+  const summaryPart = artifacts.visibleParts.find((part) => part.kind === "summary");
+  const summaryText = normalizeText(summaryPart?.text);
+  const assistantTextParts = artifacts.visibleParts.filter((part) => part.role === "assistant" && part.kind === "text");
+
+  assert(Boolean(interruption), "Real smoke did not record the SSE interruption checkpoint", artifacts.statusCheckpoints);
+  assert(assistantTextParts.length >= 1, "Interrupted run did not preserve any assistant text in the visible transcript", artifacts.visibleParts);
+  assert(summaryText.includes("已中断"), "Interrupted run summary did not switch to the visible interrupted state", { summaryText, interruption });
+  assert(normalizeText(interruption?.errorMessage).includes("连接中断，请重试"), "Interrupted run did not expose the expected interruption error copy", interruption);
+  assert(artifacts.extensionState?.currentRun?.status === "error", "Interrupted run did not converge to error status", artifacts.extensionState?.currentRun);
+  assert(artifacts.extensionState?.stream?.status === "error", "Interrupted stream did not converge to error status", artifacts.extensionState?.stream);
+}
+
+export function assertStopHandled(artifacts) {
+  const stopCheckpoint = artifacts.statusCheckpoints?.stop;
+  const summaryPart = artifacts.visibleParts.find((part) => part.kind === "summary");
+  const summaryText = normalizeText(summaryPart?.text);
+  const assistantTextParts = artifacts.visibleParts.filter((part) => part.role === "assistant" && part.kind === "text");
+  const finalAssistantText = normalizeText(assistantTextParts.at(-1)?.text);
+  const preStopAssistantText = normalizeText(stopCheckpoint?.preStopAssistantText);
+
+  assert(Boolean(stopCheckpoint), "Real smoke did not record the stop checkpoint", artifacts.statusCheckpoints);
+  assert(assistantTextParts.length >= 1, "Stop scenario did not preserve any assistant text in the visible transcript", artifacts.visibleParts);
+  assert(preStopAssistantText.length > 0, "Stop scenario did not capture assistant text before stop convergence", stopCheckpoint);
+  assert(finalAssistantText.includes(preStopAssistantText), "Stop scenario did not preserve the already visible assistant text after stop", {
+    preStopAssistantText,
+    finalAssistantText,
+    stopCheckpoint
+  });
+  assert(summaryText.includes("已完成"), "Stop scenario summary did not switch to completed state", { summaryText, stopCheckpoint });
+  assert(artifacts.extensionState?.currentRun?.status === "done", "Stopped run did not converge to done status", artifacts.extensionState?.currentRun);
+  assert(artifacts.extensionState?.stream?.status === "done", "Stopped stream did not converge to done status", artifacts.extensionState?.stream);
 }
 
 export function assertSidepanelPerformanceGuard(artifacts, thresholds = {}) {

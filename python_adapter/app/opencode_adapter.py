@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -664,6 +665,14 @@ class OpencodeAdapter:
             if request_payload:
                 run["question_requests"][answer.questionId] = request_payload
 
+        if request_payload and request_payload.get("_synthetic"):
+            await self._submit_follow_up_answer_prompt(run, answer, request_payload)
+            return
+
+        if not request_payload:
+            await self._submit_follow_up_answer_prompt(run, answer, None)
+            return
+
         answers = [self._build_question_answer_payload(answer, request_payload)]
 
         async with self._client_factory(30.0) as client:
@@ -809,7 +818,7 @@ class OpencodeAdapter:
                         if event.type in {"result", "error"}:
                             return
 
-        if not run["result_emitted"]:
+        if not run["result_emitted"] and not run.get("waiting_question_id"):
             final_event = await self._build_result_from_session(run, allow_placeholder=True)
             if final_event:
                 yield final_event
@@ -830,7 +839,7 @@ class OpencodeAdapter:
                         {"event": global_event},
                     )
 
-        if not run["result_emitted"]:
+        if not run["result_emitted"] and not run.get("waiting_question_id"):
             messages = await self._fetch_session_messages(run)
             if messages is not None:
                 run["result_emitted"] = True
@@ -942,6 +951,16 @@ class OpencodeAdapter:
                     emission_kind="snapshot",
                 )
                 return [emitted] if emitted else []
+            if part_type == "step-finish":
+                reason = str(part.get("reason") or "").lower()
+                if reason == "stop":
+                    if run.get("waiting_question_id"):
+                        return []
+                    synthetic_question = self._maybe_build_terminal_question_event(run)
+                    if synthetic_question is not None:
+                        return [synthetic_question]
+                    result = await self._build_result_from_session(run, allow_placeholder=False)
+                    return [result] if result is not None else []
             return []
 
         if event_type == "message.updated":
@@ -1008,6 +1027,115 @@ class OpencodeAdapter:
             allowFreeText=first_question.get("custom", True),
             placeholder="请输入答案",
         )
+
+    def _prompt_requires_question_tool(self, run: dict[str, Any]) -> bool:
+        request = run.get("request")
+        prompt = request.prompt if isinstance(request, RunStartRequest) else ""
+        return "QUESTION" in prompt.upper()
+
+    def _extract_textual_question_options(self, message: str, question_id: str) -> list[QuestionOption]:
+        normalized_message = str(message or "").replace("\r\n", "\n")
+        options: list[QuestionOption] = []
+        for index, match in enumerate(re.finditer(r"(?:^|\n)\s*(\d+)[\.)]\s*(.+?)(?=(?:\n\s*\d+[\.)])|\Z)", normalized_message, re.MULTILINE | re.DOTALL)):
+            label = re.sub(r"\s+", " ", match.group(2)).strip(" -\t\n\r")
+            if not label:
+                continue
+            options.append(
+                QuestionOption(
+                    id=f"{question_id}-option-{index + 1}",
+                    label=label,
+                    value=label,
+                )
+            )
+        return options
+
+    def _build_synthetic_question(self, run: dict[str, Any]) -> QuestionPayload | None:
+        if run.get("waiting_question_id") or run.get("question_requests") or not self._prompt_requires_question_tool(run):
+            return None
+
+        message = str(run.get("last_output_text") or "").strip()
+        if not message:
+            return None
+
+        question_id = f"synthetic-question-{run['run_id']}"
+        options = self._extract_textual_question_options(message, question_id)
+        if not options:
+            return None
+
+        question_message = next(
+            (line.strip() for line in message.replace("\r\n", "\n").split("\n") if line.strip() and ("？" in line or "?" in line)),
+            "",
+        )
+        if not question_message:
+            return None
+
+        return QuestionPayload(
+            questionId=question_id,
+            title=question_message[:40] or "需要用户回答",
+            message=question_message,
+            options=options,
+            allowFreeText=True,
+            placeholder="请输入答案",
+        )
+
+    def _build_synthetic_question_request_payload(self, question: QuestionPayload) -> dict[str, Any]:
+        return {
+            "id": question.questionId,
+            "_synthetic": True,
+            "questions": [{
+                "header": question.title,
+                "question": question.message,
+                "options": [{"label": option.label, "value": option.value} for option in question.options],
+                "custom": question.allowFreeText,
+            }],
+        }
+
+    def _maybe_build_terminal_question_event(self, run: dict[str, Any]) -> NormalizedRunEvent | None:
+        question = self._build_synthetic_question(run)
+        if question is None:
+            return None
+
+        run["waiting_question_id"] = question.questionId
+        run["question_requests"][question.questionId] = self._build_synthetic_question_request_payload(question)
+        return self._next_event(
+            run,
+            "question",
+            question.message,
+            question=question,
+            data={"session_id": run.get("session_id"), "synthetic": True},
+        )
+
+    async def _submit_follow_up_answer_prompt(
+        self,
+        run: dict[str, Any],
+        answer: QuestionAnswerRequest,
+        request_payload: dict[str, Any] | None,
+    ) -> None:
+        session_id = run.get("session_id")
+        selected_remote_agent = run.get("selected_remote_agent")
+        if not session_id or not selected_remote_agent:
+            raise RuntimeError("Cannot submit follow-up answer without an active opencode session")
+
+        answer_text = (answer.answer or "").strip()
+        if not answer_text and request_payload:
+            for index, option in enumerate((request_payload.get("questions") or [{}])[0].get("options") or []):
+                option_id = f"{request_payload.get('id', 'question')}-option-{index + 1}"
+                if option_id == answer.choiceId:
+                    answer_text = str(option.get("label") or "").strip()
+                    break
+        if not answer_text:
+            answer_text = "已提交回答。"
+
+        async with self._client_factory(30.0) as client:
+            response = await client.post(
+                self.settings.opencode_prompt_async_endpoint.format(session_id=session_id),
+                params=self._query_params(),
+                json={
+                    "agent": selected_remote_agent,
+                    "parts": [{"type": "text", "text": f"对上一条澄清问题的回答：{answer_text}"}],
+                },
+            )
+            response.raise_for_status()
 
     async def _build_result_from_session(self, run: dict[str, Any], *, allow_placeholder: bool) -> NormalizedRunEvent | None:
         if run["result_emitted"] or not run.get("session_id"):

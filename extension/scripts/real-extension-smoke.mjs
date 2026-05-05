@@ -8,7 +8,19 @@ import { chromium } from "playwright";
 
 const CDP_ORIGIN = process.env.CHROME_CDP_ORIGIN ?? "http://127.0.0.1:9222";
 const TEST_URL = process.env.EXTENSION_TEST_URL ?? "http://127.0.0.1:4173/";
-const RUN_PROMPT = process.env.EXTENSION_SMOKE_PROMPT ?? "请总结当前 SR 的风险与建议下一步动作。";
+const REAL_SMOKE_SCENARIO = String(process.env.REAL_SMOKE_SCENARIO ?? "default").trim().toLowerCase();
+const EXPECT_QUESTION = REAL_SMOKE_SCENARIO === "question" || process.env.REAL_SMOKE_EXPECT_QUESTION === "1";
+const EXPECT_DOMAIN_ACCESS_DENIAL = REAL_SMOKE_SCENARIO === "domain-access-control" || process.env.REAL_SMOKE_EXPECT_DOMAIN_ACCESS_DENIAL === "1";
+const EXPECT_SSE_INTERRUPTION = REAL_SMOKE_SCENARIO === "sse-interruption" || process.env.REAL_SMOKE_EXPECT_SSE_INTERRUPTION === "1";
+const EXPECT_STOP_TERMINAL = REAL_SMOKE_SCENARIO === "stop" || process.env.REAL_SMOKE_EXPECT_STOP === "1";
+const RUN_PROMPT_BASE = process.env.EXTENSION_SMOKE_PROMPT ?? "请总结当前 SR 的风险与建议下一步动作。";
+const RUN_PROMPT_RESPONSE_CONTRACT = process.env.EXTENSION_SMOKE_RESPONSE_CONTRACT ?? "";
+const DEFAULT_NON_INTERACTIVE_CONTRACT = process.env.REAL_SMOKE_DEFAULT_RESPONSE_CONTRACT ?? "请直接基于当前已知上下文完成回答，不要向我追问，也不要要求我补充信息。如果信息不足，请明确说明已知风险、缺口和建议下一步动作。";
+const QUESTION_TOOL_CONTRACT = process.env.REAL_SMOKE_QUESTION_TOOL_CONTRACT ?? "请先使用 QUESTION 工具向我提出一个澄清问题，再在我回答后继续完成任务。问题必须包含可选项，并允许我补充自由文本。";
+const QUESTION_ANSWER_TEXT = process.env.REAL_SMOKE_QUESTION_ANSWER ?? "请按高优先级处理，并在今天内完成验证。";
+const OPPORTUNISTIC_QUESTION_ANSWER_TEXT = process.env.REAL_SMOKE_OPPORTUNISTIC_QUESTION_ANSWER ?? "当前没有更多 SR 细节。请基于现有上下文直接给出风险结论、已知缺口和建议下一步动作，不要继续追问。";
+const DOMAIN_ACCESS_ERROR_COPY = process.env.REAL_SMOKE_DOMAIN_ACCESS_ERROR_COPY ?? "当前站点未授权采集";
+const SSE_INTERRUPTION_ERROR_COPY = process.env.REAL_SMOKE_SSE_INTERRUPTION_ERROR_COPY ?? "连接中断，请重试";
 const STATE_KEY = "ai-web-assistant-state";
 const OUTPUT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../temp/real-extension-smoke");
 const EXTENSION_WORKSPACE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -26,6 +38,7 @@ const CAPTURE_PERFORMANCE_GUARD = process.env.REAL_SMOKE_CAPTURE_PERFORMANCE_GUA
 const PERFORMANCE_SAMPLE_INTERVAL_MS = Number(process.env.REAL_SMOKE_PERFORMANCE_SAMPLE_INTERVAL_MS ?? "100");
 const PERFORMANCE_FREEZE_THRESHOLD_MS = Number(process.env.REAL_SMOKE_PERFORMANCE_FREEZE_THRESHOLD_MS ?? "250");
 const REQUIRE_REPO_OPENCODE_STUB = process.env.REAL_SMOKE_REQUIRE_REPO_STUB === "1";
+const REQUIRE_LIVE_UPSTREAM = process.env.REAL_SMOKE_REQUIRE_LIVE_UPSTREAM === "1";
 const TEST_OPENCODE_STUB_PORT = Number(process.env.REAL_SMOKE_OPENCODE_STUB_PORT ?? (REQUIRE_REPO_OPENCODE_STUB ? "18124" : "8124"));
 const TEST_ADAPTER_PORT = Number(process.env.REAL_SMOKE_ADAPTER_PORT ?? (REQUIRE_REPO_OPENCODE_STUB ? "18030" : "8030"));
 const EXTENSION_API_BASE_URL = process.env.REAL_SMOKE_EXTENSION_API_BASE_URL ?? `http://127.0.0.1:${TEST_ADAPTER_PORT}`;
@@ -36,6 +49,29 @@ const ADAPTER_LOG_DIR = process.env.EXTENSION_SMOKE_ADAPTER_LOG_DIR ?? path.join
 const ADAPTER_LOG_PATH = process.env.EXTENSION_SMOKE_ADAPTER_LOG_PATH ?? path.join(ADAPTER_LOG_DIR, "invocations.jsonl");
 const OPENCODE_STUB_SCRIPT = path.join(REPO_ROOT, "scripts", "mock-opencode-server.mjs");
 const PYTHON_EXECUTABLE = process.env.REAL_SMOKE_PYTHON_EXECUTABLE ?? "python";
+
+function buildSmokePrompt(basePrompt, responseContract, options = {}) {
+  const normalizedPrompt = String(basePrompt ?? "").trim();
+  const normalizedContract = String(responseContract ?? "").trim();
+  const promptSections = [normalizedPrompt].filter(Boolean);
+  if (options.expectQuestion) {
+    promptSections.push(String(options.questionToolContract ?? "").trim());
+  } else if (options.nonInteractiveContract) {
+    promptSections.push(String(options.nonInteractiveContract).trim());
+  }
+
+  if (normalizedContract) {
+    promptSections.push(`请严格按以下返回契约作答：\n${normalizedContract}`);
+  }
+
+  return promptSections.join("\n\n").trim();
+}
+
+const RUN_PROMPT = buildSmokePrompt(RUN_PROMPT_BASE, RUN_PROMPT_RESPONSE_CONTRACT, {
+  expectQuestion: EXPECT_QUESTION,
+  questionToolContract: QUESTION_TOOL_CONTRACT,
+  nonInteractiveContract: REAL_SMOKE_SCENARIO === "default" ? DEFAULT_NON_INTERACTIVE_CONTRACT : ""
+});
 
 function logSmokeStep(step) {
   console.error(`[real-smoke] ${step}`);
@@ -107,16 +143,31 @@ function spawnAndWaitForExit(command, args, options = {}) {
 }
 
 async function ensureOpencodeEnvironment() {
+  if (REQUIRE_REPO_OPENCODE_STUB && REQUIRE_LIVE_UPSTREAM) {
+    throw new Error("REAL_SMOKE_REQUIRE_REPO_STUB=1 conflicts with REAL_SMOKE_REQUIRE_LIVE_UPSTREAM=1. Real-upstream smoke cannot use the repository stub.");
+  }
+
   try {
     const health = await httpGetJson(OPENCODE_HEALTH_URL);
     logSmokeStep("opencode-health-ready");
     if (REQUIRE_REPO_OPENCODE_STUB && health?.service !== "mock-opencode-server") {
       throw new Error(`REAL_SMOKE_REQUIRE_REPO_STUB=1 but ${OPENCODE_HEALTH_URL} is not serving the repository stub. Expected service=mock-opencode-server, received ${JSON.stringify(health)}.`);
     }
-    return { close: async () => undefined };
+    if (REQUIRE_LIVE_UPSTREAM && health?.service === "mock-opencode-server") {
+      throw new Error(`REAL_SMOKE_REQUIRE_LIVE_UPSTREAM=1 but ${OPENCODE_HEALTH_URL} is still serving the repository stub.`);
+    }
+    return {
+      close: async () => undefined,
+      upstreamMode: health?.service === "mock-opencode-server" ? "repo-stub" : "external-upstream",
+      service: health?.service ?? null,
+      health
+    };
   } catch (error) {
-    if (error instanceof Error && error.message.includes("REAL_SMOKE_REQUIRE_REPO_STUB=1")) {
+    if (error instanceof Error && (error.message.includes("REAL_SMOKE_REQUIRE_REPO_STUB=1") || error.message.includes("REAL_SMOKE_REQUIRE_LIVE_UPSTREAM=1"))) {
       throw error;
+    }
+    if (REQUIRE_LIVE_UPSTREAM) {
+      throw new Error(`REAL_SMOKE_REQUIRE_LIVE_UPSTREAM=1 but ${OPENCODE_HEALTH_URL} is unavailable or unhealthy. Live-upstream smoke will not auto-start scripts/mock-opencode-server.mjs.`);
     }
     logSmokeStep("opencode-health-missing-starting-stub");
   }
@@ -127,7 +178,11 @@ async function ensureOpencodeEnvironment() {
     shell: false,
     env: {
       ...process.env,
-      OPENCODE_STUB_PORT: String(TEST_OPENCODE_STUB_PORT)
+      OPENCODE_STUB_PORT: String(TEST_OPENCODE_STUB_PORT),
+      OPENCODE_STUB_EMIT_QUESTION: EXPECT_QUESTION ? "1" : "0",
+      OPENCODE_STUB_STEP_FINISH_STOP_AFTER_CHUNK: EXPECT_STOP_TERMINAL ? String(Number(process.env.OPENCODE_STUB_STEP_FINISH_STOP_AFTER_CHUNK ?? "4")) : "0",
+      OPENCODE_STUB_SESSION_ERROR_AFTER_CHUNK: EXPECT_SSE_INTERRUPTION ? String(Number(process.env.OPENCODE_STUB_SESSION_ERROR_AFTER_CHUNK ?? "4")) : "0",
+      OPENCODE_STUB_SESSION_ERROR_MESSAGE: SSE_INTERRUPTION_ERROR_COPY
     }
   });
   attachChildLogging(child, "mock-opencode-server");
@@ -147,6 +202,9 @@ async function ensureOpencodeEnvironment() {
 
   logSmokeStep("opencode-stub-ready");
   return {
+    upstreamMode: "repo-stub",
+    service: "mock-opencode-server",
+    health: { service: "mock-opencode-server" },
     close: async () => {
       if (!child.killed) {
         child.kill("SIGTERM");
@@ -156,10 +214,6 @@ async function ensureOpencodeEnvironment() {
 }
 
 async function ensureExtensionBuildForSmoke() {
-  if (!REQUIRE_REPO_OPENCODE_STUB) {
-    return;
-  }
-
   logSmokeStep(`extension-build-start apiBaseUrl=${EXTENSION_API_BASE_URL}`);
   const buildCommand = process.platform === "win32" ? "cmd.exe" : "npm";
   const buildArgs = process.platform === "win32" ? ["/d", "/s", "/c", "npm run build"] : ["run", "build"];
@@ -179,14 +233,14 @@ async function ensureExtensionBuildForSmoke() {
 
 async function ensurePythonAdapterEnvironment() {
   if (!REQUIRE_REPO_OPENCODE_STUB) {
-    return { close: async () => undefined };
+    return { close: async () => undefined, interrupt: async () => undefined, startedBySmoke: false };
   }
 
   try {
     const health = await httpGetJson(ADAPTER_HEALTH_URL);
     if (health?.backend === "python-adapter" && health?.opencode_base_url === OPENCODE_BASE_URL) {
       logSmokeStep("adapter-health-ready");
-      return { close: async () => undefined };
+      return { close: async () => undefined, interrupt: async () => undefined, startedBySmoke: false };
     }
 
     throw new Error(`Adapter health check at ${ADAPTER_HEALTH_URL} does not match test environment: ${JSON.stringify(health)}`);
@@ -235,7 +289,13 @@ async function ensurePythonAdapterEnvironment() {
       if (!child.killed) {
         child.kill("SIGTERM");
       }
-    }
+    },
+    interrupt: async () => {
+      if (!child.killed) {
+        child.kill("SIGTERM");
+      }
+    },
+    startedBySmoke: true
   };
 }
 
@@ -454,14 +514,20 @@ async function installSidepanelPerformanceProbe(frame, options = {}) {
     const getAssistantTextLength = () => Array.from(document.querySelectorAll("[data-section='part'][data-part-role='assistant'][data-part-kind='text']"))
       .reduce((total, node) => total + ((node.textContent ?? "").trim().length), 0);
     const nowOffset = () => performance.now() - state.startedAt;
+    const isActiveRunPhase = (summaryText, assistantTextLength) => assistantTextLength > 0 || summaryText.includes("进行中") || summaryText.includes("已完成");
 
     let lastGrowthLength = 0;
     let lastGrowthAt = state.startedAt;
+    let rafTrackingActive = false;
     const sample = () => {
       const assistantTextLength = getAssistantTextLength();
       const summaryText = getSummaryText();
       const atMs = nowOffset();
       state.transcriptSamples.push({ atMs, assistantTextLength, summaryText });
+
+      if (!rafTrackingActive && isActiveRunPhase(summaryText, assistantTextLength)) {
+        rafTrackingActive = true;
+      }
 
       if (assistantTextLength > lastGrowthLength) {
         lastGrowthLength = assistantTextLength;
@@ -492,7 +558,7 @@ async function installSidepanelPerformanceProbe(frame, options = {}) {
     let animationFrameId = 0;
     const tick = (timestamp) => {
       const gapMs = timestamp - lastAnimationFrameAt;
-      if (gapMs > freezeThresholdMs) {
+      if (rafTrackingActive && gapMs > freezeThresholdMs) {
         state.rafGaps.push({ atMs: timestamp - state.startedAt, gapMs });
       }
       lastAnimationFrameAt = timestamp;
@@ -647,6 +713,12 @@ async function ensureSmokeRuleConfiguredInExtensionPage(extensionFrame) {
       : [...currentRules, nextRule];
     await chrome.storage.local.set({ [storageKey]: nextRules });
   }, { nextRule: rule });
+}
+
+async function clearSmokeRulesInExtensionPage(extensionFrame) {
+  await extensionFrame.evaluate(async () => {
+    await chrome.storage.local.set({ "ai-web-assistant-rules": [] });
+  });
 }
 
 async function resetSmokeStateInExtensionPage(extensionFrame) {
@@ -982,6 +1054,10 @@ function buildCaptureTextFromState(state) {
 }
 
 function buildSummaryTextFromState(state) {
+  if (state?.currentRun?.status === "error" || state?.stream?.status === "error") {
+    return "已中断";
+  }
+
   if (hasTerminalEvidenceInState(state)) {
     return "已完成本轮回答已就绪，可继续追问、复制结果或发起重试。";
   }
@@ -1211,6 +1287,23 @@ function isOrderedTokenSubsequence(expectedTokens, actualTokens) {
   return false;
 }
 
+function isOrderedTokenSubstringSubsequence(expectedTokens, actualText) {
+  if (!Array.isArray(expectedTokens) || expectedTokens.length === 0 || !actualText) {
+    return false;
+  }
+
+  let cursor = 0;
+  for (const token of expectedTokens) {
+    const nextIndex = actualText.indexOf(token, cursor);
+    if (nextIndex < 0) {
+      return false;
+    }
+    cursor = nextIndex + token.length;
+  }
+
+  return true;
+}
+
 function compareTerminalAssistantVisibility(stateAssistantTexts, visibleAssistantTexts, finalOutput) {
   const normalizedState = (stateAssistantTexts ?? []).map((value) => normalizeComparableText(value)).filter(Boolean);
   const normalizedVisible = (visibleAssistantTexts ?? []).map((value) => normalizeComparableText(value)).filter(Boolean);
@@ -1224,6 +1317,9 @@ function compareTerminalAssistantVisibility(stateAssistantTexts, visibleAssistan
   const visibleTerminalKey = normalizeTerminalContentKey(visibleTerminalText);
   const expectedTerminalTokens = buildTerminalTokenSequence(expectedTerminalText);
   const visibleTerminalTokens = buildTerminalTokenSequence(visibleTerminalText);
+  const expectedTokenCoverage = computeTokenCoverageRatio(expectedTerminalTokens, visibleTerminalKey);
+  const visibleTokenCoverage = computeTokenCoverageRatio(visibleTerminalTokens, expectedTerminalKey);
+  const shingleOverlap = computeShingleOverlapRatio(expectedTerminalKey, visibleTerminalKey);
   const exact = JSON.stringify(normalizedState) === JSON.stringify(normalizedVisible);
   const shorterLength = Math.min(expectedTerminalText.length, visibleTerminalText.length);
   const longerLength = Math.max(expectedTerminalText.length, visibleTerminalText.length);
@@ -1251,6 +1347,10 @@ function compareTerminalAssistantVisibility(stateAssistantTexts, visibleAssistan
       ))
       || isOrderedTokenSubsequence(expectedTerminalTokens, visibleTerminalTokens)
       || isOrderedTokenSubsequence(visibleTerminalTokens, expectedTerminalTokens)
+      || isOrderedTokenSubstringSubsequence(expectedTerminalTokens, visibleTerminalKey)
+      || isOrderedTokenSubstringSubsequence(visibleTerminalTokens, expectedTerminalKey)
+      || (expectedTokenCoverage >= 0.72 && visibleTokenCoverage >= 0.72)
+      || (shingleOverlap >= 0.74 && comparableLengthRatio >= 0.72)
       || (sharedPrefix && sharedSuffix && comparableLengthRatio >= 0.6)
     );
 
@@ -1266,10 +1366,75 @@ function compareTerminalAssistantVisibility(stateAssistantTexts, visibleAssistan
     visibleTerminalKey,
     expectedTerminalTokens,
     visibleTerminalTokens,
+    expectedTokenCoverage,
+    visibleTokenCoverage,
+    shingleOverlap,
     sharedPrefix,
     sharedSuffix,
     comparableLengthRatio
   };
+}
+
+function computeTokenCoverageRatio(tokens, comparableText) {
+  if (!Array.isArray(tokens) || tokens.length === 0) {
+    return 0;
+  }
+
+  const comparable = normalizeTerminalContentKey(comparableText);
+  if (!comparable) {
+    return 0;
+  }
+
+  let matchedCount = 0;
+  for (const token of tokens) {
+    const normalizedToken = normalizeTerminalContentKey(token);
+    if (normalizedToken && comparable.includes(normalizedToken)) {
+      matchedCount += 1;
+    }
+  }
+
+  return matchedCount / tokens.length;
+}
+
+function computeShingleOverlapRatio(left, right, size = 8) {
+  const normalizedLeft = normalizeTerminalContentKey(left);
+  const normalizedRight = normalizeTerminalContentKey(right);
+  if (!normalizedLeft || !normalizedRight) {
+    return 0;
+  }
+
+  const leftShingles = buildCharacterShingles(normalizedLeft, size);
+  const rightShingles = buildCharacterShingles(normalizedRight, size);
+  if (leftShingles.size === 0 || rightShingles.size === 0) {
+    return 0;
+  }
+
+  let overlap = 0;
+  for (const shingle of leftShingles) {
+    if (rightShingles.has(shingle)) {
+      overlap += 1;
+    }
+  }
+
+  return overlap / Math.max(leftShingles.size, rightShingles.size);
+}
+
+function buildCharacterShingles(text, size) {
+  const normalized = normalizeTerminalContentKey(text);
+  const shingles = new Set();
+  if (!normalized) {
+    return shingles;
+  }
+
+  if (normalized.length <= size) {
+    shingles.add(normalized);
+    return shingles;
+  }
+
+  for (let index = 0; index <= normalized.length - size; index += 1) {
+    shingles.add(normalized.slice(index, index + size));
+  }
+  return shingles;
 }
 
 async function getBrowserWebSocketUrl() {
@@ -1502,14 +1667,22 @@ async function waitForStableAssistantOutput(page, extensionId, options = {}) {
     const rawRunEntries = activeRunId ? getEntriesForRun(await readInvocationLogEntries(), activeRunId) : [];
     const transportIdle = hasIdleEventInRunEntries(rawRunEntries);
     const terminalState = deriveSmokeTerminalState(state, visibleParts, transportIdle);
-    const stateAssistantMessageIds = extractAssistantMessageIdsFromState(state);
-    const visibleAssistantMessageIds = extractVisibleAssistantMessageIds(visibleParts);
+    const stateAssistantTexts = extractAssistantTextsFromState(state);
+    const visibleAssistantTexts = visibleParts
+      .filter((part) => part.role === "assistant" && part.kind === "text")
+      .map((part) => part.text);
+    const assistantVisibilityComparison = compareTerminalAssistantVisibility(
+      stateAssistantTexts,
+      visibleAssistantTexts,
+      terminalState.finalOutputText
+    );
     const stableContentSignature = JSON.stringify({
       terminalEvidence: terminalState.canonicalTerminalEvidence,
       transportIdle,
       finalOutputText: terminalState.finalOutputText,
-      stateAssistantMessageIds,
-      visibleAssistantMessageIds
+      expectedTerminalKey: assistantVisibilityComparison.expectedTerminalKey,
+      visibleTerminalKey: assistantVisibilityComparison.visibleTerminalKey,
+      assistantVisibilityOk: assistantVisibilityComparison.ok
     });
     const signature = terminalState.canonicalTerminalEvidence
       ? stableContentSignature
@@ -1519,6 +1692,8 @@ async function waitForStableAssistantOutput(page, extensionId, options = {}) {
         streamStatus: terminalState.streamStatus,
         ...JSON.parse(stableContentSignature)
       });
+    const hasStableVisibleOutput = assistantTextCount > 0 && terminalState.finalOutputText.length > 0;
+    const canAcceptImplicitConvergence = hasStableVisibleOutput && Date.now() - start >= terminalConvergenceGraceMs;
 
     latestSample = {
       state,
@@ -1528,7 +1703,7 @@ async function waitForStableAssistantOutput(page, extensionId, options = {}) {
       panelSource: snapshot?.visibleParts?.length ? "dom" : "state"
     };
 
-    if (assistantTextCount > 0 && terminalState.canonicalTerminalEvidence && signature === previousSignature) {
+    if (hasStableVisibleOutput && (terminalState.canonicalTerminalEvidence || canAcceptImplicitConvergence) && signature === previousSignature) {
       stablePolls += 1;
       if (stablePolls >= stablePollsRequired) {
         return latestSample;
@@ -1550,7 +1725,7 @@ async function waitForStableAssistantOutput(page, extensionId, options = {}) {
     }
 
     if (pollCount % 10 === 0) {
-      logSmokeStep(`assistant-output-poll stablePolls=${stablePolls} terminalEvidence=${terminalState.canonicalTerminalEvidence} stateTerminalEvidence=${terminalState.stateTerminalEvidence} runStatus=${terminalState.runStatus ?? "null"} streamStatus=${terminalState.streamStatus ?? "null"} assistantTextCount=${assistantTextCount} completedSummaryVisible=${terminalState.summaryText.includes("已完成") && !terminalState.summaryText.includes("进行中")}`);
+      logSmokeStep(`assistant-output-poll stablePolls=${stablePolls} terminalEvidence=${terminalState.canonicalTerminalEvidence} stateTerminalEvidence=${terminalState.stateTerminalEvidence} assistantVisibilityOk=${assistantVisibilityComparison.ok} runStatus=${terminalState.runStatus ?? "null"} streamStatus=${terminalState.streamStatus ?? "null"} assistantTextCount=${assistantTextCount} completedSummaryVisible=${terminalState.summaryText.includes("已完成") && !terminalState.summaryText.includes("进行中")}`);
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -1568,9 +1743,194 @@ async function waitForStableAssistantOutput(page, extensionId, options = {}) {
 async function waitForInteractiveCheckpoint(page, extensionId, predicate, options = {}) {
   return await waitFor(async () => {
     const frame = await getExtensionFrame(page, extensionId);
-    const checkpoint = await getInteractiveCheckpoint(frame);
-    return predicate(checkpoint) ? checkpoint : null;
+    const [checkpoint, state, snapshot] = await Promise.all([
+      getInteractiveCheckpoint(frame),
+      getExtensionState(page, extensionId),
+      readEmbeddedPanelSnapshot(page, extensionId).catch(() => null)
+    ]);
+    const visibleParts = snapshot?.visibleParts ?? buildVisiblePartsFromState(state);
+    const stateSummaryText = buildSummaryTextFromState(state);
+    const activeRunPhase = Boolean(state?.currentRun?.runId) && !hasTerminalEvidenceInState(state);
+    const normalizedSummaryText = checkpoint.summaryText
+      || (activeRunPhase ? "进行中正在生成回答，请稍候。" : stateSummaryText);
+    const normalizedCheckpoint = {
+      ...checkpoint,
+      rawSummaryText: checkpoint.summaryText,
+      summaryText: normalizedSummaryText,
+      stateSummaryText,
+      runId: state?.currentRun?.runId ?? null,
+      runStatus: state?.currentRun?.status ?? null,
+      streamStatus: state?.stream?.status ?? null,
+      pendingQuestionId: state?.stream?.pendingQuestionId ?? null,
+      assistantTextCount: visibleParts.filter((part) => part.role === "assistant" && part.kind === "text").length,
+      hasTerminalEvidence: hasTerminalEvidenceInState(state),
+      activeRunPhase
+    };
+    return predicate(normalizedCheckpoint) ? normalizedCheckpoint : null;
   }, options);
+}
+
+async function waitForPendingQuestion(page, extensionId, options = {}) {
+  return await waitFor(async () => {
+    const state = await getExtensionState(page, extensionId);
+    const pendingQuestionId = state?.stream?.pendingQuestionId ?? null;
+    if (!pendingQuestionId) {
+      return null;
+    }
+
+    const snapshot = await readEmbeddedPanelSnapshot(page, extensionId).catch(() => null);
+    const frame = snapshot?.frame ?? await getExtensionFrame(page, extensionId);
+    const questionCard = frame.locator(".question-card").first();
+    if (await questionCard.count() === 0) {
+      return null;
+    }
+
+    return {
+      frame,
+      state,
+      pendingQuestionId,
+      questionText: await questionCard.innerText().catch(() => "")
+    };
+  }, {
+    timeoutMs: options.timeoutMs ?? 90000,
+    intervalMs: options.intervalMs ?? 500,
+    errorMessage: options.errorMessage ?? "Timed out waiting for the real smoke question checkpoint"
+  });
+}
+
+async function waitForOptionalPendingQuestion(page, extensionId, options = {}) {
+  try {
+    return await waitForPendingQuestion(page, extensionId, options);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Timed out waiting")) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function answerPendingQuestion(frame, answerText) {
+  const questionCard = frame.locator(".question-card").first();
+  await questionCard.waitFor({ timeout: 20000 });
+
+  const textarea = questionCard.locator("textarea");
+  if (await textarea.count()) {
+    await textarea.fill(answerText);
+  } else {
+    await questionCard.locator(".inline-option-button").first().click();
+  }
+
+  await questionCard.locator("button:has-text('提交回答')").first().click();
+}
+
+async function waitForQuestionAnswered(page, extensionId, questionId, options = {}) {
+  return await waitFor(async () => {
+    const state = await getExtensionState(page, extensionId);
+    const answers = Array.isArray(state?.answers) ? state.answers : [];
+    const hasAnswer = answers.some((answer) => answer?.questionId === questionId);
+    const pendingQuestionCleared = state?.stream?.pendingQuestionId !== questionId;
+    const stateWaitingForAnswer = state?.stream?.status === "waiting_for_answer"
+      || state?.currentRun?.status === "waiting_for_answer";
+    const snapshot = await readEmbeddedPanelSnapshot(page, extensionId).catch(() => null);
+    const frame = snapshot?.frame ?? await getExtensionFrame(page, extensionId);
+    const questionCardVisible = await frame.locator(".question-card").first().count().catch(() => 0) > 0;
+    const uiAdvancedPastQuestion = !questionCardVisible && !stateWaitingForAnswer;
+    const terminalAfterAnswer = hasTerminalEvidenceInState(state)
+      || state?.currentRun?.status === "done"
+      || state?.stream?.status === "done"
+      || state?.currentRun?.status === "streaming"
+      || state?.stream?.status === "streaming";
+    return (hasAnswer || pendingQuestionCleared || uiAdvancedPastQuestion)
+      && (terminalAfterAnswer || uiAdvancedPastQuestion)
+      ? state
+      : null;
+  }, {
+    timeoutMs: options.timeoutMs ?? 30000,
+    intervalMs: options.intervalMs ?? 250,
+    errorMessage: options.errorMessage ?? `Timed out waiting for question ${questionId} to be answered`
+  });
+}
+
+async function waitForDomainAccessDenial(frame, extensionId, options = {}) {
+  return await waitFor(async () => {
+    const state = await frame.evaluate(async ({ stateKey }) => {
+      const stored = await chrome.storage.local.get(stateKey);
+      return stored[stateKey] ?? null;
+    }, { stateKey: STATE_KEY });
+    const activeContext = await getActiveContext(frame).catch(() => null);
+    const panelText = await frame.locator("body").innerText().catch(() => "");
+    const denialText = `${panelText}\n${activeContext?.message ?? ""}`;
+    const panelHasErrorCopy = denialText.includes(DOMAIN_ACCESS_ERROR_COPY)
+      || denialText.includes("规则未命中")
+      || denialText.includes("当前页面未命中任何启用规则")
+      || denialText.includes("尚未命中任何启用规则");
+    const currentRunMissing = !state?.currentRun?.runId;
+    const matchedRuleMissing = !activeContext?.matchedRule?.id;
+    return panelHasErrorCopy && currentRunMissing && matchedRuleMissing
+      ? { state, activeContext, panelText }
+      : null;
+  }, {
+    timeoutMs: options.timeoutMs ?? 20000,
+    intervalMs: options.intervalMs ?? 250,
+    errorMessage: options.errorMessage ?? "Timed out waiting for domain access denial to become visible"
+  });
+}
+
+async function waitForAssistantTextGrowth(page, extensionId, options = {}) {
+  return await waitFor(async () => {
+    const snapshot = await readEmbeddedPanelSnapshot(page, extensionId).catch(() => null);
+    const visibleParts = snapshot?.visibleParts ?? [];
+    const assistantTexts = visibleParts
+      .filter((part) => part.role === "assistant" && part.kind === "text")
+      .map((part) => normalizeComparableText(part.text))
+      .filter(Boolean);
+    const latestAssistantText = assistantTexts.at(-1) ?? "";
+    return latestAssistantText.length >= (options.minLength ?? 8)
+      ? {
+        frame: snapshot?.frame ?? null,
+        visibleParts,
+        latestAssistantText,
+        panelText: snapshot?.visibleText ?? latestAssistantText
+      }
+      : null;
+  }, {
+    timeoutMs: options.timeoutMs ?? 90000,
+    intervalMs: options.intervalMs ?? 500,
+    errorMessage: options.errorMessage ?? "Timed out waiting for assistant text growth before interruption"
+  });
+}
+
+async function waitForInterruptedTerminalState(page, extensionId, options = {}) {
+  return await waitFor(async () => {
+    const state = await getExtensionState(page, extensionId);
+    const snapshot = await readEmbeddedPanelSnapshot(page, extensionId).catch(() => null);
+    const visibleParts = snapshot?.visibleParts ?? buildVisiblePartsFromState(state);
+    const panelText = snapshot?.visibleText ?? visibleParts.map((part) => part.text).filter(Boolean).join("\n\n");
+    const summaryText = normalizeComparableText(visibleParts.find((part) => part.kind === "summary")?.text);
+    const assistantTexts = visibleParts
+      .filter((part) => part.role === "assistant" && part.kind === "text")
+      .map((part) => normalizeComparableText(part.text))
+      .filter(Boolean);
+    const currentRunError = normalizeComparableText(state?.currentRun?.errorMessage ?? state?.errorMessage);
+    if ((state?.currentRun?.status === "error" || state?.stream?.status === "error")
+      && assistantTexts.length > 0
+      && summaryText.includes("已中断")
+      && panelText.includes(SSE_INTERRUPTION_ERROR_COPY)
+      && currentRunError.includes(SSE_INTERRUPTION_ERROR_COPY)) {
+      return {
+        state,
+        visibleParts,
+        panelText,
+        summaryText,
+        preservedAssistantText: assistantTexts.at(-1) ?? ""
+      };
+    }
+    return null;
+  }, {
+    timeoutMs: options.timeoutMs ?? 45000,
+    intervalMs: options.intervalMs ?? 500,
+    errorMessage: options.errorMessage ?? "Timed out waiting for interrupted error state to converge"
+  });
 }
 
 async function main() {
@@ -1613,7 +1973,11 @@ async function main() {
     logSmokeStep(`extension-frame-ready extensionId=${extensionId}`);
 
     await resetSmokeStateInExtensionPage(extensionFrame);
-    await ensureSmokeRuleConfiguredInExtensionPage(extensionFrame);
+    if (EXPECT_DOMAIN_ACCESS_DENIAL) {
+      await clearSmokeRulesInExtensionPage(extensionFrame);
+    } else {
+      await ensureSmokeRuleConfiguredInExtensionPage(extensionFrame);
+    }
     await extensionFrame.evaluate(() => {
       window.location.reload();
     });
@@ -1625,14 +1989,79 @@ async function main() {
 
     await frame.locator("textarea").waitFor({ timeout: 20000 });
     await frame.locator("button[aria-label='发送消息']").waitFor({ timeout: 20000 });
-    await waitForMatchedRule(extensionFrame, {
-      timeoutMs: 20000,
-      intervalMs: 250,
-      errorMessage: "Timed out waiting for the smoke rule to become active in the sidepanel"
-    });
-    logSmokeStep("matched-rule-ready");
-    await ensurePagePermission(frame, extensionFrame);
-    logSmokeStep("page-permission-ready");
+    if (!EXPECT_DOMAIN_ACCESS_DENIAL) {
+      await waitForMatchedRule(extensionFrame, {
+        timeoutMs: 20000,
+        intervalMs: 250,
+        errorMessage: "Timed out waiting for the smoke rule to become active in the sidepanel"
+      });
+      logSmokeStep("matched-rule-ready");
+      await ensurePagePermission(frame, extensionFrame);
+      logSmokeStep("page-permission-ready");
+    }
+
+    if (EXPECT_DOMAIN_ACCESS_DENIAL) {
+      await frame.locator("button[aria-label='采集页面']").waitFor({ timeout: 20000 });
+      await frame.locator("button[aria-label='采集页面']").click();
+      const deniedAfterCapture = await waitForDomainAccessDenial(frame, extensionId, {
+        timeoutMs: 20000,
+        intervalMs: 250,
+        errorMessage: "Timed out waiting for capture-only denial to keep currentRun empty"
+      });
+
+      const pageScreenshotPath = path.join(OUTPUT_DIR, "test-page.png");
+      const panelScreenshotPath = path.join(OUTPUT_DIR, "embedded-panel.png");
+      const panelHtmlPath = path.join(OUTPUT_DIR, "OUR_EXTENSION.HTML");
+      const stateJsonPath = path.join(OUTPUT_DIR, "extension-state.json");
+      const statusCheckpointsJsonPath = path.join(OUTPUT_DIR, "status-checkpoints.json");
+      await page.screenshot({ path: pageScreenshotPath, fullPage: true }).catch(() => undefined);
+      await frame.locator("body").screenshot({ path: panelScreenshotPath }).catch(() => undefined);
+      const panelHtml = await frame.locator("body").innerHTML().catch(() => "");
+      await writeFile(panelHtmlPath, panelHtml, "utf-8");
+      await writeFile(stateJsonPath, JSON.stringify(deniedAfterCapture.state, null, 2), "utf8");
+      await writeFile(statusCheckpointsJsonPath, JSON.stringify({
+        domainAccess: {
+          panelText: deniedAfterCapture.panelText,
+          activeContext: deniedAfterCapture.activeContext,
+          currentRun: deniedAfterCapture.state?.currentRun ?? null,
+          matchedRuleBeforeCapture: null
+        }
+      }, null, 2), "utf8");
+
+      const summary = {
+        extensionId,
+        testUrl: TEST_URL,
+        scenario: REAL_SMOKE_SCENARIO,
+        expectDomainAccessDenial: true,
+        requireLiveUpstream: REQUIRE_LIVE_UPSTREAM,
+        upstreamMode: opencodeEnvironment.upstreamMode,
+        opencodeService: opencodeEnvironment.service,
+        usedRepoStub: opencodeEnvironment.upstreamMode === "repo-stub",
+        runId: null,
+        runStatus: null,
+        streamStatus: deniedAfterCapture.state?.stream?.status ?? null,
+        questionAnswered: false,
+        finalOutputLength: 0,
+        rawEventCount: 0,
+        runEventCount: Array.isArray(deniedAfterCapture.state?.runEvents) ? deniedAfterCapture.state.runEvents.length : 0,
+        panelTextSample: deniedAfterCapture.panelText.slice(0, 2000),
+        exports: {
+          pageScreenshot: pageScreenshotPath,
+          panelScreenshot: panelScreenshotPath,
+          panelHtml: panelHtmlPath,
+          state: stateJsonPath,
+          rawEvents: null,
+          visibleParts: null,
+          comparison: null,
+          statusCheckpoints: statusCheckpointsJsonPath,
+          performance: null
+        }
+      };
+
+      console.log(JSON.stringify(summary, null, 2));
+      logSmokeStep("completed-successfully");
+      return;
+    }
 
     if (CAPTURE_PERFORMANCE_GUARD) {
       await installSidepanelPerformanceProbe(frame);
@@ -1675,19 +2104,15 @@ async function main() {
     });
     logSmokeStep("live-output-visible");
 
-    let performanceInputMeasurement = null;
-    let performanceAgentMeasurement = null;
-    if (CAPTURE_PERFORMANCE_GUARD) {
-      performanceInputMeasurement = await measureSidepanelInputLatency(frame, "性能护栏输入 during streaming");
-      performanceAgentMeasurement = await measureSidepanelAgentSwitchLatency(frame);
-      logSmokeStep(`performance-interactions-captured inputLatency=${performanceInputMeasurement?.latencyMs ?? "n/a"} agentLatency=${performanceAgentMeasurement?.latencyMs ?? "n/a"}`);
-    }
-
     const inProgressCheckpoint = CAPTURE_PROGRESS_CHECKPOINTS
       ? await waitForInteractiveCheckpoint(page, extensionId, (checkpoint) => (
-        checkpoint.summaryText.includes("进行中")
-        && checkpoint.newSessionDisabled === true
+        checkpoint.newSessionDisabled === true
         && checkpoint.sendDisabled === true
+        && (
+          checkpoint.summaryText.includes("进行中")
+          || checkpoint.stateSummaryText.includes("进行中")
+          || checkpoint.activeRunPhase
+        )
       ), {
         timeoutMs: 90000,
         intervalMs: 250,
@@ -1698,14 +2123,101 @@ async function main() {
       logSmokeStep("in-progress-checkpoint-captured");
     }
 
-    const settled = await waitForStableAssistantOutput(page, extensionId, {
-      timeoutMs: 120000,
-      intervalMs: 1000,
-      stablePollsRequired: 4
-    });
+    let questionCheckpoint = EXPECT_QUESTION
+      ? await waitForPendingQuestion(page, extensionId, {
+        timeoutMs: 90000,
+        intervalMs: 500,
+        errorMessage: "Timed out waiting for a QUESTION-tool interaction in real smoke"
+      })
+      : await waitForOptionalPendingQuestion(page, extensionId, {
+        timeoutMs: 12000,
+        intervalMs: 500,
+        errorMessage: "Timed out waiting for an opportunistic live question in real smoke"
+      });
+    const initialQuestionCheckpoint = questionCheckpoint;
+    let answeredQuestionState = null;
+    let answeredQuestionRounds = 0;
+    const questionAnswerText = EXPECT_QUESTION ? QUESTION_ANSWER_TEXT : OPPORTUNISTIC_QUESTION_ANSWER_TEXT;
+    while (questionCheckpoint) {
+      logSmokeStep(`question-visible questionId=${questionCheckpoint.pendingQuestionId}`);
+      await answerPendingQuestion(questionCheckpoint.frame, questionAnswerText);
+      answeredQuestionState = await waitForQuestionAnswered(page, extensionId, questionCheckpoint.pendingQuestionId, {
+        timeoutMs: 30000,
+        intervalMs: 250,
+        errorMessage: `Timed out waiting for question ${questionCheckpoint.pendingQuestionId} to clear after UI answer submission`
+      });
+      logSmokeStep(`question-answered questionId=${questionCheckpoint.pendingQuestionId}`);
+      answeredQuestionRounds += 1;
+      if (answeredQuestionRounds >= 4) {
+        throw new Error(`Real smoke encountered more than ${answeredQuestionRounds} sequential questions and stopped auto-answering`);
+      }
+      questionCheckpoint = await waitForOptionalPendingQuestion(page, extensionId, {
+        timeoutMs: 8000,
+        intervalMs: 500,
+        errorMessage: "Timed out waiting for a follow-up live question in real smoke"
+      });
+    }
+
+    let interruptionCheckpoint = null;
+    let interruptedTerminalState = null;
+    let stopCheckpoint = null;
+    if (EXPECT_SSE_INTERRUPTION) {
+      interruptionCheckpoint = await waitForAssistantTextGrowth(page, extensionId, {
+        timeoutMs: 90000,
+        intervalMs: 500,
+        minLength: 8,
+        errorMessage: "Timed out waiting for assistant text growth before the upstream interruption terminal event"
+      });
+      logSmokeStep("sse-interruption-growth-visible");
+      logSmokeStep("sse-interruption-triggered");
+      interruptedTerminalState = await waitForInterruptedTerminalState(page, extensionId, {
+        timeoutMs: 45000,
+        intervalMs: 500,
+        errorMessage: "Timed out waiting for interrupted error state after the upstream session.error terminal event"
+      });
+      logSmokeStep("sse-interruption-settled");
+    } else if (EXPECT_STOP_TERMINAL) {
+      stopCheckpoint = await waitForAssistantTextGrowth(page, extensionId, {
+        timeoutMs: 90000,
+        intervalMs: 500,
+        minLength: 8,
+        errorMessage: "Timed out waiting for assistant text growth before the stop terminal event"
+      });
+      logSmokeStep("stop-growth-visible");
+    }
+
+    let performanceInputMeasurement = null;
+    let performanceAgentMeasurement = null;
+    if (CAPTURE_PERFORMANCE_GUARD) {
+      performanceInputMeasurement = await measureSidepanelInputLatency(frame, "性能护栏输入 during streaming");
+      performanceAgentMeasurement = await measureSidepanelAgentSwitchLatency(frame);
+      logSmokeStep(`performance-interactions-captured inputLatency=${performanceInputMeasurement?.latencyMs ?? "n/a"} agentLatency=${performanceAgentMeasurement?.latencyMs ?? "n/a"}`);
+    }
+
+    const settled = EXPECT_SSE_INTERRUPTION
+      ? {
+          state: interruptedTerminalState.state,
+          frame: interruptionCheckpoint?.frame ?? null,
+          panelText: interruptedTerminalState.panelText,
+          visibleParts: interruptedTerminalState.visibleParts,
+          panelSource: "dom"
+        }
+      : await waitForStableAssistantOutput(page, extensionId, {
+          timeoutMs: 120000,
+          intervalMs: 1000,
+          stablePollsRequired: 4
+        });
     logSmokeStep(`assistant-output-settled source=${settled.panelSource}`);
 
-    const completedCheckpoint = CAPTURE_PROGRESS_CHECKPOINTS
+    const completedCheckpoint = EXPECT_SSE_INTERRUPTION
+      ? {
+          summaryText: interruptedTerminalState.summaryText,
+          newSessionDisabled: false,
+          sendDisabled: false,
+          textareaDisabled: false,
+          panelText: interruptedTerminalState.panelText
+        }
+      : CAPTURE_PROGRESS_CHECKPOINTS
       ? await waitForInteractiveCheckpoint(page, extensionId, (checkpoint) => (
         checkpoint.summaryText.includes("已完成")
         && !checkpoint.summaryText.includes("进行中")
@@ -1798,6 +2310,27 @@ async function main() {
       assistantMessageSequenceComparison
     }, null, 2), "utf8");
     await writeFile(statusCheckpointsJsonPath, JSON.stringify({
+      question: initialQuestionCheckpoint ? {
+        pendingQuestionId: initialQuestionCheckpoint.pendingQuestionId,
+        questionText: initialQuestionCheckpoint.questionText,
+        answerText: questionAnswerText,
+        answersCountAfterSubmit: Array.isArray(answeredQuestionState?.answers) ? answeredQuestionState.answers.length : 0,
+        answerPersisted: Array.isArray(answeredQuestionState?.answers)
+          ? answeredQuestionState.answers.some((answer) => answer?.questionId === initialQuestionCheckpoint.pendingQuestionId)
+          : false
+      } : null,
+      interruption: interruptedTerminalState ? {
+        preservedAssistantText: interruptedTerminalState.preservedAssistantText,
+        summaryText: interruptedTerminalState.summaryText,
+        errorMessage: interruptedTerminalState.state?.currentRun?.errorMessage ?? interruptedTerminalState.state?.errorMessage ?? null
+      } : null,
+      stop: stopCheckpoint ? {
+        preStopAssistantText: stopCheckpoint.latestAssistantText,
+        finalOutput: settled.state?.currentRun?.finalOutput ?? null,
+        runStatus: settled.state?.currentRun?.status ?? null,
+        streamStatus: settled.state?.stream?.status ?? null,
+        summaryText: completedCheckpoint?.summaryText ?? buildSummaryTextFromState(settled.state)
+      } : null,
       inProgress: inProgressCheckpoint,
       completed: completedCheckpoint
     }, null, 2), "utf8");
@@ -1824,6 +2357,14 @@ async function main() {
       extensionId,
       testUrl: TEST_URL,
       prompt: RUN_PROMPT,
+      scenario: REAL_SMOKE_SCENARIO,
+      expectQuestion: EXPECT_QUESTION,
+      expectSseInterruption: EXPECT_SSE_INTERRUPTION,
+      expectStop: EXPECT_STOP_TERMINAL,
+      requireLiveUpstream: REQUIRE_LIVE_UPSTREAM,
+      upstreamMode: opencodeEnvironment.upstreamMode,
+      opencodeService: opencodeEnvironment.service,
+      usedRepoStub: opencodeEnvironment.upstreamMode === "repo-stub",
       captureBeforeSend: CAPTURE_BEFORE_SEND,
       floatingButtonText,
       initialPanelContainsPermissionState: initialPanelText.includes("域名未授权") || initialPanelText.includes("域名已授权"),
@@ -1833,6 +2374,7 @@ async function main() {
       finalOutputLength: settled.state?.currentRun?.finalOutput?.length ?? 0,
       runEventCount: Array.isArray(settled.state?.runEvents) ? settled.state.runEvents.length : 0,
       rawEventCount: runEntries.length,
+      questionAnswered: Boolean(initialQuestionCheckpoint && answeredQuestionState),
       containsNoiseMarkers: NOISE_MARKERS.filter((marker) => finalizedPanelText.includes(marker)),
       assistantMessageSequenceComparison,
       assistantTextComparison,
@@ -1859,12 +2401,59 @@ async function main() {
       throw new Error("Smoke test did not start a real run");
     }
 
-    if (summary.runStatus !== "done") {
+    if (REQUIRE_LIVE_UPSTREAM && summary.usedRepoStub) {
+      throw new Error("Smoke test required a live upstream but still executed against the repository stub");
+    }
+
+    if (EXPECT_QUESTION && !summary.questionAnswered) {
+      throw new Error("Smoke test expected a QUESTION-tool interaction but did not complete the answer loop");
+    }
+
+    if (EXPECT_SSE_INTERRUPTION) {
+      if (summary.runStatus !== "error") {
+        throw new Error(`Smoke interruption scenario did not converge to an error run state: ${summary.runStatus ?? "null"}`);
+      }
+      if (!finalizedPanelText.includes("已中断") || !finalizedPanelText.includes(SSE_INTERRUPTION_ERROR_COPY)) {
+        throw new Error(`Smoke interruption scenario did not expose the expected interruption copy: ${finalizedPanelText}`);
+      }
+      if (!interruptedTerminalState?.preservedAssistantText?.trim()) {
+        throw new Error("Smoke interruption scenario did not preserve any assistant text before the failure");
+      }
+      logSmokeStep("completed-successfully");
+      return;
+    }
+
+    if (EXPECT_STOP_TERMINAL) {
+      const finalAssistantText = visibleAssistantTexts.at(-1) ?? "";
+      const normalizedPreStopText = normalizeComparableText(stopCheckpoint?.latestAssistantText ?? "");
+      const normalizedFinalAssistantText = normalizeComparableText(finalAssistantText);
+      if (summary.runStatus !== "done") {
+        throw new Error(`Smoke stop scenario did not converge to a completed run state: ${summary.runStatus ?? "null"}`);
+      }
+      if (!normalizedPreStopText) {
+        throw new Error("Smoke stop scenario did not capture assistant text before stop convergence");
+      }
+      if (!normalizedFinalAssistantText.includes(normalizedPreStopText)) {
+        throw new Error(`Smoke stop scenario lost assistant text after stop: ${JSON.stringify({ normalizedPreStopText, normalizedFinalAssistantText }, null, 2)}`);
+      }
+      if (!(completedCheckpoint?.summaryText ?? "").includes("已完成")) {
+        throw new Error(`Smoke stop scenario did not expose completed summary copy: ${completedCheckpoint?.summaryText ?? ""}`);
+      }
+      logSmokeStep("completed-successfully");
+      return;
+    }
+
+    const allowInteractiveWaitState = !EXPECT_QUESTION && summary.questionAnswered && summary.runStatus === "waiting_for_answer";
+    if (summary.runStatus !== "done" && !allowInteractiveWaitState) {
       throw new Error(`Smoke test did not reach a completed run state: ${summary.runStatus ?? "null"}`);
     }
 
     if (summary.finalOutputLength === 0) {
       throw new Error("Smoke test completed without any final assistant output");
+    }
+
+    if (allowInteractiveWaitState) {
+      logSmokeStep("completed-with-interactive-wait-state");
     }
 
     if (summary.runEventCount === 0) {

@@ -10,6 +10,18 @@ const STREAM_EVENT_DELAY_MS = Number(process.env.OPENCODE_STUB_STREAM_EVENT_DELA
 const SESSION_IDLE_DELAY_MS = Number(process.env.OPENCODE_STUB_SESSION_IDLE_DELAY_MS ?? "2000");
 const STREAM_CHUNK_COUNT = Math.max(1, Number(process.env.OPENCODE_STUB_STREAM_CHUNK_COUNT ?? "1"));
 const STREAM_EMISSION_KIND = process.env.OPENCODE_STUB_STREAM_EMISSION_KIND ?? "snapshot";
+const EMIT_QUESTION = process.env.OPENCODE_STUB_EMIT_QUESTION === "1";
+const QUESTION_HEADER = process.env.OPENCODE_STUB_QUESTION_HEADER ?? "请选择当前处理优先级";
+const QUESTION_TEXT = process.env.OPENCODE_STUB_QUESTION_TEXT ?? "请先确认当前 SR 的处理优先级，再继续输出最终结论。";
+const QUESTION_CUSTOM_ENABLED = process.env.OPENCODE_STUB_QUESTION_ALLOW_FREE_TEXT !== "0";
+const QUESTION_OPTIONS = String(process.env.OPENCODE_STUB_QUESTION_OPTIONS ?? "高优先级|中优先级|低优先级")
+  .split("|")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const QUESTION_REPLY_TIMEOUT_MS = Number(process.env.OPENCODE_STUB_QUESTION_REPLY_TIMEOUT_MS ?? "30000");
+const SESSION_ERROR_AFTER_CHUNK = Math.max(0, Number(process.env.OPENCODE_STUB_SESSION_ERROR_AFTER_CHUNK ?? "0"));
+const SESSION_ERROR_MESSAGE = process.env.OPENCODE_STUB_SESSION_ERROR_MESSAGE ?? "连接中断，请重试";
+const STEP_FINISH_STOP_AFTER_CHUNK = Math.max(0, Number(process.env.OPENCODE_STUB_STEP_FINISH_STOP_AFTER_CHUNK ?? "0"));
 
 let nextSessionNumber = 1;
 const sessions = new Map();
@@ -58,19 +70,38 @@ function sendNotFound(response) {
 function createSessionRecord(title) {
   const sessionId = `ses-stub-${nextSessionNumber}`;
   nextSessionNumber += 1;
+  const terminalText = resolveTerminalText(FINAL_TEXT);
   const record = {
     id: sessionId,
     title,
     promptPayload: null,
     answeredQuestions: [],
+    questionReply: null,
     emittedToConnection: false,
     messageId: `msg-stub-${sessionId}`,
     partId: `part-stub-${sessionId}`,
-    finalText: FINAL_TEXT,
+    streamingText: FINAL_TEXT,
+    finalText: terminalText,
+    questionRequest: EMIT_QUESTION ? buildQuestionRequest(sessionId) : null,
     createdAt: now()
   };
   sessions.set(sessionId, record);
   return record;
+}
+
+function buildQuestionRequest(sessionId) {
+  return {
+    id: `req-${sessionId}`,
+    sessionID: sessionId,
+    questions: [
+      {
+        header: QUESTION_HEADER,
+        question: QUESTION_TEXT,
+        options: QUESTION_OPTIONS.map((label) => ({ label })),
+        custom: QUESTION_CUSTOM_ENABLED
+      }
+    ]
+  };
 }
 
 function buildSessionPayload(record) {
@@ -90,20 +121,10 @@ function buildSessionPayload(record) {
 
 function buildGlobalEvents(record) {
   const partUpdates = buildPartUpdateEvents(record);
+  const emitSessionError = SESSION_ERROR_AFTER_CHUNK > 0 && partUpdates.length > 0;
+  const emitStepFinishStop = !emitSessionError && STEP_FINISH_STOP_AFTER_CHUNK > 0 && partUpdates.length > 0;
 
   return [
-    {
-      directory: DIRECTORY,
-      payload: {
-        type: "session.status",
-        properties: {
-          sessionID: record.id,
-          status: {
-            type: "busy"
-          }
-        }
-      }
-    },
     {
       directory: DIRECTORY,
       payload: {
@@ -119,22 +140,134 @@ function buildGlobalEvents(record) {
       }
     },
     ...partUpdates,
+    ...(emitStepFinishStop ? [{
+      directory: DIRECTORY,
+      payload: {
+        type: "message.part.updated",
+        agent: AGENT_ID,
+        properties: {
+          sessionID: record.id,
+          messageID: record.messageId,
+          partID: `${record.partId}-stop`,
+          metadata: {
+            emissionKind: "terminal",
+            reason: "stop"
+          },
+          part: {
+            id: `${record.partId}-stop`,
+            sessionID: record.id,
+            messageID: record.messageId,
+            type: "step-finish",
+            reason: "stop"
+          }
+        }
+      }
+    }] : []),
     {
       directory: DIRECTORY,
       payload: {
-        type: "session.idle",
+        type: emitSessionError ? "session.error" : "session.idle",
         properties: {
-          sessionID: record.id
+          sessionID: record.id,
+          ...(emitSessionError ? { error: SESSION_ERROR_MESSAGE } : {})
         }
       }
     }
   ];
 }
 
-function buildPartUpdateEvents(record) {
-  const textChunks = splitIntoStreamingChunks(record.finalText, STREAM_CHUNK_COUNT);
+function buildQuestionAskedEvent(record) {
+  return {
+    directory: DIRECTORY,
+    payload: {
+      type: "question.asked",
+      properties: record.questionRequest
+    }
+  };
+}
 
-  return textChunks.map((text, index) => ({
+function buildQuestionRepliedEvent(record) {
+  return {
+    directory: DIRECTORY,
+    payload: {
+      type: "question.replied",
+      properties: {
+        id: record.questionRequest?.id,
+        sessionID: record.id,
+        answers: record.questionReply?.answers ?? []
+      }
+    }
+  };
+}
+
+function getPendingQuestionRequests() {
+  return Array.from(sessions.values())
+    .filter((record) => record.promptPayload && record.questionRequest && !record.questionReply)
+    .map((record) => record.questionRequest);
+}
+
+function getRecordByQuestionId(questionId) {
+  return Array.from(sessions.values()).find((record) => record.questionRequest?.id === questionId) ?? null;
+}
+
+async function emitSseEvent(response, event, delayMs) {
+  if (delayMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  response.write(`data: ${JSON.stringify(event)}\n\n`);
+}
+
+async function waitForQuestionReply(record) {
+  const startedAt = now();
+  while (!record.questionReply && now() - startedAt <= QUESTION_REPLY_TIMEOUT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  if (!record.questionReply) {
+    throw new Error(`Timed out waiting for question reply for session ${record.id}`);
+  }
+}
+
+async function sendSessionEvents(response, record) {
+  const busyEvent = {
+    directory: DIRECTORY,
+    payload: {
+      type: "session.status",
+      properties: {
+        sessionID: record.id,
+        status: {
+          type: "busy"
+        }
+      }
+    }
+  };
+
+  await emitSseEvent(response, busyEvent, STREAM_EVENT_DELAY_MS);
+
+  if (record.questionRequest && !record.questionReply) {
+    await emitSseEvent(response, buildQuestionAskedEvent(record), STREAM_EVENT_DELAY_MS);
+    await waitForQuestionReply(record);
+    await emitSseEvent(response, buildQuestionRepliedEvent(record), STREAM_EVENT_DELAY_MS);
+  }
+
+  const events = buildGlobalEvents(record);
+  for (const [index, event] of events.entries()) {
+    const delayMs = index === events.length - 1 && event.payload?.type === "session.idle"
+      ? SESSION_IDLE_DELAY_MS
+      : STREAM_EVENT_DELAY_MS;
+    await emitSseEvent(response, event, delayMs);
+  }
+}
+
+function buildPartUpdateEvents(record) {
+  const textChunks = splitIntoStreamingChunks(record.streamingText, STREAM_CHUNK_COUNT);
+  const emittedChunks = SESSION_ERROR_AFTER_CHUNK > 0
+    ? textChunks.slice(0, SESSION_ERROR_AFTER_CHUNK)
+    : STEP_FINISH_STOP_AFTER_CHUNK > 0
+      ? textChunks.slice(0, STEP_FINISH_STOP_AFTER_CHUNK)
+      : textChunks;
+
+  return emittedChunks.map((text, index) => ({
     directory: DIRECTORY,
     payload: {
       type: "message.part.updated",
@@ -144,9 +277,9 @@ function buildPartUpdateEvents(record) {
         messageID: record.messageId,
         partID: record.partId,
         metadata: {
-          emissionKind: index === textChunks.length - 1 ? "final" : STREAM_EMISSION_KIND,
+          emissionKind: index === emittedChunks.length - 1 && SESSION_ERROR_AFTER_CHUNK === 0 ? "final" : STREAM_EMISSION_KIND,
           chunkIndex: index + 1,
-          chunkCount: textChunks.length
+          chunkCount: emittedChunks.length
         },
         part: {
           id: record.partId,
@@ -157,6 +290,15 @@ function buildPartUpdateEvents(record) {
       }
     }
   }));
+}
+
+function resolveTerminalText(text) {
+  if (STEP_FINISH_STOP_AFTER_CHUNK <= 0) {
+    return text;
+  }
+
+  const chunks = splitIntoStreamingChunks(text, STREAM_CHUNK_COUNT);
+  return chunks[Math.min(chunks.length, STEP_FINISH_STOP_AFTER_CHUNK) - 1] ?? text;
 }
 
 function splitIntoStreamingChunks(text, chunkCount) {
@@ -212,7 +354,9 @@ const server = http.createServer(async (request, response) => {
         ok: true,
         service: "mock-opencode-server",
         agent: AGENT_ID,
-        directory: DIRECTORY
+        directory: DIRECTORY,
+        emitQuestion: EMIT_QUESTION
+        ,stepFinishStopAfterChunk: STEP_FINISH_STOP_AFTER_CHUNK
       });
       return;
     }
@@ -247,7 +391,17 @@ const server = http.createServer(async (request, response) => {
       for (const record of pendingRecords) {
         record.emittedToConnection = true;
       }
-      await sendSse(response, pendingRecords.flatMap((record) => buildGlobalEvents(record)));
+      response.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-store, must-revalidate",
+        connection: "keep-alive"
+      });
+
+      for (const record of pendingRecords) {
+        await sendSessionEvents(response, record);
+      }
+
+      response.end();
       return;
     }
 
@@ -283,12 +437,25 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && pathname === "/question") {
-      sendJson(response, 200, []);
+      sendJson(response, 200, getPendingQuestionRequests());
       return;
     }
 
     if (request.method === "POST" && pathname.startsWith("/question/") && pathname.endsWith("/reply")) {
-      sendJson(response, 200, { ok: true });
+      const questionId = pathname.slice("/question/".length, -"/reply".length);
+      const record = getRecordByQuestionId(questionId);
+      if (!record) {
+        sendNotFound(response);
+        return;
+      }
+
+      const payload = await readJson(request);
+      record.questionReply = payload;
+      record.answeredQuestions.push({
+        questionId,
+        answers: payload?.answers ?? []
+      });
+      sendJson(response, 200, { ok: true, questionId });
       return;
     }
 

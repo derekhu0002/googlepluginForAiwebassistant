@@ -1184,6 +1184,205 @@ describe("background rule-driven capture flow", () => {
     expect((storageState["ai-web-assistant-state"] as { currentRun: { finalOutput: string } }).currentRun.finalOutput).toBe("更新回答");
   });
 
+  /** @ArchitectureID: ELM-FUNC-EXT-RECONCILE-RUN-STATE */
+  it("preserves submitted answers when a newer same-run snapshot omits them", async () => {
+    const storageState: Record<string, unknown> = {
+      "ai-web-assistant-state": {
+        ...initialAssistantState,
+        status: "streaming",
+        answers: [{
+          id: "answer-1",
+          runId: "run-1",
+          questionId: "q-1",
+          answer: "继续执行",
+          submittedAt: "2026-04-02T00:00:01.500Z"
+        }],
+        runEvents: [{
+          id: "event-1",
+          runId: "run-1",
+          type: "question",
+          createdAt: "2026-04-02T00:00:01.000Z",
+          sequence: 1,
+          question: {
+            questionId: "q-1",
+            text: "是否继续？",
+            options: []
+          },
+          canonical: {
+            key: "run-1:1:question",
+            identitySource: "run_sequence_type",
+            orderKey: "run-1:1:2026-04-02T00:00:01.000Z:run-1:1:question:event-1",
+            rawEventId: "event-1"
+          }
+        }],
+        currentRun: {
+          runId: "run-1",
+          selectedAgent: DEFAULT_MAIN_AGENT,
+          prompt: "hello",
+          username: "alice",
+          usernameSource: "dom_text",
+          softwareVersion: "",
+          selectedSr: "",
+          pageTitle: "",
+          pageUrl: "",
+          status: "streaming",
+          startedAt: "2026-04-02T00:00:00.000Z",
+          updatedAt: "2026-04-02T00:00:01.500Z",
+          finalOutput: ""
+        },
+        stream: {
+          runId: "run-1",
+          status: "streaming",
+          pendingQuestionId: null
+        },
+        runEventState: {
+          frontier: {
+            version: 1,
+            acceptedEventCount: 1,
+            lastSequence: 1,
+            contiguousSequence: 1,
+            lastAcceptedCanonicalKey: "run-1:1:question",
+            lastAcceptedRawEventId: "event-1",
+            lastAcceptedAt: "2026-04-02T00:00:01.000Z"
+          },
+          acceptedCanonicalKeys: ["run-1:1:question"],
+          diagnostics: []
+        },
+        syncMetadata: {
+          origin: "sidepanel",
+          snapshotVersion: 1,
+          generatedAt: "2026-04-02T00:00:01.600Z",
+          frontier: {
+            version: 1,
+            acceptedEventCount: 1,
+            lastSequence: 1,
+            contiguousSequence: 1,
+            lastAcceptedCanonicalKey: "run-1:1:question",
+            lastAcceptedRawEventId: "event-1",
+            lastAcceptedAt: "2026-04-02T00:00:01.000Z"
+          },
+          lastAcceptedCanonicalKey: "run-1:1:question"
+        }
+      }
+    };
+    const listenerRegistry: { handler?: (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response: unknown) => void) => void } = {};
+
+    vi.stubGlobal("chrome", {
+      tabs: {
+        query: vi.fn().mockResolvedValue([{ id: 1, url: "https://example.com/page" }]),
+        get: vi.fn().mockResolvedValue({ id: 1, url: "https://example.com/page" }),
+        sendMessage: vi.fn()
+      },
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: storageState[key] })),
+          set: vi.fn(async (payload: Record<string, unknown>) => Object.assign(storageState, payload))
+        }
+      },
+      permissions: {
+        contains: vi.fn().mockResolvedValue(true),
+        request: vi.fn().mockResolvedValue(true)
+      },
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        onMessage: { addListener: vi.fn((handler) => { listenerRegistry.handler = handler; }) },
+        onInstalled: { addListener: vi.fn() }
+      },
+      sidePanel: {
+        setOptions: vi.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
+        setPanelBehavior: vi.fn().mockResolvedValue(undefined)
+      },
+      scripting: {
+        executeScript: vi.fn().mockResolvedValue(undefined)
+      }
+    } as unknown as typeof chrome);
+
+    await import("./index");
+
+    const response = await new Promise<unknown>((resolve) => {
+      listenerRegistry.handler?.({
+        type: "SYNC_RUN_STATE",
+        payload: {
+          status: "done",
+          activeSessionId: null,
+          capturedFields: null,
+          runPrompt: "hello",
+          runEvents: [{
+            id: "event-2",
+            runId: "run-1",
+            type: "result",
+            createdAt: "2026-04-02T00:00:02.000Z",
+            sequence: 2,
+            message: "完成",
+            canonical: {
+              key: "run-1:2:result",
+              identitySource: "run_sequence_type",
+              orderKey: "run-1:2:2026-04-02T00:00:02.000Z:run-1:2:result:event-2",
+              rawEventId: "event-2"
+            }
+          }],
+          currentRun: {
+            runId: "run-1",
+            selectedAgent: DEFAULT_MAIN_AGENT,
+            prompt: "hello",
+            username: "alice",
+            usernameSource: "dom_text",
+            softwareVersion: "",
+            selectedSr: "",
+            pageTitle: "",
+            pageUrl: "",
+            status: "done",
+            startedAt: "2026-04-02T00:00:00.000Z",
+            updatedAt: "2026-04-02T00:00:02.000Z",
+            finalOutput: "完成"
+          },
+          answers: [],
+          error: null,
+          errorMessage: "",
+          matchedRule: null,
+          lastCapturedUrl: null,
+          usernameContext: null,
+          stream: { runId: "run-1", status: "done", pendingQuestionId: null },
+          runEventState: {
+            frontier: {
+              version: 2,
+              acceptedEventCount: 2,
+              lastSequence: 2,
+              contiguousSequence: 2,
+              lastAcceptedCanonicalKey: "run-1:2:result",
+              lastAcceptedRawEventId: "event-2",
+              lastAcceptedAt: "2026-04-02T00:00:02.000Z"
+            },
+            acceptedCanonicalKeys: ["run-1:1:question", "run-1:2:result"],
+            diagnostics: []
+          },
+          syncMetadata: {
+            origin: "sidepanel",
+            snapshotVersion: 2,
+            generatedAt: "2026-04-02T00:00:02.100Z",
+            frontier: {
+              version: 2,
+              acceptedEventCount: 2,
+              lastSequence: 2,
+              contiguousSequence: 2,
+              lastAcceptedCanonicalKey: "run-1:2:result",
+              lastAcceptedRawEventId: "event-2",
+              lastAcceptedAt: "2026-04-02T00:00:02.000Z"
+            },
+            lastAcceptedCanonicalKey: "run-1:2:result"
+          }
+        }
+      }, {}, resolve);
+    }) as { ok: boolean };
+
+    expect(response.ok).toBe(true);
+    expect((storageState["ai-web-assistant-state"] as { answers: Array<{ questionId: string; answer: string }>; stream: { status: string } }).answers).toEqual([
+      expect.objectContaining({ questionId: "q-1", answer: "继续执行" })
+    ]);
+    expect((storageState["ai-web-assistant-state"] as { stream: { status: string } }).stream.status).toBe("done");
+  });
+
   it("returns context with controlled permission request and activeTab fallback hint", async () => {
     const storageState: Record<string, unknown> = {
       "ai-web-assistant-rules": [

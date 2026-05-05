@@ -5,7 +5,7 @@ import { createDomainError, normalizeDomainError, toDisplayMessage } from "../sh
 import { evaluatePageAccess, matchesChromePattern, toOriginPermissionPattern } from "../shared/pageAccess";
 import { ensureContentScriptReady, isReceivingEndMissingError } from "../shared/scripting";
 import { findMatchingRule, getStoredRules, removeRule, RULES_STORAGE_KEY, saveRules, toCanonicalCapturedFields, upsertRule } from "../shared/rules";
-import type { ActiveTabContext, AssistantState, CapturedFields, PageRule, RuntimeMessage, SyncableAssistantRunState, UsernameContext } from "../shared/types";
+import type { ActiveTabContext, AnswerRecord, AssistantState, CapturedFields, PageRule, RuntimeMessage, SyncableAssistantRunState, UsernameContext } from "../shared/types";
 import {
   compareRunEventFrontiers,
   createEmptyRunEventState,
@@ -67,6 +67,22 @@ function normalizeSyncableState(state: SyncableAssistantRunState): SyncableAssis
   };
 }
 
+function toAnswerRecordKey(answer: AnswerRecord): string {
+  return answer.id || `${answer.runId}:${answer.questionId}:${answer.submittedAt}:${answer.answer}`;
+}
+
+function mergeAnswerRecords(currentAnswers: AnswerRecord[], incomingAnswers: AnswerRecord[]): AnswerRecord[] {
+  const merged = new Map<string, AnswerRecord>();
+  for (const answer of currentAnswers) {
+    merged.set(toAnswerRecordKey(answer), answer);
+  }
+  for (const answer of incomingAnswers) {
+    merged.set(toAnswerRecordKey(answer), answer);
+  }
+
+  return [...merged.values()].sort((left, right) => left.submittedAt.localeCompare(right.submittedAt));
+}
+
 function reconcileRunState(current: AssistantState, incomingPartial: SyncableAssistantRunState) {
   const incoming = normalizeSyncableState(incomingPartial);
   const currentRunId = current.currentRun?.runId ?? current.stream.runId;
@@ -94,6 +110,7 @@ function reconcileRunState(current: AssistantState, incomingPartial: SyncableAss
   const mergedState: AssistantState = {
     ...current,
     ...incoming,
+    answers: mergeAnswerRecords(current.answers ?? [], incoming.answers ?? []),
     runEvents: frontierCompare === 0
       ? current.runEvents.length >= incoming.runEvents.length ? current.runEvents : incoming.runEvents
       : incoming.runEvents,

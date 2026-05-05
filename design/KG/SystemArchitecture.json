@@ -275,7 +275,7 @@
 {
 "id": "2255",
 "name": "REMOTE OPENCODE SERVER"
-,"type": "ArchiMate_ApplicationComponent"
+,"type": "ArchiMate_ApplicationComponent,_EXTERNAL_SYSTEM_"
 ,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/REMOTE OPENCODE SERVER"
 ,"attributes": [
 {

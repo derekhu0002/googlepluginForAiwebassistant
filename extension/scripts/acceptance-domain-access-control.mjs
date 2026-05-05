@@ -1,12 +1,15 @@
-import { runVitestAcceptance } from "./run-vitest-acceptance.mjs";
+import { assertDomainAccessDenied, runSmokeAndLoadArtifacts } from "./real-smoke-assertions.mjs";
 
-await runVitestAcceptance([
-  {
-    file: "src/shared/pageAccess.test.ts",
-    testName: "returns permission error for non-whitelisted pages"
-  },
-  {
-    file: "src/background/index.test.ts",
-    testName: "returns explicit error when no rule matches current page"
+const artifacts = await runSmokeAndLoadArtifacts({
+  env: {
+    REAL_SMOKE_REQUIRE_REPO_STUB: "1",
+    REAL_SMOKE_SCENARIO: "domain-access-control"
   }
-]);
+});
+
+assertDomainAccessDenied(artifacts);
+
+console.log(JSON.stringify({
+  testcase: "RealDomainAccessControl",
+  result: "passed"
+}, null, 2));

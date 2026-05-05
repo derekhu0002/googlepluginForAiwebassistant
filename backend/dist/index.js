@@ -52,8 +52,6 @@ var AppError = class extends Error {
     this.code = code;
     this.statusCode = statusCode;
   }
-  code;
-  statusCode;
 };
 var AuthError = class extends AppError {
   constructor(message = "Unauthorized request") {
@@ -70,7 +68,6 @@ var ValidationError = class extends AppError {
     super(message, "VALIDATION_ERROR", 400);
     this.details = details;
   }
-  details;
 };
 var TimeoutError = class extends AppError {
   constructor(message = "Analysis timed out") {
@@ -244,7 +241,6 @@ var MockAnalysisProvider = class {
   constructor(delayMs) {
     this.delayMs = delayMs;
   }
-  delayMs;
   name = "mock-analysis-provider";
   async analyze(input, options) {
     const startedAt = Date.now();
