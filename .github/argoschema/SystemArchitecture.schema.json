@@ -1,0 +1,436 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "./schema/SystemArchitecture.schema.json",
+  "title": "SystemArchitecture Knowledge Graph Schema",
+  "description": "Schema extracted from the EA ArchiMate JSON export structure for design/KG/SystemArchitecture.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "description",
+    "elements",
+    "relationships",
+    "views"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "attributes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/attribute"
+      }
+    },
+    "elements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/element"
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relationship"
+      }
+    },
+    "views": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/view"
+      }
+    }
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "start_date": {
+          "type": "string"
+        },
+        "completion_date": {
+          "type": "string"
+        },
+        "due_date": {
+          "type": "string"
+        },
+        "reporter": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string"
+        },
+        "assigned_to": {
+          "type": "string"
+        },
+        "progress": {
+          "type": "string"
+        }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "role",
+        "start_date",
+        "end_date",
+        "percent_complete",
+        "expected_hours"
+      ],
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "start_date": {
+          "type": "string"
+        },
+        "end_date": {
+          "type": "string"
+        },
+        "percent_complete": {
+          "type": "number"
+        },
+        "expected_hours": {
+          "type": "number"
+        },
+        "history": {
+          "type": "string"
+        }
+      }
+    },
+    "projectSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "notes": {
+          "type": "string"
+        },
+        "started": {
+          "type": "string"
+        },
+        "deadline": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string"
+        },
+        "assigned_to": {
+          "type": "string"
+        },
+        "progress": {
+          "type": "string"
+        }
+      }
+    },
+    "projectInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "$ref": "#/$defs/projectSummary"
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resource"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/task"
+          }
+        }
+      }
+    },
+    "attribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "description": "Generic EA-style attribute container. Use this for architecture annotations such as verification_focus, acceptance_outcomes, and design_risks instead of introducing dedicated top-level fields.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Attribute name, for example verification_focus, acceptance_outcomes, design_risks, or a domain-specific property name."
+        },
+        "description": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        }
+      }
+    },
+    "subdiagramView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "view_id",
+        "view_name"
+      ],
+      "properties": {
+        "view_id": {
+          "type": "string"
+        },
+        "view_name": {
+          "type": "string"
+        }
+      }
+    },
+    "testcase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description",
+        "type",
+        "Input",
+        "acceptanceCriteria",
+        "TestResults"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Stable testcase identifier. Use the testcase name itself as the long-lived identity; do not add a separate testcase id field."
+        },
+        "description": {
+          "type": "string",
+          "description": "Place the intent being verified here. Each testcase should normally be mounted under exactly one element rather than using extra verifies_elements or verifies_intents fields."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "Unit Test",
+            "Integration Test",
+            "System Test",
+            "Acceptance Test",
+            "Scenario Test",
+            "Inspection Test"
+          ]
+        },
+        "Input": {
+          "type": "string"
+        },
+        "acceptanceCriteria": {
+          "type": "string"
+        },
+        "TestResults": {
+          "type": "string"
+        }
+      }
+    },
+    "element": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "alias": {
+          "type": "string"
+        },
+        "classifier": {
+          "type": "string"
+        },
+        "browser_path": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "document": {
+          "type": "string"
+        },
+        "attributes": {
+          "type": "array",
+          "description": "Use attributes to store additional architecture intent metadata, including verification_focus, acceptance_outcomes, and design_risks.",
+          "items": {
+            "$ref": "#/$defs/attribute"
+          }
+        },
+        "code_file": {
+          "type": "string"
+        },
+        "condition_file": {
+          "type": "string"
+        },
+        "prompts_file": {
+          "type": "string"
+        },
+        "project_info": {
+          "$ref": "#/$defs/projectInfo"
+        },
+        "subdiagram_views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/subdiagramView"
+          }
+        },
+        "testcases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/testcase"
+          }
+        }
+      }
+    },
+    "relationshipAttribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "statement",
+        "name",
+        "source_id",
+        "target_id",
+        "source_name",
+        "target_name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "statement": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": "string"
+        },
+        "super_type": {
+          "type": "string"
+        },
+        "document": {
+          "type": "string"
+        },
+        "attributes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relationshipAttribute"
+          }
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "source_name": {
+          "type": "string"
+        },
+        "target_name": {
+          "type": "string"
+        }
+      }
+    },
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "view_id",
+        "view_name",
+        "included_elements",
+        "included_relationships"
+      ],
+      "properties": {
+        "view_id": {
+          "type": "string"
+        },
+        "view_name": {
+          "type": "string"
+        },
+        "browser_path": {
+          "type": "string"
+        },
+        "parent_element_id": {
+          "type": "string"
+        },
+        "parent_element_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "included_elements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "included_relationships": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
