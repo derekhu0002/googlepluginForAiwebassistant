@@ -5,12 +5,13 @@ import { createDomainError, normalizeDomainError, toDisplayMessage } from "../sh
 import { evaluatePageAccess, matchesChromePattern, toOriginPermissionPattern } from "../shared/pageAccess";
 import { ensureContentScriptReady, isReceivingEndMissingError } from "../shared/scripting";
 import { findMatchingRule, getStoredRules, removeRule, RULES_STORAGE_KEY, saveRules, toCanonicalCapturedFields, upsertRule } from "../shared/rules";
-import type { ActiveTabContext, AnswerRecord, AssistantState, CapturedFields, PageRule, RuntimeMessage, SyncableAssistantRunState, UsernameContext } from "../shared/types";
+import type { ActiveTabContext, AssistantState, CapturedFields, PageRule, RuntimeMessage, SyncableAssistantRunState, UsernameContext } from "../shared/types";
 import {
   compareRunEventFrontiers,
   createEmptyRunEventState,
   deriveRunEventFrontier,
   sortNormalizedRunEvents,
+  type AnswerRecord,
   type MainAgent,
   type RunRecord
 } from "../shared/protocol";
