@@ -6,7 +6,6 @@
 "id": "1207",
 "name": "StrategyLayerAndMotivationAspect"
 ,"type": "ArchiMate_Assessment"
-,"browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect"
 ,"subdiagram_views": [
 {
 "view_id": "159",
@@ -18,7 +17,6 @@
 "id": "1208",
 "name": "BusinessLayer"
 ,"type": "ArchiMate_Assessment"
-,"browser_path": "Model/System/BusinessLayer/BusinessLayer"
 ,"subdiagram_views": [
 {
 "view_id": "160",
@@ -30,7 +28,6 @@
 "id": "1209",
 "name": "ApplicationLayer"
 ,"type": "ArchiMate_Assessment"
-,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer"
 ,"subdiagram_views": [
 {
 "view_id": "161",
@@ -42,7 +39,6 @@
 "id": "1210",
 "name": "TechnologyLayer"
 ,"type": "ArchiMate_Assessment"
-,"browser_path": "Model/System/TechnologyLayer/TechnologyLayer"
 ,"subdiagram_views": [
 {
 "view_id": "162",
@@ -54,7 +50,6 @@
 "id": "2242",
 "name": "CHROME EXTENSION 正常显示"
 ,"type": "ArchiMate_ApplicationFunction"
-,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/CHROME EXTENSION/CHROME EXTENSION 正常显示"
 ,"testcases": [
 {
 "name": "TestCase1",
@@ -86,7 +81,6 @@
 "id": "2243",
 "name": "扩展可正常抓取页面内容并发送到PROMPT"
 ,"type": "ArchiMate_ApplicationFunction"
-,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/CHROME EXTENSION/扩展可正常抓取页面内容并发送到PROMPT"
 ,"testcases": [
 {
 "name": "TestCase4",
@@ -118,7 +112,6 @@
 "id": "2253",
 "name": "PYTHON ADAPTER"
 ,"type": "ArchiMate_ApplicationComponent"
-,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/PYTHON ADAPTER"
 ,"attributes": [
 {
 "name": "INTRODUCTION"
@@ -148,7 +141,6 @@
 "id": "2254",
 "name": "CHROME EXTENSION"
 ,"type": "ArchiMate_ApplicationComponent"
-,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/CHROME EXTENSION"
 ,"testcases": [
 {
 "name": "流式消息渲染的 UI 线程隔离 (防止卡死)",
@@ -276,7 +268,6 @@
 "id": "2255",
 "name": "REMOTE OPENCODE SERVER"
 ,"type": "ArchiMate_ApplicationComponent,_EXTERNAL_SYSTEM_"
-,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/REMOTE OPENCODE SERVER"
 ,"attributes": [
 {
 "name": "INTRODUCTION"
@@ -288,26 +279,22 @@
 "id": "2256",
 "name": "提供一个用户和AI会话的途径"
 ,"type": "ArchiMate_Outcome"
-,"browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect/提供一个用户和AI会话的途径"
 ,"description": "1、通过CHROME扩展的方式提供；\r\n2、用户可以选择使用哪个业务AGENT；\r\n3、会话过程中，AI输出的消息以流式逐步显示在会话窗口，并进行MARKDOWN渲染；\r\n4、用户可以设置需要抓取当前页面哪些内容，并可预抓取；\r\n5、在用户发起会话时，预抓取的页面内容会随着用户输入的内容一起发送给AI；"
 },
 {
 "id": "2257",
 "name": "人类用户"
 ,"type": "ArchiMate_BusinessActor"
-,"browser_path": "Model/System/BusinessLayer/BusinessLayer/人类用户"
 },
 {
 "id": "2258",
 "name": "AI辅助XX业务"
 ,"type": "ArchiMate_BusinessProcess"
-,"browser_path": "Model/System/BusinessLayer/BusinessLayer/AI辅助XX业务"
 },
 {
 "id": "2259",
 "name": "AI辅助XX业务服务"
 ,"type": "ArchiMate_BusinessService"
-,"browser_path": "Model/System/BusinessLayer/BusinessLayer/AI辅助XX业务服务"
 }
 ],
 "relationships": [
@@ -376,7 +363,6 @@
 {
 "view_id": "159",
 "view_name": "StrategyLayerAndMotivationAspect"
-,"browser_path": "Model/System/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect/StrategyLayerAndMotivationAspect"
 ,"parent_element_id": "1207"
 ,"parent_element_name": "StrategyLayerAndMotivationAspect"
 ,"included_elements": [
@@ -389,7 +375,6 @@
 {
 "view_id": "160",
 "view_name": "BusinessLayer"
-,"browser_path": "Model/System/BusinessLayer/BusinessLayer/BusinessLayer"
 ,"parent_element_id": "1208"
 ,"parent_element_name": "BusinessLayer"
 ,"included_elements": [
@@ -405,7 +390,6 @@
 {
 "view_id": "161",
 "view_name": "ApplicationLayer"
-,"browser_path": "Model/System/ApplicationLayer/ApplicationLayer/ApplicationLayer"
 ,"parent_element_id": "1209"
 ,"parent_element_name": "ApplicationLayer"
 ,"included_elements": [
@@ -425,7 +409,6 @@
 {
 "view_id": "162",
 "view_name": "TechnologyLayer"
-,"browser_path": "Model/System/TechnologyLayer/TechnologyLayer/TechnologyLayer"
 ,"parent_element_id": "1210"
 ,"parent_element_name": "TechnologyLayer"
 ,"included_elements": [
@@ -438,7 +421,6 @@
 {
 "view_id": "158",
 "view_name": "SystemArchitecture"
-,"browser_path": "Model/System/SystemArchitecture"
 ,"included_elements": [
 "1207",
 "1208",
