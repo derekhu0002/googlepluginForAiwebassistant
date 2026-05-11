@@ -1,3 +1,5 @@
+"""Guardrail: watches python_adapter/scripts probe flow so health and agent discovery checks remain executable from the repo boundary."""
+
 import json
 from urllib.error import HTTPError
 

@@ -1,4 +1,5 @@
-import { assertCapturedContextVisibleInTranscript, runSmokeAndLoadArtifacts } from "./real-smoke-assertions.mjs";
+/** Guardrail: watches extension/src capture orchestration so pre-captured page fields are reused on run start and projected into the transcript. */
+import { assertCapturedContextVisibleInTranscript, runSmokeAndLoadArtifacts } from "../../scripts/real-smoke-assertions.mjs";
 
 const artifacts = await runSmokeAndLoadArtifacts({
   env: {

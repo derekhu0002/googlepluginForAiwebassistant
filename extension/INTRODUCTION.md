@@ -403,7 +403,7 @@
 - Chrome DevTools Protocol 地址 `http://127.0.0.1:9222`
 - Playwright 可用的 Chromium
 
-证据来源：`extension/package.json`、`extension/scripts/acceptance-testcase2.mjs`、`extension/scripts/acceptance-testcase3.mjs`、`extension/scripts/acceptance-testcase4.mjs`、`extension/scripts/real-extension-smoke.mjs`、`extension/src/sidepanel/architecture.acceptance.test.tsx`。
+证据来源：`extension/package.json`、`extension/src/guardrails/acceptance-testcase2.mjs`、`extension/src/guardrails/acceptance-testcase3.mjs`、`extension/src/guardrails/acceptance-testcase4.mjs`、`extension/src/guardrails/real-extension-smoke.mjs`、`extension/src/sidepanel/architecture.acceptance.test.tsx`。
 
 ## 5. 调用与使用方法
 
@@ -589,7 +589,7 @@ npm run dev
 - `extension/src/sidepanel/diagnostics.ts`
 - `extension/src/sidepanel/diagnostics.test.ts`
 - `extension/src/sidepanel/architecture.acceptance.test.tsx`
-- `extension/scripts/real-extension-smoke.mjs`
+- `extension/src/guardrails/real-extension-smoke.mjs`
 
 ### 系统级补充说明
 

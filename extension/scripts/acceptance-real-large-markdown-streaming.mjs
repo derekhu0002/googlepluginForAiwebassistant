@@ -1,1 +1,0 @@
-import "./acceptance-real-sidepanel-performance.mjs";

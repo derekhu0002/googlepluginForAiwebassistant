@@ -1,3 +1,5 @@
+"""Guardrail: watches python_adapter/app main-agent catalog loading so default agent, aliases, and whitelist mappings remain canonical."""
+
 from python_adapter.app.main_agents import ALLOWED_MAIN_AGENTS, DEFAULT_MAIN_AGENT, MAIN_AGENT_CONFIGS, REMOTE_AGENT_WHITELIST
 
 

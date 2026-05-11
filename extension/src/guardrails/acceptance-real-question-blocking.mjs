@@ -1,4 +1,5 @@
-import { assertQuestionFlowCompleted, runSmokeAndLoadArtifacts } from "./real-smoke-assertions.mjs";
+/** Guardrail: watches extension/src real question-blocking flow so waiting-for-answer state, answer submission, and resume semantics stay coherent. */
+import { assertQuestionFlowCompleted, runSmokeAndLoadArtifacts } from "../../scripts/real-smoke-assertions.mjs";
 
 const artifacts = await runSmokeAndLoadArtifacts({
   env: {

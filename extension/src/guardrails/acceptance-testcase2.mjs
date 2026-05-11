@@ -1,4 +1,5 @@
-import { assertToolTranscriptHidden, runSmokeAndLoadArtifacts } from "./real-smoke-assertions.mjs";
+/** Guardrail: watches extension/src main-stage transcript projection so tool transcript stays hidden from the visible user conversation. */
+import { assertToolTranscriptHidden, runSmokeAndLoadArtifacts } from "../../scripts/real-smoke-assertions.mjs";
 
 const artifacts = await runSmokeAndLoadArtifacts({
   env: {

@@ -1,4 +1,5 @@
-import { runVitestSelections } from "./run-vitest-acceptance.mjs";
+/** Guardrail: watches extension/src/shared history persistence so stored runs, events, and answers can be restored without breaking transcript projection. */
+import { runVitestSelections } from "../../../scripts/run-vitest-acceptance.mjs";
 
 await runVitestSelections("会话历史（History）的本地持久化读取", [
   {

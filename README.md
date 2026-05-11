@@ -293,9 +293,9 @@ npm run acceptance:testcase4 --workspace extension
 
 真实 smoke 用例入口：
 
-- `extension/scripts/acceptance-testcase2.mjs`
-- `extension/scripts/acceptance-testcase3.mjs`
-- `extension/scripts/acceptance-testcase4.mjs`
+- `extension/src/guardrails/acceptance-testcase2.mjs`
+- `extension/src/guardrails/acceptance-testcase3.mjs`
+- `extension/src/guardrails/acceptance-testcase4.mjs`
 
 根目录快捷入口：
 

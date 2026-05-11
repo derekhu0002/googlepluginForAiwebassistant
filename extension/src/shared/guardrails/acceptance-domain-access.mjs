@@ -1,4 +1,5 @@
-import { runVitestSelections } from "./run-vitest-acceptance.mjs";
+/** Guardrail: watches extension/src/shared domain-access policy so restricted pages fail consistently before orchestration proceeds. */
+import { runVitestSelections } from "../../../scripts/run-vitest-acceptance.mjs";
 
 await runVitestSelections("域名授权与访问控制逻辑", [
   {

@@ -363,14 +363,14 @@ curl -X POST http://127.0.0.1:8030/api/runs/<runId>/answers \
 | --- | --- |
 | 系统主链路是“前端/扩展 -> Python Adapter -> opencode serve” | `python_adapter/README.md`；`python_adapter/app/config.py` 中默认 `OPENCODE_BASE_URL`；`python_adapter/app/opencode_adapter.py` 中对 `/agent`、`/session`、`/prompt_async`、`/global/event` 的调用 |
 | 对外 API 包括 `/health`、`/api/runs`、事件流、回答接口、反馈接口 | `python_adapter/app/main.py` |
-| run 请求需要 `prompt`、`selectedAgent`、`capture`、`context` | `python_adapter/app/models.py` 中 `RunStartRequest`；`python_adapter/tests/test_app.py`；`python_adapter/tests/test_opencode_adapter.py` |
-| 系统会把 `capture` 与 `context` 注入上游 `prompt_async` | `python_adapter/tests/test_opencode_adapter.py` 中 `test_start_run_includes_capture_and_context_in_prompt_async_payload` |
+| run 请求需要 `prompt`、`selectedAgent`、`capture`、`context` | `python_adapter/app/models.py` 中 `RunStartRequest`；`python_adapter/app/test_app_guardrail.py`；`python_adapter/app/test_opencode_adapter_guardrail.py` |
+| 系统会把 `capture` 与 `context` 注入上游 `prompt_async` | `python_adapter/app/test_opencode_adapter_guardrail.py` 中 `test_start_run_includes_capture_and_context_in_prompt_async_payload` |
 | 允许的主 AGENT 受配置文件约束，且会先做远端 canonical agent 发现与校验 | `python_adapter/app/main_agents.py`；`config/main-agents.json`；`python_adapter/app/opencode_adapter.py` |
-| 对外提供归一化事件流和原始事件流 | `python_adapter/app/main.py`；`python_adapter/app/models.py`；`python_adapter/tests/test_app.py` |
+| 对外提供归一化事件流和原始事件流 | `python_adapter/app/main.py`；`python_adapter/app/models.py`；`python_adapter/app/test_app_guardrail.py` |
 | 消息反馈会转发到另一个反馈后端 | `python_adapter/app/main.py` 中 `post_feedback_to_backend`；`python_adapter/app/config.py` 中 `FEEDBACK_BACKEND_*` 默认值 |
-| 默认日志写入 `python_adapter/logs/invocations.jsonl` | `python_adapter/README.md`；`python_adapter/app/config.py`；`python_adapter/tests/test_app.py` |
-| 可用探针脚本用于同时验证 `/global/health` 与 `/agent` | `python_adapter/scripts/probe_opencode.py`；`python_adapter/tests/test_probe_opencode.py` |
-| 根目录测试入口为 `python -m pytest python_adapter/tests` | 仓库根目录 `package.json` |
+| 默认日志写入 `python_adapter/logs/invocations.jsonl` | `python_adapter/README.md`；`python_adapter/app/config.py`；`python_adapter/app/test_app_guardrail.py` |
+| 可用探针脚本用于同时验证 `/global/health` 与 `/agent` | `python_adapter/scripts/probe_opencode.py`；`python_adapter/scripts/test_probe_opencode_guardrail.py` |
+| 根目录测试入口为 `python -m pytest python_adapter/app python_adapter/scripts` | 仓库根目录 `package.json` |
 | 正式启动命令未在仓库中明确写明 | 在 `python_adapter` 范围内未找到明确启动命令；仅能从 `requirements.txt` 与 `app/main.py` 推断可能使用 Uvicorn |
 
 ## 快速结论

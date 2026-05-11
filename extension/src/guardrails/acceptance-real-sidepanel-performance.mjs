@@ -1,4 +1,5 @@
-import { assertSidepanelPerformanceGuard, runSmokeAndLoadArtifacts } from "./real-smoke-assertions.mjs";
+/** Guardrail: watches extension/src real-browser streaming performance so sidepanel responsiveness and transcript convergence do not regress together. */
+import { assertSidepanelPerformanceGuard, runSmokeAndLoadArtifacts } from "../../scripts/real-smoke-assertions.mjs";
 
 function buildLargeMarkdownPayload() {
   const heading = "# REAL_EXTENSION_SMOKE_OK\n\n## 风险摘要\n\n- 当前 SR 需要优先核对软件版本影响范围\n- 建议先执行分层回归，再安排增量修复验证\n";

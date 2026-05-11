@@ -147,7 +147,7 @@ Observed codes from current code/tests:
 - `RUN_NOT_FOUND` for unknown `runId`
 - client-side `NETWORK_ERROR` is synthesized by the extension when fetch/SSE setup fails (`extension/src/shared/api.ts`)
 
-Relevant tests: `python_adapter/tests/test_app.py`.
+Relevant tests: `python_adapter/app/test_app_guardrail.py`.
 
 ### Question answering contract
 
@@ -252,7 +252,7 @@ Behavior:
 
 Relevant tests:
 
-- `python_adapter/tests/test_opencode_adapter.py:test_real_contract_preflights_remote_agent_catalog_before_session_bootstrap`
+- `python_adapter/app/test_opencode_adapter_guardrail.py:test_real_contract_preflights_remote_agent_catalog_before_session_bootstrap`
 - `...:test_remote_agent_alias_is_canonicalized_from_supported_catalog`
 - `...:test_remote_agent_discovery_rejects_ambiguous_alias_matches`
 - `...:test_real_contract_fails_when_message_event_reports_wrong_primary_agent`
@@ -284,7 +284,7 @@ Implemented in `OpencodeAdapter.start_run`.
 
 Relevant tests:
 
-- `python_adapter/tests/test_opencode_adapter.py:test_real_contract_uses_session_prompt_async_and_question_reply`
+- `python_adapter/app/test_opencode_adapter_guardrail.py:test_real_contract_uses_session_prompt_async_and_question_reply`
 - `...:test_real_contract_reuses_existing_session_for_follow_up_prompt`
 - `...:test_request_without_capture_defaults_to_generic_session_title`
 
@@ -314,7 +314,7 @@ Important normalization details:
 
 Relevant tests:
 
-- `python_adapter/tests/test_opencode_adapter.py:test_reasoning_part_delta_is_buffered_and_emitted_as_thinking_after_part_type_is_known`
+- `python_adapter/app/test_opencode_adapter_guardrail.py:test_reasoning_part_delta_is_buffered_and_emitted_as_thinking_after_part_type_is_known`
 - `...:test_text_part_delta_is_buffered_and_emitted_as_answer_stream_after_part_type_is_known`
 - `...:test_text_part_snapshot_uses_assistant_text_snapshot_semantics`
 - `...:test_session_idle_without_text_defers_placeholder_until_stream_end`
@@ -596,5 +596,5 @@ Rules:
 
 ### Tests that lock in behavior
 
-- `python_adapter/tests/test_app.py`
-- `python_adapter/tests/test_opencode_adapter.py`
+- `python_adapter/app/test_app_guardrail.py`
+- `python_adapter/app/test_opencode_adapter_guardrail.py`

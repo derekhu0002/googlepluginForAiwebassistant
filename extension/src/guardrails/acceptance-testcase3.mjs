@@ -1,4 +1,5 @@
-import { assertCompletedSummaryAfterTerminalEvidence, assertRunControlsTransition, runSmokeAndLoadArtifacts } from "./real-smoke-assertions.mjs";
+/** Guardrail: watches extension/src run lifecycle convergence so in-progress and completed UI states switch at the right checkpoints. */
+import { assertCompletedSummaryAfterTerminalEvidence, assertRunControlsTransition, runSmokeAndLoadArtifacts } from "../../scripts/real-smoke-assertions.mjs";
 
 const artifacts = await runSmokeAndLoadArtifacts({
   env: {

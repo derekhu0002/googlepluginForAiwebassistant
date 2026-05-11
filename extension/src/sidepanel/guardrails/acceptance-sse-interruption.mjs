@@ -1,4 +1,5 @@
-import { runVitestSelections } from "./run-vitest-acceptance.mjs";
+/** Guardrail: watches extension/src/sidepanel interrupted streaming behavior so partial assistant Markdown remains visible after transport failure. */
+import { runVitestSelections } from "../../../scripts/run-vitest-acceptance.mjs";
 
 await runVitestSelections("SSE 连接意外中断的容错处理", [
   {

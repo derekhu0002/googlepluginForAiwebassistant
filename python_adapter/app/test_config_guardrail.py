@@ -1,3 +1,5 @@
+"""Guardrail: watches python_adapter/app settings defaults so adapter and upstream boundary configuration does not silently drift."""
+
 from pathlib import Path
 
 from python_adapter.app.config import Settings

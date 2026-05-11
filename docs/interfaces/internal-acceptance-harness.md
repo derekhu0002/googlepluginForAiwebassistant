@@ -41,16 +41,16 @@
 
 - 职责：提供最小 `opencode serve` 兼容 HTTP/SSE 边界，覆盖 `/global/health`、`/agent`、`/session`、`/session/{id}/prompt_async`、`/global/event`、`/session/{id}/message` 和 question reply 占位接口，用于真实 smoke 缺少本机上游时的环境自举。
 - 边界：只模拟 acceptance 所需的最小远端协议，不承担 adapter 归一化、前端投影或业务断言。
-- 依赖：Node.js 内置 `http`；由 `extension/scripts/real-extension-smoke.mjs` 按需拉起。
+- 依赖：Node.js 内置 `http`；由 `extension/src/guardrails/real-extension-smoke.mjs` 按需拉起。
 - 调用约束：仅作为 smoke 内部依赖使用；调用方只执行 `real-extension-smoke.mjs`，不应单独把 stub 生命周期暴露给架构图。
 - 演进注意：若真实 smoke 未来覆盖更多远端行为，应优先在此兼容层补充协议，而不是把远端细节散入 sidepanel smoke 脚本。
 
-### `extension/scripts/real-extension-smoke.mjs`
+### `extension/src/guardrails/real-extension-smoke.mjs`
 
 - 职责：作为真实浏览器 smoke 的唯一外部入口，负责浏览器启动、规则灌入、权限授权、prompt 提交、artifact 导出，以及缺失上游 `opencode` 时的本地兼容环境自举。
 - 边界：对外只暴露单一脚本入口；对内可复用仓库级 stub 和现有 sidepanel 状态读取 helper，但不把环境准备分散给 wrapper 脚本。
 - 依赖：`playwright`、`extension/dist`、`scripts/mock-opencode-server.mjs`、本机 `test_site` 与 `python_adapter`。
-- 调用约束：调用方只运行 `node extension/scripts/real-extension-smoke.mjs`；需要真实上游 AI 时，应显式设置 `REAL_SMOKE_REQUIRE_LIVE_UPSTREAM=1`，并指向已启动的外部 `opencode`/adapter。只有显式设置 `REAL_SMOKE_REQUIRE_REPO_STUB=1` 时，入口才会在内部自举 repo-local stub(`18124`) 和测试 adapter(`18030`)；不得在 wrapper 层重复拼装启动链。
+- 调用约束：调用方只运行 `node extension/src/guardrails/real-extension-smoke.mjs`；需要真实上游 AI 时，应显式设置 `REAL_SMOKE_REQUIRE_LIVE_UPSTREAM=1`，并指向已启动的外部 `opencode`/adapter。只有显式设置 `REAL_SMOKE_REQUIRE_REPO_STUB=1` 时，入口才会在内部自举 repo-local stub(`18124`) 和测试 adapter(`18030`)；不得在 wrapper 层重复拼装启动链。
 - Prompt 约束：可通过 `EXTENSION_SMOKE_PROMPT` 提供测试问题，并通过 `EXTENSION_SMOKE_RESPONSE_CONTRACT` 追加“返回契约”，显式约束真实上游回答的结构，以降低 live upstream 场景下的输出漂移；该契约不能替代真实上游本身。
 - Question 约束：若 smoke 需要验证真实 Question 阻断闭环，应通过 `REAL_SMOKE_SCENARIO=question` 或 `REAL_SMOKE_EXPECT_QUESTION=1` 启用 QUESTION 场景；入口会把 `REAL_SMOKE_QUESTION_TOOL_CONTRACT` 追加到 prompt，显式要求上游先用 QUESTION 工具提问，并在面板出现 `.question-card` 后通过真实 UI 提交 `REAL_SMOKE_QUESTION_ANSWER`。
 - Stop 约束：若 smoke 需要验证 stop terminal 语义，应通过 `REAL_SMOKE_SCENARIO=stop` 或 `REAL_SMOKE_EXPECT_STOP=1` 启用 stop 场景；入口会要求 repo-local stub 发出 `step-finish: stop`，在 run 收敛后把 stop 前已见 assistant 文本、stop 后 finalOutput 与 completed summary 写入 `status-checkpoints.json.stop`。
@@ -61,7 +61,7 @@
 - 序列约束：`assistantMessageSequenceComparison` 仍需强约束 raw events 与 projected state 的一致性；但对 UI 侧，若 `assistantVisibilityComparison.ok === true`，则允许 terminal assistant message 被 Markdown/summary 收敛逻辑合并，不再把这类可接受 coalescing 误判为失败。
 - 演进注意：若后续要把 `test_site` / `python_adapter` 也纳入完全自举，继续在该入口内部扩展，不新增第二层 wrapper。
 
-### `python_adapter/tests/_direct_entry.py`
+### `python_adapter/app/_direct_entry.py`
 
 - 职责：为“以测试文件路径直接执行”的外部调度器补齐 repo root import path，并把测试文件转交给 pytest 执行。
 - 边界：不介入具体测试逻辑，仅提供入口自举。

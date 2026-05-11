@@ -4,6 +4,10 @@ import { createApp } from "./app.js";
 import { env } from "./config.js";
 import type { AnalysisProvider, AnalyzeRequest, AnalyzeResult } from "./types.js";
 
+/**
+ * Guardrail: watches backend/src request validation, auth, and feedback endpoints so the backend app surface stays contract-safe.
+ */
+
 class ImmediateProvider implements AnalysisProvider {
   readonly name = "test-provider";
 

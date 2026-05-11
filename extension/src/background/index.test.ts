@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_MAIN_AGENT } from "../shared/protocol";
 import { initialAssistantState } from "../shared/state";
 
+/**
+ * Guardrail: watches extension/src/background run-start orchestration, permission gating, and capture packaging for the active tab.
+ */
+
 /** @ArchitectureID: ELM-FUNC-EXT-RECONCILE-RUN-STATE */
 /** @ArchitectureID: REQ-AIASSIST-UI-CHAT-SEND-DECOUPLE-AND-COMPLETE-RESPONSE-RENDER */
 describe("background rule-driven capture flow", () => {

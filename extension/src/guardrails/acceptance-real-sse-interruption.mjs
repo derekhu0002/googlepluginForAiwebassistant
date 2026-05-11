@@ -1,4 +1,5 @@
-import { assertSseInterruptionHandled, runSmokeAndLoadArtifacts } from "./real-smoke-assertions.mjs";
+/** Guardrail: watches extension/src real SSE interruption recovery so partial assistant content is preserved and the UI reaches an observable terminal state. */
+import { assertSseInterruptionHandled, runSmokeAndLoadArtifacts } from "../../scripts/real-smoke-assertions.mjs";
 
 const artifacts = await runSmokeAndLoadArtifacts({
   env: {

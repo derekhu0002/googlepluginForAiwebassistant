@@ -1,4 +1,5 @@
-import { assertStopHandled, runSmokeAndLoadArtifacts } from "./real-smoke-assertions.mjs";
+/** Guardrail: watches extension/src stop semantics so user stop or finish=stop halts further growth without rolling back already visible content. */
+import { assertStopHandled, runSmokeAndLoadArtifacts } from "../../scripts/real-smoke-assertions.mjs";
 
 const artifacts = await runSmokeAndLoadArtifacts({
   env: {

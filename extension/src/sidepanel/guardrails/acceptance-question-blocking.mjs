@@ -1,4 +1,5 @@
-import { runVitestSelections } from "./run-vitest-acceptance.mjs";
+/** Guardrail: watches extension/src/sidepanel question interaction so pending-question UI, submit payload, and blocking state remain aligned. */
+import { runVitestSelections } from "../../../scripts/run-vitest-acceptance.mjs";
 
 await runVitestSelections("人工追问事件（Question）的阻断性交互", [
   {

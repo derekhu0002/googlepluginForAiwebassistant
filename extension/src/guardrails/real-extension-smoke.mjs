@@ -1,3 +1,4 @@
+/** Guardrail: watches extension/src end-to-end orchestration across background, sidepanel, adapter, and visible transcript convergence. */
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import http from "node:http";
@@ -22,11 +23,11 @@ const OPPORTUNISTIC_QUESTION_ANSWER_TEXT = process.env.REAL_SMOKE_OPPORTUNISTIC_
 const DOMAIN_ACCESS_ERROR_COPY = process.env.REAL_SMOKE_DOMAIN_ACCESS_ERROR_COPY ?? "当前站点未授权采集";
 const SSE_INTERRUPTION_ERROR_COPY = process.env.REAL_SMOKE_SSE_INTERRUPTION_ERROR_COPY ?? "连接中断，请重试";
 const STATE_KEY = "ai-web-assistant-state";
-const OUTPUT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../temp/real-extension-smoke");
-const EXTENSION_WORKSPACE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXTENSION_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
+const OUTPUT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../temp/real-extension-smoke");
+const EXTENSION_WORKSPACE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const EXTENSION_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../dist");
 const PROFILE_ROOT_DIR = path.join(OUTPUT_DIR, "playwright-profile-runs");
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const PYTHON_ADAPTER_DIR = path.join(REPO_ROOT, "python_adapter");
 const LAUNCH_MODE = process.env.EXTENSION_SMOKE_BROWSER_MODE ?? "launch";
 const CHROMIUM_EXECUTABLE = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? null;

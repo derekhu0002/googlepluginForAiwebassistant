@@ -4,49 +4,49 @@
 
 ## 1. Python Adapter Entrypoints
 
-### `python_adapter/tests/test_app.py`
+### `python_adapter/app/test_app_guardrail.py`
 
 - 用途：验证 `POST /api/runs`、`GET /api/runs/{runId}/events`、`POST /api/runs/{runId}/answers`、`GET /api/runs/{runId}/events/raw` 的契约闭环。
-- 调用方式：`python python_adapter/tests/test_app.py`
+- 调用方式：`python -m pytest python_adapter/app/test_app_guardrail.py`
 - 输入：无。
 - 输出：pytest 标准输出；退出码 `0` 表示通过。
-- 约束：内部会自举 `sys.path` 并由 `__main__` 触发 pytest，适用于“以文件路径直接执行”的外部调度器。
+- 约束：canonical guardrail 已迁移到 `python_adapter/app/`，外部调度器应直接执行 pytest 入口。
 - 错误语义：任一断言失败、导入失败、环境异常都会导致非零退出。
 - 示例：
 
 ```bash
-python python_adapter/tests/test_app.py
+python -m pytest python_adapter/app/test_app_guardrail.py
 ```
 
-### `python_adapter/tests/test_opencode_adapter.py`
+### `python_adapter/app/test_opencode_adapter_guardrail.py`
 
 - 用途：验证 opencode adapter 的 agent 发现、session 创建、prompt_async 编排、question reply、delta buffering 与 final result 语义。
-- 调用方式：`python python_adapter/tests/test_opencode_adapter.py`
+- 调用方式：`python -m pytest python_adapter/app/test_opencode_adapter_guardrail.py`
 - 输入：无。
 - 输出：pytest 标准输出；退出码 `0` 表示通过。
-- 约束：内部会自举 `sys.path` 并由 `__main__` 触发 pytest。
+- 约束：canonical guardrail 已直接迁移到 `python_adapter/app/`，外部调度器应以该目录为唯一入口。
 - 错误语义：任一断言失败、导入失败、fake client 响应不匹配都会导致非零退出。
 - 示例：
 
 ```bash
-python python_adapter/tests/test_opencode_adapter.py
+python -m pytest python_adapter/app/test_opencode_adapter_guardrail.py
 ```
 
 ## 2. Extension Entrypoints
 
 ### 通用调用约定
 
-- 调用方式：`node extension/scripts/<script>.mjs`
+- 调用方式：`node extension/src/**/guardrails/<script>.mjs`
 - 输入：无额外参数。
 - 输出：成功时输出 JSON 摘要并以 `0` 退出；失败时透传 Vitest 失败信息并以非 `0` 退出。
 - 约束：脚本内部固定封装目标测试文件与测试名，外部调度器不需要了解 Vitest 细节。
 - 选择保护：若脚本绑定的 `testNamePattern` 未实际命中任何测试，或命中后没有任何测试真正通过，入口会直接以非零退出，避免把“全 skipped”误判为通过。
 - 环境自举：脚本在启动 Vitest 前会先执行仓库级 `scripts/ensure-rollup-native.mjs`，按当前平台补齐 Rollup native optional dependency，不要求外部调度器手动执行 `npm install`。
 
-### `extension/scripts/real-extension-smoke.mjs`
+### `extension/src/guardrails/real-extension-smoke.mjs`
 
 - 用途：执行真实浏览器 embedded sidepanel smoke，产出 extension state、raw events、visible transcript、comparison 和 status checkpoints 等系统级工件。
-- 调用方式：`node extension/scripts/real-extension-smoke.mjs`
+- 调用方式：`node extension/src/guardrails/real-extension-smoke.mjs`
 - 输入：无额外参数。
 - 输出：成功时输出 smoke 摘要 JSON，并在 `temp/real-extension-smoke/` 目录写出可比对工件；退出码 `0` 表示通过。
 - 约束：默认使用 `http://127.0.0.1:4173/` 作为测试页面。需要真实上游 AI 时，应显式设置 `REAL_SMOKE_REQUIRE_LIVE_UPSTREAM=1` 并连接外部已启动的 `opencode`/adapter；只有显式设置 `REAL_SMOKE_REQUIRE_REPO_STUB=1` 时，入口才会自举 repo-local smoke 环境：仓库级 `scripts/mock-opencode-server.mjs` 监听 `http://127.0.0.1:18124`、测试专用 python adapter 监听 `http://127.0.0.1:18030`、extension build 自动改写为连接该 adapter。
@@ -60,62 +60,62 @@ python python_adapter/tests/test_opencode_adapter.py
 - 示例：
 
 ```bash
-node extension/scripts/real-extension-smoke.mjs
+node extension/src/guardrails/real-extension-smoke.mjs
 ```
 
 ### 入口清单
 
-- `extension/scripts/acceptance-streaming-markdown-convergence.mjs`
+- `extension/src/sidepanel/guardrails/acceptance-streaming-markdown-convergence.mjs`
   - 覆盖：streaming 降级态到最终 Markdown 的语义收敛。
 
-- `extension/scripts/acceptance-final-markdown-fidelity.mjs`
+- `extension/src/sidepanel/guardrails/acceptance-final-markdown-fidelity.mjs`
   - 覆盖：最终大 Markdown 的 headings、lists、blockquote、code fence、link、table 和 raw HTML 保守策略。
 
-- `extension/scripts/acceptance-large-markdown-performance.mjs`
+- `extension/src/sidepanel/guardrails/acceptance-large-markdown-performance.mjs`
   - 覆盖：大体量 Markdown 渲染性能基线。
 
-- `extension/scripts/acceptance-long-session-memory.mjs`
+- `extension/src/sidepanel/guardrails/acceptance-long-session-memory.mjs`
   - 覆盖：长会话下历史节点复用、DOM 负载受控、无全量重复增长。
 
-- `extension/scripts/acceptance-tool-call-throttle.mjs`
+- `extension/src/sidepanel/guardrails/acceptance-tool-call-throttle.mjs`
   - 覆盖：高频 tool_call 事件下 transcript 不泄漏 tool part，主舞台更新保持受控。
 
-- `extension/scripts/acceptance-question-blocking.mjs`
+- `extension/src/sidepanel/guardrails/acceptance-question-blocking.mjs`
   - 覆盖：question 阻断态、回答提交与恢复链路的本地 Vitest/jsdom 护栏，不替代架构图里的真实 Question 场景。
 
-- `extension/scripts/acceptance-real-question-blocking.mjs`
+- `extension/src/guardrails/acceptance-real-question-blocking.mjs`
   - 覆盖：真实 Playwright smoke 下、连接真实上游 AI 的 QUESTION 工具显式提问、面板内回答提交，以及回答后恢复并收敛到 completed 的完整闭环。
 
-- `extension/scripts/acceptance-real-stop-convergence.mjs`
+- `extension/src/guardrails/acceptance-real-stop-convergence.mjs`
   - 覆盖：真实 Playwright smoke 下的 `step-finish: stop` 终态，要求 stop 前已见正文被保留、stop 后不再继续增长、summary 与控件恢复到 completed 状态。
 
-- `extension/scripts/acceptance-history-persistence.mjs`
+- `extension/src/shared/guardrails/acceptance-history-persistence.mjs`
   - 覆盖：IndexedDB 历史读取与 Markdown 保真。
 
-- `extension/scripts/acceptance-diagnostics-export.mjs`
+- `extension/src/sidepanel/guardrails/acceptance-diagnostics-export.mjs`
   - 覆盖：诊断快照与导出日志完整性。
 
-- `extension/scripts/acceptance-sse-interruption.mjs`
+- `extension/src/sidepanel/guardrails/acceptance-sse-interruption.mjs`
   - 覆盖：SSE 中断后已收内容保留、终态文案与重试语义的本地 Vitest/jsdom 护栏，不替代架构图里的真实 SSE 中断场景。
 
-- `extension/scripts/acceptance-real-sse-interruption.mjs`
+- `extension/src/guardrails/acceptance-real-sse-interruption.mjs`
   - 覆盖：真实 Playwright smoke 下的 SSE 中断终态，验证已收 assistant Markdown 保留、busy 动画停止、错误文案与重试语义切换。
 
-- `extension/scripts/acceptance-real-large-markdown-streaming.mjs`
+- `extension/src/guardrails/acceptance-real-large-markdown-streaming.mjs`
   - 覆盖：委托 `acceptance-real-sidepanel-performance.mjs`，以真实 Playwright smoke 校验大 Markdown 持续流式输出时的交互响应与最终收敛；该入口显式使用 repo-local stub 生成大体量 Markdown，以保持性能基线可重复。
 
-- `extension/scripts/acceptance-domain-access.mjs`
+- `extension/src/shared/guardrails/acceptance-domain-access.mjs`
   - 覆盖：未授权域名拒绝与可见错误文案。
 
-- `extension/scripts/acceptance-streaming-markdown-degradation.mjs`
+- `extension/src/sidepanel/guardrails/acceptance-streaming-markdown-degradation.mjs`
   - 覆盖：未闭合 Markdown 在 streaming 阶段的降级显示与最终收敛。
 
-- `extension/scripts/acceptance-ui-thread-isolation.mjs`
+- `extension/src/sidepanel/guardrails/acceptance-ui-thread-isolation.mjs`
   - 覆盖：高频流式事件下输入框与主 Agent 选择器可交互性。
 
 示例：
 
 ```bash
-node extension/scripts/acceptance-streaming-markdown-convergence.mjs
-node extension/scripts/acceptance-domain-access.mjs
+node extension/src/sidepanel/guardrails/acceptance-streaming-markdown-convergence.mjs
+node extension/src/shared/guardrails/acceptance-domain-access.mjs
 ```

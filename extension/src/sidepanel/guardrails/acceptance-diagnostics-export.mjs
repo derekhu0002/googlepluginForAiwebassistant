@@ -1,4 +1,5 @@
-import { runVitestSelections } from "./run-vitest-acceptance.mjs";
+/** Guardrail: watches extension/src/sidepanel diagnostics export so transport traces, environment summary, and captured errors are emitted together. */
+import { runVitestSelections } from "../../../scripts/run-vitest-acceptance.mjs";
 
 await runVitestSelections("诊断日志（Diagnostics）的导出完整性", [
   {

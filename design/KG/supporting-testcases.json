@@ -13,7 +13,7 @@
         "TestCase3",
         "真实浏览器下的大 Markdown 流式交互无卡死"
       ],
-      "script": "extension/scripts/real-extension-smoke.mjs",
+      "script": "extension/src/guardrails/real-extension-smoke.mjs",
       "reason": "Owns canonical in-progress checkpoint capture, terminal convergence, and visible transcript/status checkpoint artifacts."
     },
     {
@@ -21,7 +21,7 @@
       "supports": [
         "真实 Question 阻断交互闭环"
       ],
-      "script": "extension/scripts/acceptance-real-question-blocking.mjs",
+      "script": "extension/src/guardrails/acceptance-real-question-blocking.mjs",
       "reason": "Pins QUESTION visibility, UI answer submission, pending-question clearing, and post-answer terminal convergence against the live upstream."
     },
     {
@@ -29,7 +29,7 @@
       "supports": [
         "真实浏览器下的大 Markdown 流式交互无卡死"
       ],
-      "script": "extension/scripts/acceptance-real-sidepanel-performance.mjs",
+      "script": "extension/src/guardrails/acceptance-real-sidepanel-performance.mjs",
       "reason": "Pins large-Markdown streaming growth, responsiveness budgets, and the real-browser in-progress checkpoint path using the repo-local stub."
     },
     {
@@ -38,7 +38,7 @@
         "TestCase1",
         "真实 Question 阻断交互闭环"
       ],
-      "script": "python_adapter/tests/test_opencode_adapter.py",
+      "script": "python_adapter/app/test_opencode_adapter_guardrail.py",
       "reason": "Pins adapter-side stop-marker terminalization, synthetic textual question normalization, and follow-up answer fallback semantics."
     },
     {
@@ -46,7 +46,7 @@
       "supports": [
         "用户主动停止后保留已收内容且不再继续增长"
       ],
-      "script": "extension/scripts/acceptance-real-stop-convergence.mjs",
+      "script": "extension/src/guardrails/acceptance-real-stop-convergence.mjs",
       "reason": "Pins the real-browser stop terminal path, ensuring step-finish stop preserves already visible assistant text, halts further growth, and converges back to completed controls."
     }
   ]
