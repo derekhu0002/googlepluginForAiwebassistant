@@ -63,6 +63,27 @@ python -m pytest python_adapter/app/test_opencode_adapter_guardrail.py
 node extension/src/guardrails/real-extension-smoke.mjs
 ```
 
+### `extension/src/guardrails/acceptance-testcase2.mjs`
+
+- 用途：作为 `TestCase2` 的唯一物理入口，验证主舞台 transcript 隐藏 tool transcript。
+- 调用方式：`node extension/src/guardrails/acceptance-testcase2.mjs`
+- 输入：无额外参数；脚本内部固定为 live-upstream smoke wrapper。
+- 输出：成功时输出 testcase 摘要 JSON，并以 `0` 退出。
+
+### `extension/src/guardrails/acceptance-testcase3.mjs`
+
+- 用途：作为 `TestCase3` 的唯一物理入口，验证运行中与完成态的 summary/控件切换。
+- 调用方式：`node extension/src/guardrails/acceptance-testcase3.mjs`
+- 输入：无额外参数；脚本内部固定抓取 in-progress checkpoint。
+- 输出：成功时输出 testcase 摘要 JSON，并以 `0` 退出。
+
+### `extension/src/guardrails/acceptance-testcase4.mjs`
+
+- 用途：作为 `TestCase4` 的唯一物理入口，验证预采集字段复用与可见 capture part。
+- 调用方式：`node extension/src/guardrails/acceptance-testcase4.mjs`
+- 输入：无额外参数；脚本内部固定在发送前执行 capture。
+- 输出：成功时输出 testcase 摘要 JSON，并以 `0` 退出。
+
 ### 入口清单
 
 - `extension/src/sidepanel/guardrails/acceptance-streaming-markdown-convergence.mjs`

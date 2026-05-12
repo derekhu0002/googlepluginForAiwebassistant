@@ -61,6 +61,14 @@
 - 序列约束：`assistantMessageSequenceComparison` 仍需强约束 raw events 与 projected state 的一致性；但对 UI 侧，若 `assistantVisibilityComparison.ok === true`，则允许 terminal assistant message 被 Markdown/summary 收敛逻辑合并，不再把这类可接受 coalescing 误判为失败。
 - 演进注意：若后续要把 `test_site` / `python_adapter` 也纳入完全自举，继续在该入口内部扩展，不新增第二层 wrapper。
 
+### `extension/src/dependencyDirection.guardrail.test.ts`
+
+- 职责：冻结 `background / shared / sidepanel / content` 的稳定依赖方向，防止 UI 反向依赖后台实现、共享层反向依赖运行层。
+- 边界：只检查源码导入方向，不介入业务断言、浏览器 API mock 或 UI 渲染结果。
+- 依赖：Node.js `fs/path`、Vitest。
+- 调用约束：作为关键非显性测试的一部分运行于 `npm run test --workspace extension`；不得把该测试替换成依赖人工约定的 README 文本检查。
+- 演进注意：若未来新增 `extension/src` 下新的稳定一级子域，必须先更新该测试与 `extension/src/ARCHITECTURE.md`，再允许其参与跨目录依赖。
+
 ### `python_adapter/app/_direct_entry.py`
 
 - 职责：为“以测试文件路径直接执行”的外部调度器补齐 repo root import path，并把测试文件转交给 pytest 执行。
@@ -79,6 +87,7 @@
 ## 3. 依赖关系
 
 - 外部脚本 -> `run-vitest-acceptance.mjs` -> `missingCriteria.acceptance.test.tsx`
+- `dependencyDirection.guardrail.test.ts` -> `extension/src` 稳定目录边界
 - Python 文件入口 -> `_direct_entry.py` -> `pytest` -> adapter tests
 - `missingCriteria.acceptance.test.tsx` -> sidepanel/shared public modules
 
