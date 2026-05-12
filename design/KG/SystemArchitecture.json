@@ -123,16 +123,16 @@
 "name": "Adapter run-answer-raw-stream 契约闭环",
 "description": "验证 python adapter 在 run 主链路中的真实契约编排：POST /api/runs 接收 capture/context 与 selectedAgent，创建或复用 session；GET /api/runs/{runId}/events 输出 thinking / question 等归一化事件；POST /api/runs/{runId}/answers 继续回答阻断问题；GET /api/runs/{runId}/events/raw 输出上游 raw envelope。该用例属于 adapter 组件边界的 integration/system 证据，不直接替代 extension 侧 acceptance。",
 "type": "Integration Test",
-"Input": "复用 `python_adapter/app/test_app_guardrail.py` 中的 TestClient 场景，覆盖 start_run、events、answers、raw events 四条 HTTP 边界。",
-"acceptanceCriteria": "python_adapter/app/test_app_guardrail.py",
+"Input": "复用 `python_adapter/tests/test_app.py` 中的 TestClient 场景，覆盖 start_run、events、answers、raw events 四条 HTTP 边界。",
+"acceptanceCriteria": "python_adapter\\app\\test_app_guardrail.py",
 "TestResults": ""
 },
 {
 "name": "Adapter 对 opencode session contract 与 agent 约束保持一致",
 "description": "验证 python adapter 对远端 opencode contract 的适配不漂移：start_run 必须把 capture/context 打包进 prompt_async；question reply 必须调用远端 question/reply；session message 若仅有 reasoning 不得误当最终 answer；agent discovery 与 canonical agent mismatch 必须显式报错。该用例为 adapter 与远端协议的 integration guard。",
 "type": "Integration Test",
-"Input": "复用 `python_adapter/app/test_opencode_adapter_guardrail.py` 中的 fake httpx client 契约测试，覆盖 /agent、/session、/session/{id}/prompt_async、/global/event、/question/{id}/reply、/session/{id}/message。",
-"acceptanceCriteria": "python_adapter/app/test_opencode_adapter_guardrail.py",
+"Input": "复用 `python_adapter/tests/test_opencode_adapter.py` 中的 fake httpx client 契约测试，覆盖 /agent、/session、/session/{id}/prompt_async、/global/event、/question/{id}/reply、/session/{id}/message。",
+"acceptanceCriteria": "python_adapter\\app\\test_opencode_adapter_guardrail.py",
 "TestResults": ""
 }
 ]
@@ -203,7 +203,7 @@
 "description": "**GIVEN**: AI 正在流式输出时，`PYTHON_ADAPTER` 服务意外宕机导致 SSE 请求断开。\\r\\n**WHEN**: `CHROME_EXTENSION` 检测到请求非正常关闭。\\r\\n**THEN**: 扩展应停止“正在输入”的视觉动画，保留已接收到的部分内容，并向用户展示“连接中断，请重试”的警告提示，而不是持续转圈；同时不得回滚或清空已显示的 assistant Markdown。",
 "type": "Acceptance Test",
 "Input": "在流式输出过程中人为终止或中断 SSE 数据源，检查 sidepanel 对部分 Markdown 内容保留、动画停止、summary / 错误提示切换与重试入口的回退行为；入口为 `extension\\\\scripts\\\\acceptance-sse-interruption.mjs`，后续应复用 `extension\\\\scripts\\\\real-extension-smoke.mjs` 的 checkpoint 采样。",
-"acceptanceCriteria": "extension\\src\\sidepanel\\guardrails\\acceptance-sse-interruption.mjs",
+"acceptanceCriteria": "extension\\src\\guardrails\\acceptance-real-sse-interruption.mjs",
 "TestResults": ""
 },
 {
