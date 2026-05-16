@@ -98,11 +98,13 @@ When repository evidence conflicts, resolve it in this order:
 - Focus on high-level stable elements such as stable directories, stable components, key entry files, interface boundaries, dependency direction, test ownership, and traceability.
 - Do not degrade into file-by-file or function-by-function mirroring.
 - This stage converts intent-side explicit testcases into physical read-only entrypoints plus critical and supporting non-explicit test guardrails in the repository.
+- When designing any testcase in this stage, explicitly record the testcase control point and observation point alongside its ownership, entrypoint, and guardrail role.
 
 ### Coding And Repair Stage
 
 - Respect the frozen and evolvable test assets defined in Test Semantics and in the implementation contracts.
 - During coding, validate by invoking existing testcase entrypoints rather than rewriting them.
+- When adding or refining supporting non-explicit tests in coding mode, keep the control point and observation point explicit in the test design and in any task summary.
 
 ## Test Semantics
 
@@ -110,11 +112,13 @@ When repository evidence conflicts, resolve it in this order:
 
 - Explicit testcases are the stable acceptance or scenario baseline declared by intent architecture.
 - Their target, scope, assertion boundary, and physical single entrypoint are not to be rewritten during ordinary coding.
+- Every explicit testcase design must explicitly describe its control point and observation point. The control point is the trigger, input, setup, or executable entry that drives the behavior under test. The observation point is the externally observable output, state, artifact, log, error, or effect that the testcase asserts.
 - If an explicit testcase is missing a physical entrypoint, report it as an implementation architecture design gap rather than patching around it silently in coding mode.
 
 ### Non-Explicit Tests
 
 - Non-explicit tests belong to the implementation layer rather than the intent layer.
+- Every non-explicit test design must also explicitly describe its control point and observation point; a testcase definition without both is incomplete.
 - Critical non-explicit tests are limited to four categories:
   - architecture boundary guards
   - dependency direction guards
